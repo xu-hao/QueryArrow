@@ -16,4 +16,7 @@ cabal-file: project.cabal
 version: 1
 extra-packages: ''
 ghc-args: []
-excluded-modules: []
+excluded-modules:
+- src/Arrow.hs
+- src/ListT.hs
+- src/QueryArrow.hs
