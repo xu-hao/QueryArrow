@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, FlexibleInstances, TypeSynonymInstances #-}
 
 -- iRODS 4.2 genquery library
 -- http://www.irods.org
@@ -15,6 +15,7 @@ import qualified Data.Map as Map
 import qualified Data.List as List
 import Control.Monad.State hiding (lift)
 import Prelude hiding (id,(.), concat, foldr)
+import qualified Data.Function
 
 -- abstract framework
 -- Query
@@ -46,21 +47,21 @@ class Groupable m where
     type Key m a
     data Group m a -- make sure this is injective
     qgroup :: (a -> Key m a) -> m a -> m (Group m (m a))
-    gmap :: (a -> b) -> (Group m a) -> (Group m b)
+    gmap :: (a -> b) -> Group m a -> Group m b
 
 class Countable m where
     type Count m a
-    qcount :: m a -> (Count m a)
+    qcount :: m a -> Count m a
     qlimit :: Int -> m a -> m a
 
 class Sortable m where
     qsort :: (Ord k)=> (a -> k) -> m a -> m a
 
 start :: (Query q g m, Graph g m) => Vertex g -> q a (VPath g)
-start a = transform (\ x -> vpath a)
+start a = transform (\ _ -> vpath a)
 
 add :: (Query q g m) => a -> q a a
-add a = arr id &++ transform (\x->return a)
+add a = arr id &++ transform (\ _ -> return a)
 
 trim :: (Query q g m, Filterable m) => (a -> Bool) -> q a a
 trim f = transform (qfilter f)
@@ -87,10 +88,10 @@ selectOutE :: (Query q g m, Graph g m) => Label g -> q (VPath g) (EPath g)
 selectOutE l = grow (loutE l)
 
 selectInV :: (Query q g m, Graph g m) => q (EPath g) (VPath g)
-selectInV = grow (inV)
+selectInV = grow inV
 
 selectOutV :: (Query q g m, Graph g m) => q (EPath g) (VPath g)
-selectOutV = grow (outV)
+selectOutV = grow outV
 
 selectE :: (Query q g m, Graph g m) => Label g -> q (VPath g) (EPath g)
 selectE l = selectInE l &++ selectOutE l
@@ -99,7 +100,7 @@ selectEV :: (Query q g m, Graph g m) => Label g -> q (VPath g) (VPath g)
 selectEV l = (selectInE l >>> selectOutV) &++ (selectOutE l >>> selectInV)
 
 startV :: (Query q g m, Graph g m) => Vertex g -> q a (VPath g)
-startV v = transform (\ a -> vpath v)
+startV v = transform (\ _ -> vpath v)
 
 
 -- A concrete example
@@ -112,14 +113,15 @@ type CGraph = Map.Map CGVertex (Map.Map CGLabel [CGEdge])
 
 type MGraph = State CGraph
 
+getEdges :: VPath MGraph -> (Map.Map CGLabel [CGEdge] -> [CGEdge]) -> (CGVertex -> CGEdge -> Bool) -> MGraph [EPath MGraph]
 getEdges vp getEdgeList filterEdge = do
     g <- get
-    let v = (case vp of VLeaf v -> v
-                        VCons v ep -> v)
+    let v = (case vp of VLeaf v0 -> v0
+                        VCons v0 _ -> v0)
         em = g Map.! v
         es = getEdgeList em
         eins = filter (filterEdge v) es
-        eps = map (\ ein -> ECons ein vp) eins in
+        eps = map (`ECons` vp) eins in
         return eps
 
 instance Graph MGraph [] where
@@ -128,12 +130,12 @@ instance Graph MGraph [] where
     type Label MGraph = CGLabel
     data VPath MGraph = VLeaf (Vertex MGraph) | VCons (Vertex MGraph) (EPath MGraph) deriving Show
     data EPath MGraph = ECons (Edge MGraph) (VPath MGraph) deriving Show
-    inE vp = getEdges vp (foldr (++) []) (\ v (vout, l, vin) -> vin == v)
-    linE l vp = getEdges vp ( \ em -> if Map.member l em then em Map.! l else [] ) (\ v (vout, l, vin) -> vin == v)
-    outE vp = getEdges vp (foldr (++) []) (\ v (vout, l, vin) -> vout == v)
-    loutE l vp = getEdges vp (\ em -> if Map.member l em then em Map.! l else [] ) (\ v (vout, l, vin) -> vout == v)
-    inV p = case p of (ECons (vin, l, vout) vp) -> return [VCons vin p]
-    outV p = case p of (ECons (vin, l, vout) vp) -> return [VCons vout p]
+    inE vp = getEdges vp concat (\ v (_, _, vin) -> vin == v)
+    linE l vp = getEdges vp ( \ em -> if Map.member l em then em Map.! l else [] ) (\ v (_, _, vin) -> vin == v)
+    outE vp = getEdges vp concat (\ v (vout, _, _) -> vout == v)
+    loutE l vp = getEdges vp (\ em -> if Map.member l em then em Map.! l else [] ) (\ v (vout, _, _) -> vout == v)
+    inV p = case p of (ECons (vin, _, _) _) -> return [VCons vin p]
+    outV p = case p of (ECons (_, _, vout) _) -> return [VCons vout p]
     vpath v = return (VLeaf v)
 
 data CQuery a b = CQuery {unCQuery :: [a] -> MGraph [b]}
@@ -143,8 +145,8 @@ instance Category CQuery where
     CQuery f . CQuery g = CQuery (g >=> f)
 
 instance Arrow CQuery where
-    arr f = CQuery (return . (fmap f))
-    first (CQuery f) = CQuery (\ acs -> 
+    arr f = CQuery (return . fmap f)
+    first (CQuery f) = CQuery (\ acs ->
         let (as, cs) = unzip acs in do
             bs <- f as
             return (zip bs cs))
@@ -157,37 +159,19 @@ instance Query CQuery MGraph [] where
 instance Countable [] where
     type Count [] a = (Int, [a])
     qcount as = (length as, as)
-    qlimit n as = take n as
+    qlimit = take
 
 instance Sortable [] where
-    qsort f as = List.sortBy (\ a b -> compare (f a) (f b)) as
+    qsort f = List.sortBy (compare `Data.Function.on` f)
 
 instance Groupable [] where
-    type Key [] a = CGVertex  
+    type Key [] a = CGVertex
     data Group [] a = Group { unGroup :: (CGLabel, a) } deriving Show
     qgroup extractKey as = fmap Group (Map.toList grp) where
         grp = foldr f Map.empty as where
             f a m = if Map.member v m then Map.adjust (++[a]) v m else Map.insert v [a] m where
                 v = extractKey a
-    gmap f = \ (Group (l, as)) -> Group (l, f as)
-    
+    gmap f (Group (l, as)) = Group (l, f as)
+
 instance Filterable [] where
     qfilter = filter
-    
-graphFromList :: [CGEdge] -> CGraph
-graphFromList es = foldr (\ (vout, l, vin) ->
-            insertVertex vin . insertVertex vout . insertEdge vin l (vout, l, vin) .  insertEdge vout l (vout, l, vin)
-        ) Map.empty es where
-            insertVertex v m = if Map.member v m then m else Map.insert v Map.empty m
-            insertEdge v l e m = Map.adjust (\ em ->
-                                     if Map.member l em then Map.adjust (\es -> es ++ [e]) l em else Map.insert l [e] em) v m
-
-g :: CGraph
-g = graphFromList [("1","a","2"), ("1","a","4"), ("4","c","3"), ("4","c","5"), ("3","a","5"), ("5","d","4"), ("2", "b","3"), ("3", "c", "1")]
-
-main :: IO ()
-main = do
-    let (a, _) = runState (do unCQuery (start "1" >>> selectE "a" >>> selectOutV >>> groupCount (\ p -> case p of VLeaf v -> v
-                                                                                                                  VCons v ep -> v)) []) g in
-        print a
-        
