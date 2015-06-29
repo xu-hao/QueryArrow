@@ -10,6 +10,8 @@ executable QueryArrow
   build-depends:   
                    base >= 4,
                    containers,
-                   mtl
+                   mtl,
+                   transformers,
+                   semigroups
   ghc-options:     -Wall
 

@@ -20,6 +20,8 @@ g :: CGraph
 g = graphFromList [("1","a","2"), ("1","a","4"), ("4","c","3"), ("4","c","5"), ("3","a","5"), ("5","d","4"), ("2", "b","3"), ("3", "c", "1")]
 
 main :: IO ()
-main = let (a, _) = runState (unCQuery (start "1" >>> selectE "a" >>> selectOutV >>> groupCount (\ p -> case p of VLeaf v -> v
-                                                                                                                  VCons v _ -> v)) []) g in
+main = 
+    let (a, _) = runCQuery (startV "1" >>> selectE "a" >>> selectOutV >>> groupCount (Kleisli (\ p -> 
+            return (case p of VLeaf v -> v
+                              VCons v _ -> v)))) g () in
         print a
