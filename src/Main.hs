@@ -1,5 +1,6 @@
 module Main where
 
+import QueryArrowList
 import QueryArrow
 import Control.Arrow
 import Control.Category
