@@ -62,16 +62,13 @@ instance Query CQuery where
 instance Injectable CQuery [] where
     inj = Kleisli (\ a -> return [a])
      
-instance Monoidal CQuery [EPath CGraph] [EPath CGraph] [EPath CGraph] where
-    aplus (Kleisli a) (Kleisli b) = Kleisli (\ x -> do
-        as <- a x
-        bs <- b x
-        return (as ++ bs))
+instance Monoidal CQuery [EPath CGraph] where
+    aplus = arr (uncurry (++))
 
 instance Growable CQuery [] where
     grow (Kleisli f) = Kleisli (mapM f) 
 
-instance Multiplicable CQuery [] [a] [a] where
+instance Multiplicable CQuery [] where
     mtimes = arr concat
 --    (CQuery f) &++ (CQuery g) = CQuery (\ as -> (++) <$> f as <*> g as)
 
@@ -97,8 +94,8 @@ instance Groupable CQuery [] (VPath CGraph) Group CGLabel where
         c <- f as
         return (Group l c))
 
-instance Filterable CQuery [] where
-    qfilter (Kleisli f) = Kleisli (filterM f) 
+instance ArrowChoice CQuery where
+    Kleisli f ||| Kleisli g = Kleisli (f ||| g) 
 
 runCQuery :: CQuery a b -> CGraph -> a -> (b, CGraph)
 runCQuery (Kleisli f) g a = runState (f a) g

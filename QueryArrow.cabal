@@ -12,6 +12,9 @@ executable QueryArrow
                    containers,
                    mtl,
                    transformers,
-                   semigroups
+                   semigroups,
+                   parsec,
+                   semigroupoids
   ghc-options:     -Wall
+  other-modules:   FO
 

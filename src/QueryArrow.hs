@@ -63,21 +63,32 @@ class (Arrow q) => Query q where
 -- A type constructor for Semigroup
 -- similar to Alternative but doesn't require m to be Applicative
 -- similar to Alt but doesn't require m to be a Functor
-    
+
+-- return    
 class (Query q) => Injectable q l where
     inj :: q a (l a)
+
+-- mplus    
+class Query q => Monoidal q a where
+    aplus :: q (a, a) a  
+
+-- mzero
+class Query q => Zeroable q a where
+    azero :: q x a
     
-class Query q => Monoidal q a b c where
-    aplus :: q x a -> q x b -> q x c  
+-- join
+class Query q => Multiplicable q l where
+    mtimes :: q (l (l a)) (l a)
 
-class Query q => Multiplicable q l a b where
-    mtimes :: q (l a) b
-
+-- fmap
 class (Query q) => Growable q l where
     grow :: q a b -> q (l a) (l b)
 
-class Query q => Filterable q l where
-    qfilter :: q a Bool -> q (l a) (l a)
+qfilter :: (ArrowChoice q, Growable q l, Injectable q l, Multiplicable q l, Zeroable q (l a)) =>
+           q a Bool -> q (l a) (l a)
+qfilter f = afilter f >>> mtimes where
+    afilter :: (ArrowChoice q, Zeroable q (l a), Injectable q l, Growable q l) => q a Bool -> q (l a) (l (l a))
+    afilter g = grow (g &&& id >>> arr (\ (x, y) -> if x then Left y else Right y) >>> (inj ||| azero))
 
 class Query q => Groupable q l a grp key | q l -> grp where
     qgroup :: q a key -> q (l a) (l (grp l key (l a)))
@@ -105,19 +116,19 @@ class (Query q) => Graph g q l | g -> q l where
     vpath :: Vertex g -> q x (VPath g)
 
 infix 3 &++
-(&++) :: (Monoidal q (l b) (l b) (l b)) => q a (l b) -> q a (l b) -> q a (l b)
-(&++) = aplus
+(&++) :: (Monoidal q (l b)) => q a (l b) -> q a (l b) -> q a (l b)
+f &++ g = f &&& g >>> aplus
 
-insert :: (Injectable q l, Monoidal q (l a) (l a) (l a)) => a -> q (l a) (l a)
+insert :: (Injectable q l, Monoidal q (l a)) => a -> q (l a) (l a)
 insert a = arr id &++ (start a >>> inj)
 
 groupCount :: (Countable q l count, Growable q l, Groupable q l a grp key) => q a key -> q (l a) (l (grp l key (count l a)))
 groupCount f = qgroup f >>> grow (gmap qcount)
 
-selectInE :: (Graph g q l, Growable q l, Multiplicable q l (l (EPath g)) (l (EPath g))) => Label g -> q (l (VPath g)) (l (EPath g))
+selectInE :: (Graph g q l, Growable q l, Multiplicable q l) => Label g -> q (l (VPath g)) (l (EPath g))
 selectInE l =  grow (linE l) >>> mtimes
 
-selectOutE :: (Graph g q l, Growable q l, Multiplicable q l (l (EPath g)) (l (EPath g))) => Label g -> q (l (VPath g)) (l (EPath g))
+selectOutE :: (Graph g q l, Growable q l, Multiplicable q l) => Label g -> q (l (VPath g)) (l (EPath g))
 selectOutE l = grow (loutE l) >>> mtimes
 
 selectInV :: (Graph g q l, Growable q l) => q (l (EPath g)) (l (VPath g))
@@ -126,10 +137,10 @@ selectInV = grow inV
 selectOutV :: (Graph g q l, Growable q l) => q (l (EPath g)) (l (VPath g))
 selectOutV = grow outV
 
-selectE :: (Graph g q l, Growable q l, Multiplicable q l (l (EPath g)) (l (EPath g)), Monoidal q (l (EPath g)) (l (EPath g)) (l (EPath g))) => Label g -> q (l (VPath g)) (l (EPath g))
+selectE :: (Graph g q l, Growable q l, Multiplicable q l, Monoidal q (l (EPath g))) => Label g -> q (l (VPath g)) (l (EPath g))
 selectE l = selectInE l &++ selectOutE l
 
-selectEV :: (Graph g q l, Growable q l, Multiplicable q l (l (EPath g)) (l (EPath g)), Monoidal q (l (VPath g)) (l (VPath g)) (l (VPath g))) => Label g -> q (l (VPath g)) (l (VPath g))
+selectEV :: (Graph g q l, Growable q l, Multiplicable q l, Monoidal q (l (VPath g))) => Label g -> q (l (VPath g)) (l (VPath g))
 selectEV l = (selectInE l >>> selectOutV) &++ (selectOutE l >>> selectInV)
 
 startV :: (Graph g q l, Injectable q l) => Vertex g -> q x (l (VPath g))
