@@ -496,7 +496,7 @@ progp :: FOParser ([Disjunction], Map String Pred)
 progp = do
     disjs <- disjsp
     predmap <- getState
-    return (disjs, predmap) where
+    return (disjs, predmap)
 
        
     
