@@ -39,27 +39,25 @@ type Disjunction = [Lit]
 -- query          
 data Query = Query { select :: [Var], cond :: [Disjunction] }
  
--- result stream
-class ResultStream m rs where
-    type ResultRow rs
-    -- concatStream :: [rs] -> rs
-    eos :: rs -> m Bool
-    next :: rs -> m (ResultRow rs, rs)
-    limitvars :: [Var] -> m rs -> m rs
+-- result stream see Takusen
+class ResultStream m re where
+    type ResultRow re
+    enumerate :: re -> (ResultRow re -> seed -> m (Either seed seed)) -> seed -> m seed
+    limitvars :: [Var] -> m re -> m re
     
 -- database
-class ResultStream m rs => Database_ db m rs | db -> m rs where
+class ResultStream m re => Database_ db m re | db -> m re where
     getName :: db -> String
     getPreds :: db -> [Pred] 
     -- domainSize function is a function from arguments to domain size
     -- it is used to compute the optimal query plan
     domainSize :: db -> (Var -> DomainSize) -> Lit -> DomainSize
-    doQuery :: db -> Query -> m rs
+    doQuery :: db -> Query -> m re
     -- filter takes a result stream, a list of input vars, a query, and generate a result stream
-    doFilter :: db -> Query -> m rs -> m rs
+    doFilter :: db -> Query -> m re -> m re
     
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data Database m rs = forall db. Database_ db m rs => Database { unDatabase :: db }
+data Database m row = forall db. Database_ db m row => Database { unDatabase :: db }
 
 -- predicate map
 type PredMap = Map String Pred
@@ -68,7 +66,7 @@ type PredMap = Map String Pred
 type PredDBMap = Map String [String]
 
 -- database map
-type DBMap m rs = Map String (Database m rs)
+type DBMap m re = Map String (Database m re)
 
 appendNew :: forall a. Eq a => [a] -> [a] -> [a]
 appendNew xs ys = xs ++ (ys \\ xs)
@@ -149,7 +147,7 @@ union = foldl appendNew []
 type Report = [[Disjunction]]
 
 -- exec query from dbname
-execQuery :: ResultStream m rs => [Database m rs] -> Query -> (m rs, Report)
+execQuery :: ResultStream m re => [Database m re] -> Query -> (m re, Report)
 execQuery dbs (Query vars lits) = (\(x,allvars,y,z,w) -> doTheFilters x allvars y z w) doTheQuery where
     doTheQuery = 
         let (dbsnew, effectivelits) = findEffectiveDisjsPrefix [] (dbs, []) lits
@@ -321,14 +319,20 @@ limitvarsInRow vars = foldrWithKey (\ var val newresrow -> if var `elem` vars th
 
 data MapDB = MapDB String String [(String, String)]
 
-newtype ListResultStream = ListResultStream [Map Var ResultValue]
-instance Applicative m => ResultStream m ListResultStream where
+newtype ListResultStream = ListResultStream [MapResultRow]
+
+instance ResultStream Identity ListResultStream where
     type ResultRow ListResultStream = MapResultRow
-    eos (ListResultStream []) = pure True
-    eos _ = pure False
-    next (ListResultStream []) = error "eos"
-    next (ListResultStream (x : xs)) = pure (x, ListResultStream xs)
-    limitvars vars = fmap (\(ListResultStream results) -> ListResultStream (map (limitvarsInRow vars) results))
+    enumerate (ListResultStream results) iteratee seed = foldEitherM f seed results where
+        f x y = iteratee y x 
+        foldEitherM _ a [] = return a
+        foldEitherM g a (b : bs) = do
+            c <- g a b
+            case c of
+                Left d -> return d
+                Right d -> foldEitherM g d bs
+    limitvars vars (Identity (ListResultStream results)) = Identity (ListResultStream (map (limitvarsInRow vars) results)) 
+        
 
 instance Database_ MapDB Identity ListResultStream where
     getName (MapDB name _ _) = name

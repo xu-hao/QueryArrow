@@ -16,5 +16,7 @@ executable QueryArrow
                    parsec,
                    semigroupoids
   ghc-options:     -Wall
-  other-modules:   FO
+  other-modules:   
+                   FO,
+                   SQL
 
