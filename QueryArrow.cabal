@@ -14,9 +14,12 @@ executable QueryArrow
                    transformers,
                    semigroups,
                    parsec,
-                   semigroupoids
+                   semigroupoids,
+                   QuickCheck >=2.8.1,
+                   HDBC-sqlite3,
+                   HDBC,
+                   hspec
   ghc-options:     -Wall
   other-modules:   
-                   FO,
-                   SQL
-
+                   FO
+                   

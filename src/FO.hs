@@ -1,12 +1,15 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
 module FO where
 
 import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, alter)
-import Text.ParserCombinators.Parsec
-import Control.Applicative ((<$>), (<*>), Applicative, pure)
+import Control.Applicative ((<$>))
 import Data.Functor.Identity
 import Data.List ((\\))
 import Control.Monad (liftM2)
+import Control.Monad.Trans.Writer.Strict (WriterT,tell,runWriterT)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans.State.Strict (StateT)
+import Control.Monad.Trans.Class (lift)
 
 -- variable types
 type Type = String
@@ -21,8 +24,11 @@ data Pred = Pred { predName :: String, predType :: PredType} deriving Eq
 type Var = String
 
 -- expression
-data Expr = VarExpr Var | IntExpr Int | StringExpr String deriving Eq
- 
+data Expr = VarExpr Var | IntExpr Int | StringExpr String deriving (Eq, Ord)
+
+-- result value
+data ResultValue = StringValue String | IntValue Int deriving (Eq , Show)
+
 -- atoms
 data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } 
           | Exists { boundvar :: Var, conjunction :: [Disjunction] } deriving Eq
@@ -40,33 +46,33 @@ type Disjunction = [Lit]
 data Query = Query { select :: [Var], cond :: [Disjunction] }
  
 -- result stream see Takusen
-class ResultStream m re where
-    type ResultRow re
-    enumerate :: re -> (ResultRow re -> seed -> m (Either seed seed)) -> seed -> m seed
-    limitvars :: [Var] -> m re -> m re
+type Iteratee row seed m = row -> seed -> m (Either seed seed)
+
+type Filter a = a -> a
+
+newtype ResultStream m seed row = ResultStream {runResultStream :: Iteratee row seed m -> seed -> m seed}
     
 -- database
-class ResultStream m re => Database_ db m re | db -> m re where
+class Database_ db m  row | db -> m  row where
+    dbStartSession :: db -> m ()
+    dbStopSession :: db -> m ()
     getName :: db -> String
     getPreds :: db -> [Pred] 
     -- domainSize function is a function from arguments to domain size
     -- it is used to compute the optimal query plan
-    domainSize :: db -> (Var -> DomainSize) -> Lit -> DomainSize
-    doQuery :: db -> Query -> m re
+    domainSize :: db -> (Var -> DomainSize) -> Sign -> Pred -> [Expr] -> DomainSize
+    doQuery :: db -> Query -> ResultStream  m seed row
     -- filter takes a result stream, a list of input vars, a query, and generate a result stream
-    doFilter :: db -> Query -> m re -> m re
+    doFilter :: db -> Query -> ResultStream m seed row -> ResultStream m seed row
     
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data Database m row = forall db. Database_ db m row => Database { unDatabase :: db }
+data Database m  row = forall db. Database_ db m  row => Database { unDatabase :: db }
 
 -- predicate map
 type PredMap = Map String Pred
 
 -- map from predicate name to database names
 type PredDBMap = Map String [String]
-
--- database map
-type DBMap m re = Map String (Database m re)
 
 appendNew :: forall a. Eq a => [a] -> [a] -> [a]
 appendNew xs ys = xs ++ (ys \\ xs)
@@ -108,34 +114,34 @@ exprDomainSize varDomainSize maxval expr = case expr of
  
 -- free variables
 class FreeVars a where
-    freevars :: a -> [Var]
+    freeVars :: a -> [Var]
     determinedVars :: a -> [Var]
     
 instance FreeVars Expr where
-    freevars (VarExpr var) = [var]
-    freevars _ = []
-    determinedVars = freevars
+    freeVars (VarExpr var) = [var]
+    freeVars _ = []
+    determinedVars = freeVars
     
 instance FreeVars Atom where
-    freevars (Atom _ theargs) = foldl (\fvs expr -> 
-        fvs `appendNew` freevars expr) [] theargs
-    freevars (Exists var conj) = freevars conj \\ [var]
+    freeVars (Atom _ theargs) = foldl (\fvs expr -> 
+        fvs `appendNew` freeVars expr) [] theargs
+    freeVars (Exists var conj) = freeVars conj \\ [var]
         
     determinedVars a = case a of
-        Atom _ _ -> freevars a
+        Atom _ _ -> freeVars a
         Exists var conj -> determinedVars conj \\ [var]
         
 instance FreeVars Lit where
-    freevars (Lit _ theatom) = freevars theatom
+    freeVars (Lit _ theatom) = freeVars theatom
     determinedVars lit = case lit of
-        Lit Pos _ -> freevars lit
+        Lit Pos _ -> freeVars lit
         Lit Neg _ -> [] -- negative literal doesn't determine any variables
     
 instance FreeVars [Disjunction] where
-    freevars = foldl (\fvs disj ->
-        fvs `appendNew` (union . map freevars) disj) []
+    freeVars = foldl (\fvs disj ->
+        fvs `appendNew` (union . map freeVars) disj) []
     determinedVars = foldl (\fvs disj ->
-        fvs `appendNew` (intersect . map freevars) disj) []
+        fvs `appendNew` (intersect . map freeVars) disj) []
             
 intersect :: Eq a => [[a]] -> [a]
 intersect [] = error "can't intersect zero lists"
@@ -147,46 +153,59 @@ union = foldl appendNew []
 type Report = [[Disjunction]]
 
 -- exec query from dbname
-execQuery :: ResultStream m re => [Database m re] -> Query -> (m re, Report)
-execQuery dbs (Query vars lits) = (\(x,allvars,y,z,w) -> doTheFilters x allvars y z w) doTheQuery where
+getAllResults :: (Monad m) => [Database m  row] -> Query -> m ([row], Report)
+getAllResults dbs query = do
+    (stream, report) <- execQuery dbs query
+    results <- runResultStream stream (\row seed  -> return (Right (seed ++ [row]))) []
+    return (results, report)
+
+execQuery :: (Monad m) => [Database m  row] -> Query -> m (ResultStream m seed row, Report)
+execQuery dbs query  = do
+    mapM_ (\(Database db)->dbStartSession db) dbs
+    (stream, report) <- runWriterT (execQuery' dbs query)
+    return (ResultStream (\ iteratee seed -> do 
+        seednew <- runResultStream stream iteratee seed
+        mapM_ (\(Database db)->dbStopSession db) dbs
+        return seednew), report)
+    
+execQuery' :: (Monad m) => [Database m  row] -> Query -> WriterT Report m (ResultStream m seed row)  
+execQuery' dbs (Query vars lits) = doTheQuery >>= (\(x,y,z) -> doTheFilters x y z)  where
     doTheQuery = 
-        let (dbsnew, effectivelits) = findEffectiveDisjsPrefix [] (dbs, []) lits
+        let (dbsnew, effectivelits, restLits) = findEffectiveDisjsPrefix [] (dbs, [], lits)
             dtvars = determinedVars effectivelits
-            freevarsnew = freevars effectivelits in
+            freevarsnew = freeVars restLits in
             if null effectivelits 
                 then error ("can't find effective literals, try reordering the literals: " ++ show lits)
                 else case head dbsnew of 
-                    Database db -> 
-                        (lits \\ effectivelits, freevarsnew, dtvars, doQuery db (Query (vars `appendNew` freevarsnew) effectivelits), [effectivelits])
+                    Database db -> do
+                        tell [effectivelits]
+                        return (restLits, dtvars, doQuery db (Query (vars `appendNew` freevarsnew) effectivelits))
         
-    doTheFilters [] _ _ results2 w = (limitvars vars results2, w)
-    doTheFilters lits2 allvars dtvars results2 w = 
-        doTheFilters restLitsnew allvarsnew dtvarsnew resultsnew (w ++ w2) where
-            (restLitsnew, allvarsnew, dtvarsnew, resultsnew, w2) = doTheFilter lits2 allvars dtvars results2
-    doTheFilter lits2 allvars dtvars results2 = 
-        let (dbsnew, effectivelits) = findEffectiveDisjsPrefix dtvars (dbs, []) lits2
+    doTheFilters [] _ results2 = return results2
+    doTheFilters lits2  dtvars results2 = do
+        (restLitsnew, dtvarsnew, resultsnew) <- doTheFilter lits2  dtvars results2 
+        doTheFilters restLitsnew  dtvarsnew resultsnew
+            
+    doTheFilter lits2  dtvars results2 = 
+        let (dbsnew, effectivelits, restLits) = findEffectiveDisjsPrefix dtvars (dbs, [], lits2)
             dtvarsnew = dtvars `appendNew` determinedVars effectivelits
-            freevarsnew = freevars effectivelits in
+            freevarsnew = freeVars restLits in
             if null effectivelits 
-                then error ("can't find effective literals, try reordering the literals: " ++ show dtvars ++ show lits2)
+                then error ("can't find effective literals, try reordering the literals 2: " ++ show dtvars ++ show lits2)
                 else case head dbsnew of 
-                    Database db -> 
-                        (lits2 \\ effectivelits, allvars `appendNew` freevarsnew, dtvarsnew, doFilter db (Query (allvars `appendNew` freevarsnew) effectivelits) results2, [effectivelits])
+                    Database db -> do
+                        tell [effectivelits] 
+                        return (restLits, dtvarsnew, doFilter db (Query (vars `appendNew` freevarsnew) effectivelits) results2)
 
 
--- construct map from db name to db
-constructDBMap :: [Database m rs] -> DBMap m rs
-constructDBMap = foldr addDBToMap empty where
-    addDBToMap (Database db) = insert (getName db) (Database db)
-    
-constructPredMap :: [Database m rs] -> PredMap
+constructPredMap :: [Database m  row] -> PredMap
 constructPredMap = foldr addPredFromDBToMap empty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
         addPredToMap thepred = insert (predName thepred) thepred
         preds = getPreds db
             
 -- construct map from predicates to db names
-constructPredDBMap :: [Database m rs] -> PredDBMap
+constructPredDBMap :: [Database m  row] -> PredDBMap
 constructPredDBMap = foldr addPredFromDBToMap empty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
         dbname = getName db
@@ -214,22 +233,23 @@ constructPredDBMap = foldr addPredFromDBToMap empty where
 -- a list of effective literals 
 -- a list of literal
 -- find the longest prefix of the literal list the literals in which become effective in at least one databases
-findEffectiveDisjsPrefix :: [Var] -> ([Database m rs], [Disjunction]) -> [Disjunction] -> ([Database m rs], [Disjunction])
-findEffectiveDisjsPrefix _ effective [] = effective
-findEffectiveDisjsPrefix determinedvars effective (disj : disjs) =
+findEffectiveDisjsPrefix :: [Var] -> ([Database m  row], [Disjunction], [Disjunction]) -> ([Database m  row], [Disjunction], [Disjunction])
+findEffectiveDisjsPrefix _ (dbs, effective, []) = (dbs, effective, [])
+findEffectiveDisjsPrefix determinedvars (dbs, effective, disj : rest) =
     if null dbsnew 
-        then effective 
-        else findEffectiveDisjsPrefix (determinedvars `appendNew` intersect (fmap determinedVars disj)) (dbsnew, effectivedisjs ++ [disj]) disjs where
-        (dbs, effectivedisjs) = effective
+        then (dbs, effective, disj : rest) 
+        else findEffectiveDisjsPrefix (determinedvars `appendNew` intersect (fmap determinedVars disj)) (dbsnew, effective ++ [disj], rest) where
         dbsnew = filter isDisjEffective dbs
         isDisjEffective db = allTrue (isLitEffective db) disj
-        isLitEffective (Database db) lit = case lit of
-            (Lit _ (Atom _ _)) -> domainSize db (\ var -> 
+        isLitEffective (Database db) (Lit thesign theatom) = case theatom of
+            Atom thepred theargs -> case domainSize db (\ var -> 
                 if var `elem` determinedvars 
                     then Just 1 -- here we don't have to calculate the actually domain size 
-                    else Nothing) lit /= Nothing
-            (Lit _ (Exists _ conj)) -> 
-                let (_, prefix) = findEffectiveDisjsPrefix determinedvars (fst effective, []) conj in
+                    else Nothing) thesign thepred theargs of
+                        Nothing -> False
+                        _ -> True
+            Exists _ conj -> 
+                let (_, prefix, _) = findEffectiveDisjsPrefix determinedvars (dbs, [], conj) in
                     length prefix == length conj -- only allows subqueries that are in one database
                 
                 
@@ -240,31 +260,42 @@ splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     
     
 -- example MapDB
--- result value
-type ResultValue = String
 
 -- result row
 type MapResultRow = Map Var ResultValue
 
-filterResults :: [Var] -> (Pred->String -> String -> MapResultRow -> [MapResultRow])
-    -> (Pred->Var -> String -> MapResultRow -> [MapResultRow])
-    -> (Pred->String -> Var -> MapResultRow -> [MapResultRow])
+filterResults :: [Var] -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> (Pred->Var -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> (Pred->ResultValue -> Var -> MapResultRow -> [MapResultRow])
     -> (Pred->Var -> Var -> MapResultRow -> [MapResultRow])
     -> ([Var] -> Var -> [Disjunction] -> MapResultRow -> [MapResultRow])
-    -> (Pred->String -> String -> MapResultRow -> [MapResultRow])
+    -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> ([Var] -> Var -> [Disjunction] -> MapResultRow -> [MapResultRow])
+    -> [MapResultRow]
+    -> [Disjunction]
+    -> [MapResultRow]
+filterResults freevars filterBy expand1 expand2 expand12 exists excludeBy notExists = 
+    foldl (filterResultsDisj freevars filterBy expand1 expand2 expand12 exists excludeBy notExists)
+
+filterResultsDisj :: [Var] -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> (Pred->Var -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> (Pred->ResultValue -> Var -> MapResultRow -> [MapResultRow])
+    -> (Pred->Var -> Var -> MapResultRow -> [MapResultRow])
+    -> ([Var] -> Var -> [Disjunction] -> MapResultRow -> [MapResultRow])
+    -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow])
     -> ([Var] -> Var -> [Disjunction] -> MapResultRow -> [MapResultRow])
     -> [MapResultRow]
     -> Disjunction
     -> [MapResultRow]
-filterResults freevars filterBy expand1 expand2 expand12 exists excludeBy notExists results = 
+filterResultsDisj freevars filterBy expand1 expand2 expand12 exists excludeBy notExists results = 
     concatMap (filterResultsLit freevars filterBy expand1 expand2 expand12 exists excludeBy notExists results)
     
-filterResultsLit :: [Var] -> (Pred->String -> String -> MapResultRow -> [MapResultRow])
-    -> (Pred->Var -> String -> MapResultRow -> [MapResultRow])
-    -> (Pred->String -> Var -> MapResultRow -> [MapResultRow])
-    -> (Pred->Var -> Var -> MapResultRow -> [MapResultRow])
+filterResultsLit :: [Var] -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> (Pred-> Var -> ResultValue -> MapResultRow -> [MapResultRow])
+    -> (Pred-> ResultValue -> Var -> MapResultRow -> [MapResultRow])
+    -> (Pred-> Var -> Var -> MapResultRow -> [MapResultRow])
     -> ([Var]-> Var -> [Disjunction] -> MapResultRow -> [MapResultRow])
-    -> (Pred->String -> String -> MapResultRow -> [MapResultRow])
+    -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow])
     -> ([Var]-> Var -> [Disjunction] -> MapResultRow -> [MapResultRow])
     -> [MapResultRow]
     -> Lit
@@ -280,14 +311,14 @@ filterResultsLit _ filterBy expand1 expand2 expand12 _ _ _ results (Lit Pos (Ato
             | otherwise -> expand12 thepred var1 var2 resrow
         VarExpr var1 : StringExpr str2 : _ ->
             if var1 `member` resrow
-                then filterBy thepred (resrow ! var1) str2 resrow
-                else expand1 thepred var1 str2 resrow
+                then filterBy thepred (resrow ! var1) (StringValue str2) resrow
+                else expand1 thepred var1 (StringValue str2) resrow
         StringExpr str1 : VarExpr var2 : _ ->
             if var2 `member` resrow
-                then filterBy thepred str1 (resrow ! var2) resrow
-                else expand2 thepred str1 var2 resrow
+                then filterBy thepred (StringValue str1) (resrow ! var2) resrow
+                else expand2 thepred (StringValue str1) var2 resrow
         StringExpr str1 : StringExpr str2 : _ ->
-            filterBy thepred str1 str2 resrow
+            filterBy thepred (StringValue str1) (StringValue str2) resrow
         _ -> []) results
 
 filterResultsLit _ _ _ _ _ _ excludeBy _ results (Lit Neg (Atom thepred args)) =
@@ -298,18 +329,18 @@ filterResultsLit _ _ _ _ _ _ excludeBy _ results (Lit Neg (Atom thepred args)) =
                 else error ("unconstrained variable " ++ var1 ++ " or " ++ var2)
         VarExpr var1 : StringExpr str2 : _ ->
             if var1 `member` resrow
-                then excludeBy thepred (resrow ! var1) str2 resrow
+                then excludeBy thepred (resrow ! var1) (StringValue str2) resrow
                 else error ("unconstrained variable " ++ var1 ++ " in " ++ show (Lit Neg (Atom thepred args)))
         StringExpr str1 : VarExpr var2 : _ ->
             if var2 `member` resrow
-                then excludeBy thepred str1 (resrow ! var2) resrow
+                then excludeBy thepred (StringValue str1) (resrow ! var2) resrow
                 else error ("unconstrained variable " ++ var2 ++ " in " ++ show (Lit Neg (Atom thepred args)))
         StringExpr str1 : StringExpr str2 : _ ->
-            excludeBy thepred str1 str2 resrow
+            excludeBy thepred (StringValue str1) (StringValue str2) resrow
         _ -> [resrow]) results
 
 filterResultsLit freevars2 _ _ _ _ exists _ _ results (Lit Pos (Exists var conj)) = 
-    concatMap (exists (freevars2 `appendNew` (freevars conj \\ [var])) var conj) results
+    concatMap (exists (freevars2 `appendNew` (freeVars conj \\ [var])) var conj) results
     
 filterResultsLit freevars2 _ _ _ _ _ _ notExists results (Lit Neg (Exists var conj)) =
     concatMap (notExists freevars2 var conj) results
@@ -317,27 +348,24 @@ filterResultsLit freevars2 _ _ _ _ _ _ notExists results (Lit Neg (Exists var co
 limitvarsInRow :: [Var] -> MapResultRow -> MapResultRow
 limitvarsInRow vars = foldrWithKey (\ var val newresrow -> if var `elem` vars then insert var val newresrow else newresrow) empty
 
-data MapDB = MapDB String String [(String, String)]
+data MapDB = MapDB String String [(ResultValue, ResultValue)] deriving Show
 
-newtype ListResultStream = ListResultStream [MapResultRow]
-
-instance ResultStream Identity ListResultStream where
-    type ResultRow ListResultStream = MapResultRow
-    enumerate (ListResultStream results) iteratee seed = foldEitherM f seed results where
-        f x y = iteratee y x 
+listResultStream :: (Monad m) => [MapResultRow] -> ResultStream m seed MapResultRow
+listResultStream results  = ResultStream (\iteratee seed-> 
+    foldEitherM (flip iteratee) seed results) where
         foldEitherM _ a [] = return a
         foldEitherM g a (b : bs) = do
             c <- g a b
             case c of
                 Left d -> return d
                 Right d -> foldEitherM g d bs
-    limitvars vars (Identity (ListResultStream results)) = Identity (ListResultStream (map (limitvarsInRow vars) results)) 
-        
 
-instance Database_ MapDB Identity ListResultStream where
+instance Database_ MapDB Identity MapResultRow where
+    dbStartSession _ = return ()
+    dbStopSession _ = return ()
     getName (MapDB name _ _) = name
     getPreds (MapDB _ predname _) = [ Pred predname ["String", "String"] ]
-    domainSize db varDomainSize (Lit thesign (Atom thepred [arg1, arg2])) 
+    domainSize db varDomainSize thesign thepred [arg1, arg2] 
         | thepred `elem` getPreds db = case thesign of
             Pos -> case db of 
                 MapDB _ _ rows -> 
@@ -349,48 +377,74 @@ instance Database_ MapDB Identity ListResultStream where
                 let d1 = exprDomainSize varDomainSize Nothing arg1 
                     d2 = exprDomainSize varDomainSize Nothing arg2 in
                     d1 `dmul` d2
-    domainSize _ _ _ = Nothing
+    domainSize _ _ _ _ _ = Nothing
         
-    doQuery db query = doFilter db query (pure (ListResultStream [empty]))
-    doFilter db (Query vars disjs) = fmap (\(ListResultStream results)-> ListResultStream (filteredResults results)) where
-        (MapDB _ _ rows) = db
-        filteredResults results = [ limitvarsInRow vars resrow | 
-            resrow <- foldl (filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists) results disjs ]
-        filterBy _ str1 str2 resrow = [resrow | (str1, str2) `elem` rows]
-        excludeBy _ str1 str2 resrow = [resrow | (str1, str2) `notElem` rows ] 
-        exists freevars var conj resrow = case doFilter db (Query freevars conj) (Identity (ListResultStream [resrow])) of Identity (ListResultStream rowsnew) -> rowsnew
-        notExists freevars var conj resrow = [ resrow | null (case doFilter db (Query freevars conj) (Identity (ListResultStream [resrow])) of Identity (ListResultStream rowsnew) -> rowsnew) ]
-        expand1 _ var1 str2 resrow = [insert var1 (fst row) resrow | row <- rows, snd row == str2 ] 
-        expand2 _ str1 var2 resrow = [insert var2 (snd row) resrow | row <- rows, fst row == str1 ] 
-        expand12 _ var1 var2 resrow = [ insert var1 (fst row) (insert var2 (snd row) resrow) | row <- rows ]
-                
+    doQuery db query = doFilter db query (return empty)
+    doFilter db (Query vars disjs) stream  = do
+        row <- stream 
+        limitvarsInRow vars <$> listResultStream (filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists [row] disjs) where
+            (MapDB _ _ rows) = db
+            filterBy :: Pred -> ResultValue -> ResultValue -> MapResultRow -> [MapResultRow]
+            filterBy _ str1 str2 resrow = [resrow | (str1, str2) `elem` rows]
+            excludeBy _ str1 str2 resrow = [resrow | (str1, str2) `notElem` rows ] 
+            exists freevars _ conj resrow =
+                case runResultStream (doFilter db (Query freevars conj) (return resrow)) (\row seed -> return (Right (row : seed))) [] of Identity results -> results
+            notExists freevars _ conj resrow =
+                case runResultStream (doFilter db (Query freevars conj) (return resrow)) (\_ _ -> return (Left [])) [resrow] of Identity results -> results
+            expand1 _ var1 str2 resrow = [insert var1 (fst row) resrow | row <- rows, snd row == str2 ] 
+            expand2 _ str1 var2 resrow = [insert var2 (snd row) resrow | row <- rows, fst row == str1 ] 
+            expand12 _ var1 var2 resrow = [ insert var1 (fst row) (insert var2 (snd row) resrow) | row <- rows ]
+                    
 -- example EqDB
  
 data EqDB = EqDB String
-instance Database_ EqDB Identity ListResultStream where
+instance Database_ EqDB Identity MapResultRow where
+    dbStartSession _ = return ()
+    dbStopSession _ = return ()
     getName (EqDB name) = name
     getPreds _ = [ Pred "eq" ["String", "String"] ]
-    domainSize db varDomainSize (Lit thesign (Atom thepred [arg1, arg2])) 
+    domainSize db varDomainSize thesign thepred [arg1, arg2] 
         | thepred `elem` getPreds db = 
             let d1 = exprDomainSize varDomainSize Nothing arg1
                 d2 = exprDomainSize varDomainSize Nothing arg2 in
                 case thesign of
                     Pos -> dmin d1 d2
                     Neg -> dmul d1 d2
-    domainSize _ _ _ = Nothing
+    domainSize _ _ _ _ _ = Nothing
         
-    doQuery db query = doFilter db query (return (ListResultStream [empty]))
-    doFilter db (Query vars disjs) = fmap (\ (ListResultStream results) -> ListResultStream ( filteredResults results) ) where
-        filteredResults res = [ limitvarsInRow vars resrow | resrow <- foldl (filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists) res disjs ]
-        filterBy _ str1 str2 resrow = [resrow | str1 == str2]
-        excludeBy _ str1 str2 resrow = [resrow | str1 /= str2 ] 
-        exists freevars var conj resrow = case doFilter db (Query freevars conj) (Identity (ListResultStream [resrow])) of Identity (ListResultStream rowsnew) -> rowsnew
-        notExists freevars var conj resrow = [ resrow | null (case doFilter db (Query freevars conj) (Identity (ListResultStream [resrow])) of Identity (ListResultStream rowsnew) -> rowsnew) ]
-        expand1 _ var1 str2 resrow = [insert var1 str2 resrow ] 
-        expand2 _ str1 var2 resrow = [insert var2 str1 resrow ] 
-        expand12 _ _ _ _ = error "unconstrained eq predicate"
+    doQuery db query = doFilter db query (return empty)
+    doFilter db (Query vars disjs) stream = do
+        row <- stream
+        limitvarsInRow vars <$> listResultStream (filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists [row] disjs) where
+            filterBy _ str1 str2 resrow = [resrow | str1 == str2]
+            excludeBy _ str1 str2 resrow = [resrow | str1 /= str2 ] 
+            exists freevars _ conj resrow =
+                case runResultStream (doFilter db (Query freevars conj) (return resrow)) (\row seed -> return (Right (row : seed))) [] of Identity results -> results
+            notExists freevars _ conj resrow =
+                case runResultStream (doFilter db (Query freevars conj) (return resrow)) (\_ _ -> return (Left [])) [resrow] of Identity results -> results
+            expand1 _ var1 str2 resrow = [insert var1 str2 resrow ] 
+            expand2 _ str1 var2 resrow = [insert var2 str1 resrow ] 
+            expand12 _ _ _ _ = error "unconstrained eq predicate"
       
+instance Functor (ResultStream m seed) where
+    fmap f (ResultStream enumerator) = ResultStream (\iteratee seed ->
+        enumerator (iteratee . f) seed)
+        
+-- instance Applicative m => Applicative (ResultStream m seed) where
 
+instance Functor m => Monad (ResultStream m seed) where
+    return a = ResultStream (\iteratee seed -> 
+                                (\seedneweither -> case seedneweither of 
+                                    Left seednew -> seednew
+                                    Right seednew -> seednew) <$> iteratee a seed)
+    (ResultStream enumerator) >>= f = ResultStream (\iteratee seed ->
+        enumerator (\row seed2 -> Right <$> runResultStream (f row) iteratee seed2) seed)
+ 
+instance MonadIO (ResultStream IO seed) where
+    liftIO f = ResultStream (\iteratee seed -> f >>= \a-> runResultStream (return a) iteratee seed)
+
+instance MonadIO (ResultStream (StateT s IO) seed) where
+    liftIO f = ResultStream (\iteratee seed -> lift f >>= \a-> runResultStream (return a) iteratee seed)
 
 -- UI
 
@@ -411,96 +465,4 @@ instance Show Lit where
         Pos -> show theatom
         Neg -> "~" ++ show theatom
     
-type FOParser = GenParser Char (Map String Pred)
--- parser
-identifier :: FOParser String
-identifier  = do
-    c  <- letter
-    cs <- many (alphaNum <|> char '_')
-    return (c:cs)
-    
-oper :: Char -> FOParser ()
-oper ch = do
-    spaces
-    char ch        
-    spaces
-    return ()
-            
-argp :: FOParser Expr
-argp = 
-    (VarExpr <$> identifier)
-    <|> (IntExpr . read <$> many1 digit)
-    <|> (char '\"' >> (StringExpr <$> many (noneOf "\"")) >>= \expr -> char '\"' >> return expr)
-
-arglistp :: FOParser [Expr]
-arglistp =
-    oper '(' >> (
-        (oper ')' >> return [])
-        <|> ((:) <$> argp <*> arglisttail)
-    ) where
-        arglisttail :: FOParser [Expr]
-        arglisttail = (spaces >> oper ')' >> return [])
-            <|> (oper ',' >> spaces >> ((:) <$> argp <*> arglisttail))
-
-atomp :: FOParser Atom
-atomp = (do
-    oper '('
-    string "exists"
-    spaces
-    var <- identifier
-    oper '.'
-    conj <- disjsp
-    oper ')'
-    return (Exists var conj)) <|> (do
-    predmap <- getState
-    predname <- identifier
-    if not (predname `member` predmap) 
-        then error ("undefined predicate " ++ predname) 
-        else do
-            let thepred = predmap ! predname
-            arglist <- arglistp
-            return (Atom thepred arglist))
-    
-litp :: FOParser Lit
-litp = (oper '~' >> Lit <$> return Neg <*> atomp)
-    <|> Lit <$> return Pos <*> atomp
-    
-disjp :: FOParser Disjunction
-disjp = spaces >> ((:) <$> litp <*> disjptail) where
-    disjptail = (spaces >> char '|' >> disjp) <|> return []
-        
-paramtypep :: FOParser Type
-paramtypep = identifier
-
-predtypep :: FOParser [Type]
-predtypep =
-    oper '(' >>
-    ((oper ')' >> return [])
-    <|> (:) <$> paramtypep <*> predtypetail) where
-        predtypetail = (oper ')' >> return [])
-            <|> (oper ',' >> spaces >> (:) <$> paramtypep <*> predtypetail)
-    
-predp :: FOParser ()
-predp = do
-    string "predicate"
-    spaces
-    name <- identifier
-    spaces
-    t <- predtypep
-    let thepred = Pred name t
-    updateState (insert name thepred)
-    
-    
-disjsp :: FOParser [Disjunction]
-disjsp = spaces >> ((predp >> disjsp)
-    <|> (:) <$> disjp <*> disjsp
-    <|> return [])
-    
-progp :: FOParser ([Disjunction], Map String Pred)
-progp = do
-    disjs <- disjsp
-    predmap <- getState
-    return (disjs, predmap)
-
-       
     
