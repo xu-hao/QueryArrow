@@ -16,7 +16,7 @@ newtype Sqlite3DBConnInfo = Sqlite3DBConnInfo String
 data Sqlite3Connection where
 	Sqlite3Connection :: IConnection conn => conn -> Sqlite3Connection
 
-instance QueryDB Sqlite3DBConnInfo Sqlite3Connection HDBCStatement ([Var], SQL) SQLExpr where
+instance QueryDB Sqlite3DBConnInfo Sqlite3Connection HDBCStatement SQLQuery SQLExpr where
         dbConnect (Sqlite3DBConnInfo path) = Sqlite3Connection <$> connectSqlite3 path
 
 

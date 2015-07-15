@@ -115,6 +115,8 @@ instance Subst SQLQualifiedCol where
     subst varmap (var, col) = (varmap ! var, col)
     fv _ = error "unsupported SQLQualifiedCol"
 
+type SQLQuery = ([Var], SQL)
+
 -- translate relational calculus to sql
 -- If P maps to table T col_1 ... col_n
 -- {xs : P(e_1,e_2,...,e_n)}

@@ -52,7 +52,7 @@ instance PreparedStatement HDBCStatement SQLExpr where
                                                                 foldlM2 iteratee seednew2 (return rest)
         closePreparedStatement _ = return ()
 
-instance HDBCConnection conn => DBConnection conn HDBCStatement ([Var], SQL) SQLExpr where
+instance HDBCConnection conn => DBConnection conn HDBCStatement SQLQuery SQLExpr where
         execStatement conn query = do
                 stmt <- liftIO $ prepareStatement conn query
                 execWithParams stmt []
