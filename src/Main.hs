@@ -44,6 +44,7 @@ import Text.Parsec (runParser)
 import Data.Functor.Identity
 import Control.Monad.Trans.State.Strict (evalStateT)
 import Database.HDBC
+import ICAT
 
 pgt :: Pred
 pgt = Pred "gt" ["Num", "Num"]
@@ -147,4 +148,20 @@ main = do
             let sql = translate (SQLTrans schema builtin predtablemap) qu2
             print sql
             (rows, report) <- evalStateT (getAllResults [Database db3] qu2) (DBAdapterState empty)
+            print rows
+    run2
+
+run2 :: IO ()
+run2 = do
+    let query3 = "DATA_NAME(a, b) DATA_COLL_NAME(a, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000)"
+    conn <- dbConnect (PostgreSQLDBConnInfo (DBConnInfo "localhost" "irods" "irods" "ICAT"))
+    let db4 = makeICATSQLDBAdapter conn
+    let predmap3 = constructPredMap [Database db4]
+    case runParser progp predmap3 "" query3 of
+        Left err -> print err
+        Right (lits, _) -> do 
+            let qu2 = Query ["a","b"] lits
+            let sql = translate (sqlTrans db4) qu2
+            print sql
+            (rows, report) <- evalStateT (getAllResults [Database db4] qu2) (DBAdapterState empty)
             print rows

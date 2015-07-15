@@ -83,22 +83,26 @@ instance Show SQLCond where
 instance Show SQLExpr where
     show (SQLColExpr (var, col)) = var ++ "." ++ col
     show (SQLIntConstExpr i) = show i
-    show (SQLStringConstExpr s) = show s
+    show (SQLStringConstExpr s) = "'" ++ s ++ "'"
     show (SQLParamExpr) = "?"
 
 class Subst a where
     subst :: Map SQLVar SQLVar -> a -> a
     fv :: a -> [(TableName, SQLVar)]
 
+instance Subst SQLVar where
+    subst varmap var = case lookup  var varmap of
+        Nothing -> var
+        Just var2 -> var2
+    fv _ = error "unsupported SQLVar"
+        
 instance Subst Table where
-    subst varmap (OneTable tablename var) = OneTable tablename (varmap ! var)
-    subst varmap (JoinTables tablename var tables) = JoinTables tablename (varmap ! var) (substs varmap tables) where
-        substs _ [] = []
-        substs varmap2 ((tablename2, var2, cond2) : tables2) = (tablename2, varmap2 ! var2, subst varmap2 cond2) : substs varmap tables2
+    subst varmap (OneTable tablename var) = OneTable tablename (subst varmap var)
+    subst varmap (JoinTables tablename var tables) = JoinTables tablename (subst varmap var) (substs varmap tables) where
+        substs varmap2 = map (\(tablename2, var2, cond2) -> (tablename2, subst varmap2 var2, subst varmap2 cond2))
     fv (OneTable tablename var) = [(tablename, var)]
     fv (JoinTables tablename var tables) = (tablename, var) : vars tables where
-        vars [] = []
-        vars ((tablename2, var2, _) : tables2) = (tablename2, var2) : vars tables2
+        vars = map (\(tablename2, var2, _)-> (tablename2, var2))
 
 instance Subst SQLCond where
     subst varmap (SQLCompCond op a b) = SQLCompCond op (subst varmap a) (subst varmap b)
@@ -112,7 +116,7 @@ instance Subst SQLExpr where
     fv _ = error "unsupported SQLExpr"
 
 instance Subst SQLQualifiedCol where
-    subst varmap (var, col) = (varmap ! var, col)
+    subst varmap (var, col) = (subst varmap var, col)
     fv _ = error "unsupported SQLQualifiedCol"
 
 type SQLQuery = ([Var], SQL)
@@ -148,7 +152,9 @@ type TransMonad a = State (Schema, BuiltIn, PredTableMap, RepMap, TableMap, Tabl
 freshSQLVar :: TableName -> TransMonad SQLVar
 freshSQLVar tablename = do
     (schema, builtin, predtablemap, repmap, pkmap, tvmap, params) <- get
-    let (tvmapnew, vid) = if tablename `member` tvmap then (adjust (+1) tablename tvmap, show (tvmap ! tablename)) else (insert tablename 0 tvmap, "")
+    let (tvmapnew, vid) = case lookup tablename tvmap of
+            Just n -> (adjust (+1) tablename tvmap, show n)
+            Nothing -> (insert tablename 0 tvmap, "")
     put (schema, builtin, predtablemap, repmap, pkmap, tvmapnew, params)
     return (tablename ++ vid)
     
@@ -198,6 +204,11 @@ sqlExprFromArg repmap arg = do
         StringExpr s ->
             return (Left (SQLStringConstExpr s))
 
+update :: (a -> a) -> State a ()
+update f = do
+    a <- get
+    put (f a)
+    
 translateLitToSQL :: Lit -> TransMonad (SQLTableList, SQLCond)
 translateLitToSQL (Lit thesign (Atom (Pred name _) args)) = do
     (schema, builtin, predtablemap, repmap, pkmap, vid, params) <- get
@@ -213,12 +224,12 @@ translateLitToSQL (Lit thesign (Atom (Pred name _) args)) = do
             builtInMap builtin thesign name sqlExprs 
         else if name `member` predtablemap then do
             let (table, cols) = predtablemap ! name
-            let getnewvars = do
-                let fvs = fv table
-                varmap <- foldM (\ varmap (fv2, tablename) -> do 
+            let getnewvars table2 = do
+                let fvs = fv table2
+                varmap <- foldM (\ varmap (tablename, fv2) -> do 
                     sqlvar <- freshSQLVar tablename
                     return (insert fv2 sqlvar varmap)) empty fvs
-                return ([table], varmap, cols, args)
+                return ([table2], varmap, cols, args)
             
             (tables, varmap, cols2, args2) <- case table of
                 OneTable tablename sqlvar -> do
@@ -232,10 +243,10 @@ translateLitToSQL (Lit thesign (Atom (Pred name _) args)) = do
                                 return ([], singleton sqlvar (pkmap ! (tablename, prikeyargs)), cols2 , args2)
                             else do
                                 sqlvar2 <- freshSQLVar tablename
-                                put (schema, builtin, predtablemap, repmap, insert (tablename, prikeyargs) sqlvar2 pkmap, vid, params)
+                                update (\(schema, builtin, predtablemap, repmap, pkmap, vid, params) -> (schema, builtin, predtablemap, repmap, insert (tablename, prikeyargs) sqlvar2 pkmap, vid, params))
                                 return ([table], singleton sqlvar sqlvar2, cols, args)
-                        else getnewvars 
-                _ -> getnewvars
+                        else getnewvars table 
+                _ -> getnewvars table
                 
             let tables2 = map (subst varmap) tables
             let cols3 = map (subst varmap) cols2
@@ -289,7 +300,7 @@ resultValueToSQLExpr resval =
 
 
 data SQLDBAdapter connInfo conn stmt where
-    SQLDBAdapter :: DBConnection conn stmt ([Var], SQL) SQLExpr => {   
+    SQLDBAdapter :: DBConnection conn stmt SQLQuery SQLExpr => {   
         sqlDBConn :: conn,
         sqlDBName :: String,
         sqlDBPreds :: [Pred],
