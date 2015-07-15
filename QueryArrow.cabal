@@ -17,9 +17,10 @@ executable QueryArrow
                    semigroupoids,
                    QuickCheck >=2.8.1,
                    HDBC-sqlite3,
+                   HDBC-postgresql,
                    HDBC,
                    hspec
   ghc-options:     -Wall
   other-modules:   
-                   FO
+                   SQL.HDBC.PostgreSQL
                    

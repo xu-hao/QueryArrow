@@ -1,4 +1,5 @@
-module SQL.HDBCPostgreSQL where
+{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses #-}
+module SQL.HDBC.PostgreSQL where
 
 import SQL.SQL
 import DBQuery
@@ -14,9 +15,9 @@ newtype PostgreSQLDBConnInfo = PostgreSQLDBConnInfo DBConnInfo
 data PostgreSQLConnection where
 	PostgreSQLConnection :: IConnection conn => conn -> PostgreSQLConnection
 
-instance QueryDB PostgreSQLDBConnInfo PostgreSQLConnection Statement SQL SQLExpr where
+instance QueryDB PostgreSQLDBConnInfo PostgreSQLConnection HDBCStatement ([Var], SQL) SQLExpr where
         dbConnect (PostgreSQLDBConnInfo (DBConnInfo host user password db)) = 
-                PostgreSQLConnection <$> connectPostgreSQL "host="++host++" dbname="++db++" user="++user++" password="++password
+                PostgreSQLConnection <$> connectPostgreSQL ("host="++host++" dbname="++db++" user="++user++" password="++password)
 
 instance HDBCConnection PostgreSQLConnection where
 	extractHDBCConnection (PostgreSQLConnection conn) = ConnWrapper conn 

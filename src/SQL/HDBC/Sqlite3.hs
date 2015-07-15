@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
-module SQL.HDBCSqlite3 where
+module SQL.HDBC.Sqlite3 where
 
 import SQL.SQL
 import DBQuery

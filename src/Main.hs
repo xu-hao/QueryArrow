@@ -35,7 +35,8 @@ import FO
 import Parser
 import SQL.SQL
 import SQL.HDBC
-import SQL.HDBCSqlite3
+import SQL.HDBC.Sqlite3
+import SQL.HDBC.PostgreSQL
 import DBQuery
 
 import Data.Map.Strict (empty, fromList)
