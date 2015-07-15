@@ -1,12 +1,22 @@
 module SQL.HDBCPostgreSQL where
 
 import SQL.SQL
+import DBQuery
+import FO
+import SQL.HDBC
 
 import Database.HDBC
 import Database.HDBC.PostgreSQL
+import Control.Applicative ((<$>))
 
 newtype PostgreSQLDBConnInfo = PostgreSQLDBConnInfo DBConnInfo
 
-instance QueryDB PostgreSQLDBConnInfo ConnWrapper Statement SQL SQLExpr where
+data PostgreSQLConnection where
+	PostgreSQLConnection :: IConnection conn => conn -> PostgreSQLConnection
+
+instance QueryDB PostgreSQLDBConnInfo PostgreSQLConnection Statement SQL SQLExpr where
         dbConnect (PostgreSQLDBConnInfo (DBConnInfo host user password db)) = 
-                connectPostgreSQL "host="++host++" dbname="++db++" user="++user++" password="++password
+                PostgreSQLConnection <$> connectPostgreSQL "host="++host++" dbname="++db++" user="++user++" password="++password
+
+instance HDBCConnection PostgreSQLConnection where
+	extractHDBCConnection (PostgreSQLConnection conn) = ConnWrapper conn 
