@@ -141,10 +141,7 @@ type PredTableMap = Map String (Table, [SQLQualifiedCol])
 -- table -> cols, primary key
 type Schema = Map TableName ([Col], [Col])
 -- builtin predicate -> op, neg op
-data BuiltIn = BuiltIn {
-    builtInMap :: Sign -> String -> [SQLExpr] -> TransMonad (SQLTableList, SQLCond),
-    builtInList :: [String]
-    }
+newtype BuiltIn = BuiltIn (Map String (Sign -> [SQLExpr] -> TransMonad (SQLTableList, SQLCond)))
 -- int is for generating fresh var
 type TableVarMap = Map TableName Int
 type TransMonad a = State (Schema, BuiltIn, PredTableMap, RepMap, TableMap, TableVarMap, [Var]) a 
@@ -211,17 +208,17 @@ update f = do
     
 translateLitToSQL :: Lit -> TransMonad (SQLTableList, SQLCond)
 translateLitToSQL (Lit thesign (Atom (Pred name _) args)) = do
-    (schema, builtin, predtablemap, repmap, pkmap, vid, params) <- get
+    (schema, BuiltIn builtin, predtablemap, repmap, pkmap, vid, params) <- get
     let err m = do 
         a <- m
         case a of 
             Left expr -> return expr
             Right _ -> error "unconstrained argument to built-in predicate"
     --try builtin first
-    if name `elem` builtInList builtin
+    if name `member` builtin
         then do
             sqlExprs <- mapM (err . sqlExprFromArg repmap) args
-            builtInMap builtin thesign name sqlExprs 
+            (builtin ! name) thesign sqlExprs 
         else if name `member` predtablemap then do
             let (table, cols) = predtablemap ! name
             let getnewvars table2 = do
@@ -307,7 +304,7 @@ data SQLDBAdapter connInfo conn stmt where
         sqlTrans :: SQLTrans
     } -> SQLDBAdapter connInfo conn stmt
 
-instance (QueryDB connInfo conn stmt ([Var], SQL) SQLExpr) => Database_ (SQLDBAdapter connInfo conn stmt) (DBAdapterMonad stmt SQLExpr) MapResultRow where
+instance (QueryDB connInfo conn stmt SQLQuery SQLExpr) => Database_ (SQLDBAdapter connInfo conn stmt) (DBAdapterMonad stmt SQLExpr) MapResultRow where
     dbStartSession _ = put (DBAdapterState empty)
     dbStopSession _ = closeAllCachedPreparedStatements
     getName = sqlDBName
@@ -320,8 +317,8 @@ instance (QueryDB connInfo conn stmt ([Var], SQL) SQLExpr) => Database_ (SQLDBAd
                 Pos -> if name `member` predtablemap then Just 1 else Nothing) where
             argsDomainSize = map (exprDomainSize varDomainSize Nothing) args
             maxArgDomainSize = dmaxList argsDomainSize
-            isBuiltIn = name `elem` builtInList builtin 
-            (SQLTrans _ builtin predtablemap) = sqlTrans db
+            isBuiltIn = name `member` builtin 
+            (SQLTrans _ (BuiltIn builtin) predtablemap) = sqlTrans db
     doQuery db query@(Query queryvars _) = do
         let sql = translate (sqlTrans db) query
         let conn = sqlDBConn db

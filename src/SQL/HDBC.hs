@@ -21,16 +21,16 @@ convertSQLExprToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
 convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
-		insert var (case sqlvalue of
-			SqlInt32 _ -> IntValue (fromSql sqlvalue)
-			SqlInt64 _ -> IntValue (fromSql sqlvalue)
-			SqlInteger _ -> IntValue (fromSql sqlvalue)
-			SqlString _ -> StringValue (fromSql sqlvalue)
+                insert var (case sqlvalue of
+                        SqlInt32 _ -> IntValue (fromSql sqlvalue)
+                        SqlInt64 _ -> IntValue (fromSql sqlvalue)
+                        SqlInteger _ -> IntValue (fromSql sqlvalue)
+                        SqlString _ -> StringValue (fromSql sqlvalue)
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
-			_ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues) 
+                        _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues) 
 
 class HDBCConnection conn where
-	extractHDBCConnection :: conn -> ConnWrapper
+        extractHDBCConnection :: conn -> ConnWrapper
 
 instance PreparedStatement HDBCStatement SQLExpr where
         execWithParams (HDBCStatement vars stmt) args = ResultStream (\iteratee seed -> do

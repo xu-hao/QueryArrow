@@ -111,36 +111,31 @@ main = do
     \ filename(a, \"John\") coll(a, \"X\") size(a, x) le(x,1000)"
     let predtablemap = fromList [("filename", (OneTable "file" "V1" , [("V1", "id"),("V1", "name")])), ("coll", (OneTable "file" "V2", [("V2", "id"),("V2", "collId")])), ("size", (OneTable "file" "V3", [("V3", "id"),("V3", "size")]))]
     let schema = fromList [("file", (["id","name","size", "collId"], ["id"]))]
-    let builtin = BuiltIn {
-        builtInList = ["le"],
-        builtInMap = \thesign _ args ->
+    let builtin = BuiltIn (fromList [("le", \thesign args ->
             return (case thesign of
                     Pos -> ([], SQLCompCond "<" (head args) (args!!1))
-                    Neg -> ([], SQLCompCond ">=" (head args) (args!!1)))}
+                    Neg -> ([], SQLCompCond ">=" (head args) (args!!1))))])
     conn <- dbConnect (Sqlite3DBConnInfo "./db.sqlite3")
     let db3 = SQLDBAdapter {
-		sqlDBConn = conn,
-		sqlDBName = "test_sqlite3_db",
-		sqlDBPreds = [
-			Pred "filename" ["ObjectId", "String"],
-			Pred "coll" ["ObjectId", "CollId"],
-			Pred "size" ["ObjectId", "BigInt"],
-			Pred "le" ["BigInt", "BigInt"] ],
-		sqlTrans = SQLTrans
-			(fromList [("data", (["id", "filename", "collId", "size"], ["id"]))])
-			BuiltIn {
-				builtInList = ["le"],
-				builtInMap = \thesign name args -> do
-					return ([], SQLCompCond (case thesign of 
-						Pos -> "<"
-						Neg -> ">=") (head args) (args !! 1))
-			}
-			(fromList [
-				("filename", (OneTable "data" "1", [( "1", "id"), ( "1", "filename")])),
-				("size", (OneTable "data" "1", [( "1", "id"), ( "1", "size")])),
-				("coll", (OneTable "data" "1", [( "1", "id"), ( "1", "collId")]))
-				])
-	}
+                sqlDBConn = conn,
+                sqlDBName = "test_sqlite3_db",
+                sqlDBPreds = [
+                        Pred "filename" ["ObjectId", "String"],
+                        Pred "coll" ["ObjectId", "CollId"],
+                        Pred "size" ["ObjectId", "BigInt"],
+                        Pred "le" ["BigInt", "BigInt"] ],
+                sqlTrans = SQLTrans
+                        (fromList [("data", (["id", "filename", "collId", "size"], ["id"]))])
+                        (BuiltIn (fromList [("le", \thesign args -> do
+                                        return ([], SQLCompCond (case thesign of 
+                                                Pos -> "<"
+                                                Neg -> ">=") (head args) (args !! 1)))]))
+                        (fromList [
+                                ("filename", (OneTable "data" "1", [( "1", "id"), ( "1", "filename")])),
+                                ("size", (OneTable "data" "1", [( "1", "id"), ( "1", "size")])),
+                                ("coll", (OneTable "data" "1", [( "1", "id"), ( "1", "collId")]))
+                                ])
+        }
     case runParser progp (constructPredMap [Database db3]) "" query2 of
         Left err -> print err
         Right (lits, _) -> do 
