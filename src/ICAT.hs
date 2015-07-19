@@ -2,23 +2,12 @@
 module ICAT where
 
 import FO
-import Parser
 import SQL.SQL
-import SQL.HDBC
-import SQL.HDBC.Sqlite3
-import SQL.HDBC.PostgreSQL
 import DBQuery
 
 import Data.Map.Strict (empty, fromList)
-import Text.Parsec (runParser)
-import Data.Functor.Identity
-import Control.Monad.Trans.State.Strict (evalStateT)
-import Database.HDBC
 import Data.Aeson
 import GHC.Generics
-import Control.Applicative ((<$>))
-import qualified Data.ByteString.Lazy as B
-
 
 data ICATDBConnInfo = ICATDBConnInfo {
     db_host :: String,
