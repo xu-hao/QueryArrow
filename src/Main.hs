@@ -181,19 +181,9 @@ getDBFromPlugin icatDBConnInfo = do
     getDBFunc icatDBConnInfo
 
 
-getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String)
-getDB ps = if catalog_database_type ps == "postgres"
-                then do
-                    conn <- dbConnect (PostgreSQLDBConnInfo (DBConnInfo (db_host ps) (db_port ps) (db_username ps) (db_password ps) (db_name ps)))
-                    let db3 = makeICATSQLDBAdapter conn
-                    return (Database db3, show . translate db3)
-                else if catalog_database_type ps == "sqlite3"
-                    then do
-                        conn <- dbConnect (Sqlite3DBConnInfo (db_name ps))
-                        let db3 = makeICATSQLDBAdapter conn
-                        return (Database db3, show . translate db3)
-                    else
-                        error ("unsupported db type " ++ catalog_database_type ps)
+--                        conn <- dbConnect (Sqlite3DBConnInfo (db_name ps))
+--                        let db3 = makeICATSQLDBAdapter conn
+--                        return (Database db3, show . translate db3)
                         
 run2 :: String -> IO ()
 run2 query = do
