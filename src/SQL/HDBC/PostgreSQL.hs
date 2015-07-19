@@ -15,9 +15,10 @@ newtype PostgreSQLDBConnInfo = PostgreSQLDBConnInfo DBConnInfo
 data PostgreSQLConnection where
         PostgreSQLConnection :: IConnection conn => conn -> PostgreSQLConnection
 
-instance QueryDB PostgreSQLDBConnInfo PostgreSQLConnection HDBCStatement SQLQuery SQLExpr where
-        dbConnect (PostgreSQLDBConnInfo (DBConnInfo host user password db)) = 
-                PostgreSQLConnection <$> connectPostgreSQL ("host="++host++" dbname="++db++" user="++user++" password="++password)
+instance QueryDB PostgreSQLDBConnInfo PostgreSQLConnection  SQLQuery  where
+        dbConnect (PostgreSQLDBConnInfo (DBConnInfo host port user password db)) = 
+                PostgreSQLConnection <$> connectPostgreSQL ("host="++host++ " port="++show port++" dbname="++db++" user="++user++" password="++password)
 
 instance HDBCConnection PostgreSQLConnection where
-        extractHDBCConnection (PostgreSQLConnection conn) = ConnWrapper conn 
+        extractHDBCConnection (PostgreSQLConnection conn) = ConnWrapper conn
+        showSQL _ = show

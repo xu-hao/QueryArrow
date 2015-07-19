@@ -4,8 +4,8 @@ module Parser where
 import FO
 import Data.Map.Strict (Map, (!), member, insert)
 import Text.ParserCombinators.Parsec
-import Control.Applicative ((<$>), (<*>))
-
+import Control.Applicative ((<$>), (<*>), (<*), (*>))
+import Control.Arrow (first, second)
     
 -- parser
 type FOParser = GenParser Char (Map String Pred)
@@ -24,25 +24,22 @@ oper ch = do
     return ()
             
 argp :: FOParser Expr
-argp = 
+argp = (
     (VarExpr <$> identifier)
     <|> (IntExpr . read <$> many1 digit)
-    <|> (char '\"' >> (StringExpr <$> many (noneOf "\"")) >>= \expr -> char '\"' >> return expr)
+    <|> try (string "pattern" >> space >> spaces >> PatternExpr <$> str )
+    <|> StringExpr <$> str) where
+        str = char '\"' >> (many (noneOf "\"")) <* char '\"'
 
 arglistp :: FOParser [Expr]
 arglistp =
-    oper '(' >> (
-        (oper ')' >> return [])
-        <|> ((:) <$> argp <*> arglisttail)
-    ) where
-        arglisttail :: FOParser [Expr]
-        arglisttail = (spaces >> oper ')' >> return [])
-            <|> (oper ',' >> spaces >> ((:) <$> argp <*> arglisttail))
+    oper '(' >> sepBy argp (oper ',') <* oper ')'
 
 atomp :: FOParser Atom
 atomp = (do
     oper '('
     _ <- string "exists"
+    space
     spaces
     var <- identifier
     oper '.'
@@ -63,41 +60,48 @@ litp = (oper '~' >> Lit <$> return Neg <*> atomp)
     <|> Lit <$> return Pos <*> atomp
     
 disjp :: FOParser Disjunction
-disjp = spaces >> ((:) <$> litp <*> disjptail) where
-    disjptail = (spaces >> char '|' >> disjp) <|> return []
+disjp = do
+    l <- litp
+    (do try (oper '|')
+        ls <- sepBy litp (oper '|')
+        return (l:ls))
+        <|> return [l]
         
 paramtypep :: FOParser Type
 paramtypep = identifier
 
 predtypep :: FOParser [Type]
 predtypep =
-    oper '(' >>
-    ((oper ')' >> return [])
-    <|> (:) <$> paramtypep <*> predtypetail) where
-        predtypetail = (oper ')' >> return [])
-            <|> (oper ',' >> spaces >> (:) <$> paramtypep <*> predtypetail)
+    oper '(' >> sepBy paramtypep (oper ',') <* oper ')'
     
 predp :: FOParser ()
 predp = do
-    _ <- try (string "predicate")
-    spaces
-    name <- identifier
-    spaces
+    name <- try (do
+        string "predicate"
+        space
+        spaces
+        identifier)
     t <- predtypep
     let thepred = Pred name t
     updateState (insert name thepred)
     
     
 disjsp :: FOParser [Disjunction]
-disjsp = spaces >> ((predp >> disjsp)
-    <|> (:) <$> disjp <*> disjsp
-    <|> return [])
+disjsp = many1 disjp
     
-progp :: FOParser ([Disjunction], Map String Pred)
-progp = do
-    disjs <- disjsp
-    predmap <- getState
-    return (disjs, predmap)
+varsp :: FOParser [Var]
+varsp = spaces >> (
+            (:) <$> identifier <*> varsp
+            <|> return [])
 
-       
-    
+progp :: FOParser (Query, Map String Pred)
+progp = do
+    spaces
+    q <- disjsp2
+    spaces
+    predmap <- getState
+    return (uncurry Query q, predmap) where
+        disjsp2 = (
+            try (string "return" >> space >> spaces >> ((,) <$> varsp <*> return []))
+            <|> (predp >> disjsp2)
+            <|> second <$> ((:) <$> disjp) <*> disjsp2)

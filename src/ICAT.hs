@@ -1,4 +1,4 @@
-{-# LANGUAGE MonadComprehensions, FlexibleContexts #-}
+{-# LANGUAGE MonadComprehensions, FlexibleContexts, DeriveGeneric #-}
 module ICAT where
 
 import FO
@@ -14,24 +14,44 @@ import Text.Parsec (runParser)
 import Data.Functor.Identity
 import Control.Monad.Trans.State.Strict (evalStateT)
 import Database.HDBC
+import Data.Aeson
+import GHC.Generics
+import Control.Applicative ((<$>))
+import qualified Data.ByteString.Lazy as B
 
-makeICATSQLDBAdapter :: DBConnection conn stmt SQLQuery SQLExpr => conn -> SQLDBAdapter connInfo conn stmt 
+
+data ICATDBConnInfo = ICATDBConnInfo {
+    db_host :: String,
+    db_password :: String,
+    db_name :: String,
+    catalog_database_type :: String,
+    db_port :: Int,
+    db_username :: String
+} deriving (Show, Generic)
+
+instance FromJSON ICATDBConnInfo
+instance ToJSON ICATDBConnInfo
+
+makeICATSQLDBAdapter :: DBConnection conn  SQLQuery  => conn -> SQLDBAdapter connInfo conn  
 makeICATSQLDBAdapter conn = SQLDBAdapter {
     sqlDBConn = conn,
     sqlDBName = "ICAT",
     sqlDBPreds = [
-        Pred "DATA_NAME" ["ObjectId", "String"],
-        Pred "DATA_COLL_ID" ["ObjectId", "CollId"],
-        Pred "DATA_REPL_NUM" ["ObjectId", "ReplNum"],
-        Pred "DATA_SIZE" ["ObjectId", "BigInt"],
-        Pred "COLL_NAME" ["ObjectId", "String"],
-        Pred "DATA_PATH" ["ObjectId", "Path"],
-        Pred "DATA_COLL_NAME" ["ObjectId", "String"],
-        Pred "DATA_CHECKSUM" ["ObjectId", "Checksum"],
-        Pred "DATA_CREATE_TIME" ["ObjectId", "Time"],
-        Pred "DATA_MODIFY_TIME" ["ObjectId", "Time"],
+        Pred "DATA_NAME" ["DataId", "String"],
+        Pred "COLL" ["ObjectId", "CollId"],
+        Pred "DATA_REPL_NUM" ["DataId", "ReplNum"],
+        Pred "DATA_SIZE" ["DataId", "BigInt"],
+        Pred "COLL_NAME" ["CollId", "String"],
+        Pred "DATA_PATH" ["DataId", "Path"],
+        Pred "DATA_CHECKSUM" ["DataId", "Checksum"],
+        Pred "DATA_CREATE_TIME" ["DataId", "Time"],
+        Pred "DATA_MODIFY_TIME" ["DataId", "Time"],
         Pred "COLL_CREATE_TIME" ["CollId", "Time"],
         Pred "COLL_MODIFY_TIME" ["CollId", "Time"],
+        Pred "META" ["ObjectId", "MetaId"],
+        Pred "META_ATTR_NAME" ["MetaId", "String"],
+        Pred "META_ATTR_VALUE" ["MetaId", "String"],
+        Pred "META_ATTR_UNITS" ["MetaId", "String"],
         Pred "le" ["BigInt", "BigInt"],
         Pred "lt" ["BigInt", "BigInt"],
         Pred "eq" ["Any", "Any"],

@@ -15,12 +15,27 @@ executable QueryArrow
                    semigroups,
                    parsec,
                    semigroupoids,
-                   QuickCheck >=2.8.1,
+                   QuickCheck,
                    HDBC-sqlite3,
                    HDBC-postgresql,
                    HDBC,
+                   aeson,
+                   bytestring,
+                   dynamic-loader,
                    hspec
   ghc-options:     -Wall
-  other-modules:   
-                   SQL.HDBC.PostgreSQL
+  other-modules:
+library
+  hs-source-dirs:  src
+  exposed-modules: Mpostgres
+  build-depends:   
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   semigroupoids,
+                   HDBC-postgresql,
+                   HDBC
+  ghc-options:     -Wall
                    

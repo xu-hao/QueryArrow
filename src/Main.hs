@@ -34,17 +34,22 @@ module Main where
 import FO
 import Parser
 import SQL.SQL
-import SQL.HDBC
 import SQL.HDBC.Sqlite3
 import SQL.HDBC.PostgreSQL
 import DBQuery
+import ICAT
 
-import Data.Map.Strict (empty, fromList)
+import Prelude hiding (lookup)
+import Data.Map.Strict (empty, fromList,lookup)
 import Text.Parsec (runParser)
 import Data.Functor.Identity
 import Control.Monad.Trans.State.Strict (evalStateT)
-import Database.HDBC
-import ICAT
+import System.Environment
+import Data.List (intercalate, transpose)
+import Data.Aeson
+import Control.Applicative ((<$>))
+import qualified Data.ByteString.Lazy as B
+import System.Plugins.DynamicLoader
 
 pgt :: Pred
 pgt = Pred "gt" ["Num", "Num"]
@@ -75,88 +80,133 @@ db2 = EqDB "Eq"
 
 main::IO()
 main = do
-    print pgt
-    print a1
-    print a2
-    print a3
-    let prog = "predicate gt(Num, Num)\n\
-    \predicate File(Path)\n\
-    \predicate Meta(Path, String)\n\
-    \gt(x, y)\n\
-    \File(z)\n\
-    \Meta(z,m)"
-    case runParser progp empty "" prog of
-        Left err -> print err
-        Right res -> print res
-    let query0 = "predicate elem(String, String) predicate eq(String, String)\n\
-    \elem(x, y) elem(y, z) ~elem(y, \"ObjC\") eq(b,\"test\") eq(a,b) "
-    case runParser progp empty "" query0 of
-        Left err -> print err
-        Right (atoms, _) -> case  getAllResults [ Database db, Database db2] (Query ["x", "y", "z", "w", "b"] atoms) of 
-            Identity ( results, _) -> print results
-    print "test2"
-    let query = "elem(x, y) elem(y, z) | elem(w, y) \
-    \(exists u.elem(y, u)) ~(exists u.(exists v.elem(v,u) elem(u,y))) \
-    \~elem(y, \"ObjC\") ~eq(x, \"ObjB\") eq(b,\"test\") eq(a,b)"
+    args2 <- getArgs
+    if null args2
+        then do
+            print pgt
+            print a1
+            print a2
+            print a3
+            let prog = "predicate gt(Num, Num)\n\
+            \predicate File(Path)\n\
+            \predicate Meta(Path, String)\n\
+            \gt(x, y)\n\
+            \File(z)\n\
+            \Meta(z,m)\
+            \return x y z m"
+            case runParser progp empty "" prog of
+                Left err -> print err
+                Right res -> print res
+            let query0 = "predicate elem(String, String) predicate eq(String, String)\n\
+            \elem(x, y) elem(y, z) ~elem(y, \"ObjC\") eq(b,\"test\") eq(a,b) return x y z w b"
+            case runParser progp empty "" query0 of
+                Left err -> print err
+                Right (atoms, _) -> case  getAllResults [ Database db, Database db2] atoms of 
+                    Identity ( results, _) -> print results
+            print "test2"
+            let query = "elem(x, y) elem(y, z) | elem(w, y) \
+            \(exists u.elem(y, u)) ~(exists u.(exists v.elem(v,u) elem(u,y))) \
+            \~elem(y, \"ObjC\") ~eq(x, \"ObjB\") eq(b,\"test\") eq(a,b) return x y z w b"
+            
+            case runParser progp (constructPredMap [Database db, Database db2]) "" query of
+                Left err -> print err
+                Right (qu, _) -> do 
+                    let (Identity  (rs, report)) =  getAllResults [Database db, Database db2] qu
+                    print rs
+                    print report
+        
+            let query2 = "predicate filename(String, String) predicate coll(String, String) predicate size(String, Int) predicate le(Int, Int)\
+            \ filename(a, \"John\") coll(a, \"X\") size(a, x) le(x,1000) return a"
+            conn <- dbConnect (Sqlite3DBConnInfo "./db.sqlite3")
+            let db3 = SQLDBAdapter {
+                        sqlDBConn = conn,
+                        sqlDBName = "test_sqlite3_db",
+                        sqlDBPreds = [
+                                Pred "filename" ["ObjectId", "String"],
+                                Pred "coll" ["ObjectId", "CollId"],
+                                Pred "size" ["ObjectId", "BigInt"],
+                                Pred "le" ["BigInt", "BigInt"] ],
+                        sqlTrans = SQLTrans
+                                (fromList [("data", (["id", "filename", "collId", "size"], ["id"]))])
+                                (BuiltIn (fromList [("le", \thesign args -> do
+                                                return ([], SQLCompCond (case thesign of 
+                                                        Pos -> "<"
+                                                        Neg -> ">=") (head args) (args !! 1)))]))
+                                (fromList [
+                                        ("filename", (OneTable "data" "1", [( "1", "id"), ( "1", "filename")])),
+                                        ("size", (OneTable "data" "1", [( "1", "id"), ( "1", "size")])),
+                                        ("coll", (OneTable "data" "1", [( "1", "id"), ( "1", "collId")]))
+                                        ])
+                }
+            case runParser progp (constructPredMap [Database db3]) "" query2 of
+                Left err -> print err
+                Right (qu2, _) -> do 
+                    let sql = translate db3 qu2
+                    print sql
+                    (rows, _) <- evalStateT (getAllResults [Database db3] qu2) (DBAdapterState empty)
+                    print rows
+            let query3 = "DATA_NAME(a, b) COLL(a, c) COLL_NAME(c, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000) return a b"
+            run2 query3
+        else
+            run2 (head args2)
+            
+pprint :: [Var] -> [MapResultRow] -> String
+pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+    join = intercalate " " . map (uncurry pad) . zip collen
+    rowstrs = map join m2
+    m2 = transpose m
+    collen = map (maximum . map length) m
+    m = map f vars
+    f var = map (g var) rows
+    g::Var->MapResultRow->String
+    g var row = case lookup var row of
+        Nothing -> "null"
+        Just e -> show e
+    pad n s
+        | length s < n  = s ++ replicate (n - length s) ' '
+        | otherwise     = s
+
     
-    case runParser progp (constructPredMap [Database db, Database db2]) "" query of
-        Left err -> print err
-        Right (lits, _) -> do 
-            let qu = Query ["x", "y", "z", "w", "b"] lits
-            let (Identity  (rs, report)) =  getAllResults [Database db, Database db2] qu
-            print rs
-            print report
 
-    let query2 = "predicate filename(String, String) predicate coll(String, String) predicate size(String, Int) predicate le(Int, Int)\
-    \ filename(a, \"John\") coll(a, \"X\") size(a, x) le(x,1000)"
-    let predtablemap = fromList [("filename", (OneTable "file" "V1" , [("V1", "id"),("V1", "name")])), ("coll", (OneTable "file" "V2", [("V2", "id"),("V2", "collId")])), ("size", (OneTable "file" "V3", [("V3", "id"),("V3", "size")]))]
-    let schema = fromList [("file", (["id","name","size", "collId"], ["id"]))]
-    let builtin = BuiltIn (fromList [("le", \thesign args ->
-            return (case thesign of
-                    Pos -> ([], SQLCompCond "<" (head args) (args!!1))
-                    Neg -> ([], SQLCompCond ">=" (head args) (args!!1))))])
-    conn <- dbConnect (Sqlite3DBConnInfo "./db.sqlite3")
-    let db3 = SQLDBAdapter {
-                sqlDBConn = conn,
-                sqlDBName = "test_sqlite3_db",
-                sqlDBPreds = [
-                        Pred "filename" ["ObjectId", "String"],
-                        Pred "coll" ["ObjectId", "CollId"],
-                        Pred "size" ["ObjectId", "BigInt"],
-                        Pred "le" ["BigInt", "BigInt"] ],
-                sqlTrans = SQLTrans
-                        (fromList [("data", (["id", "filename", "collId", "size"], ["id"]))])
-                        (BuiltIn (fromList [("le", \thesign args -> do
-                                        return ([], SQLCompCond (case thesign of 
-                                                Pos -> "<"
-                                                Neg -> ">=") (head args) (args !! 1)))]))
-                        (fromList [
-                                ("filename", (OneTable "data" "1", [( "1", "id"), ( "1", "filename")])),
-                                ("size", (OneTable "data" "1", [( "1", "id"), ( "1", "size")])),
-                                ("coll", (OneTable "data" "1", [( "1", "id"), ( "1", "collId")]))
-                                ])
-        }
-    case runParser progp (constructPredMap [Database db3]) "" query2 of
-        Left err -> print err
-        Right (lits, _) -> do 
-            let qu2 = Query ["a"] lits
-            let sql = translate (SQLTrans schema builtin predtablemap) qu2
-            print sql
-            (rows, report) <- evalStateT (getAllResults [Database db3] qu2) (DBAdapterState empty)
-            print rows
-    run2
+getDBFromPlugin :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String)
+getDBFromPlugin icatDBConnInfo = do
+    let pluginName = "M" ++ catalog_database_type icatDBConnInfo
+    print ("load plugin " ++ pluginName)
+    modul <- loadModule pluginName Nothing Nothing
+    print ("resolve functions")
+    resolveFunctions
+    print ("load function getDB")
+    getDBFunc <- loadFunction modul "getDB"
+    print ("return")
+    getDBFunc icatDBConnInfo
 
-run2 :: IO ()
-run2 = do
-    let query3 = "DATA_NAME(a, b) DATA_COLL_NAME(a, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000)"
-    conn <- dbConnect (PostgreSQLDBConnInfo (DBConnInfo "localhost" "irods" "irods" "ICAT"))
-    let db4 = makeICATSQLDBAdapter conn
-    let predmap3 = constructPredMap [Database db4]
-    case runParser progp predmap3 "" query3 of
-        Left err -> print err
-        Right (lits, _) -> do 
-            let qu2 = Query ["a","b"] lits
-            let sql = translate (sqlTrans db4) qu2
-            print sql
-            (rows, report) <- evalStateT (getAllResults [Database db4] qu2) (DBAdapterState empty)
-            print rows
+
+getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String)
+getDB ps = if catalog_database_type ps == "postgres"
+                then do
+                    conn <- dbConnect (PostgreSQLDBConnInfo (DBConnInfo (db_host ps) (db_port ps) (db_username ps) (db_password ps) (db_name ps)))
+                    let db3 = makeICATSQLDBAdapter conn
+                    return (Database db3, show . translate db3)
+                else if catalog_database_type ps == "sqlite3"
+                    then do
+                        conn <- dbConnect (Sqlite3DBConnInfo (db_name ps))
+                        let db3 = makeICATSQLDBAdapter conn
+                        return (Database db3, show . translate db3)
+                    else
+                        error ("unsupported db type " ++ catalog_database_type ps)
+                        
+run2 :: String -> IO ()
+run2 query = do
+    d <- eitherDecode <$> B.readFile "/etc/irods/database_config.json"
+    case d of
+        Left err -> putStrLn err
+        Right ps -> do
+            (db3, printFunc) <- getDBFromPlugin ps
+            let predmap = constructPredMap [db3]
+            case runParser progp predmap "" query of
+                Left err -> print err
+                Right (qu@(Query vars _), _) -> do
+                    print (printFunc qu)
+                    (rows, report) <- evalStateT (getAllResults [db3] qu) (DBAdapterState empty)
+                    print report
+                    putStr (pprint vars rows)

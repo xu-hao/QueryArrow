@@ -24,7 +24,7 @@ data Pred = Pred { predName :: String, predType :: PredType} deriving Eq
 type Var = String
 
 -- expression
-data Expr = VarExpr Var | IntExpr Int | StringExpr String deriving (Eq, Ord)
+data Expr = VarExpr Var | IntExpr Int | StringExpr String | PatternExpr String deriving (Eq, Ord)
 
 -- result value
 data ResultValue = StringValue String | IntValue Int deriving (Eq , Show)
@@ -258,6 +258,11 @@ splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     Pos -> (theatom : pos, neg)
     Neg -> (pos, theatom : neg)) ([],[])
     
+resultValueToExpr :: ResultValue -> Expr
+resultValueToExpr resval = 
+    case resval of 
+        IntValue i -> IntExpr i
+        StringValue s -> StringExpr s
     
 -- example MapDB
 
@@ -459,6 +464,7 @@ instance Show Expr where
     show (VarExpr var) = var
     show (IntExpr i) = show i
     show (StringExpr s) = show s
+    show (PatternExpr p) = show p
     
 instance Show Lit where
     show (Lit thesign theatom) = case thesign of 

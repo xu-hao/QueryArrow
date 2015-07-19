@@ -24,6 +24,7 @@ type SQLOper = String
 data SQLExpr = SQLColExpr SQLQualifiedCol
              | SQLIntConstExpr Int
              | SQLStringConstExpr String
+             | SQLPatternExpr String
              | SQLParamExpr
              
 data SQLCond = SQLCompCond SQLOper SQLExpr SQLExpr
@@ -83,9 +84,21 @@ instance Show SQLCond where
 instance Show SQLExpr where
     show (SQLColExpr (var, col)) = var ++ "." ++ col
     show (SQLIntConstExpr i) = show i
-    show (SQLStringConstExpr s) = "'" ++ s ++ "'"
+    show (SQLStringConstExpr s) = "'" ++ sqlStringEscape s ++ "'"
+    show (SQLPatternExpr s) = "'" ++ sqlPatternEscape s ++ "'"
     show (SQLParamExpr) = "?"
-
+instance Show Query where
+    show (Query vars lits) = show lits ++ " return " ++ intercalate " " vars
+sqlStringEscape :: String -> String
+sqlStringEscape = concatMap f where
+    f '\'' = "''"
+    f a = [a]
+    
+sqlPatternEscape :: String -> String
+sqlPatternEscape = concatMap f where
+    f '\\' = "\\\\"
+    f a = [a]
+    
 class Subst a where
     subst :: Map SQLVar SQLVar -> a -> a
     fv :: a -> [(TableName, SQLVar)]
@@ -155,7 +168,7 @@ freshSQLVar tablename = do
     put (schema, builtin, predtablemap, repmap, pkmap, tvmapnew, params)
     return (tablename ++ vid)
     
-translateQueryToSQL :: Query -> TransMonad SQL
+translateQueryToSQL :: Query -> TransMonad SQLQuery
 translateQueryToSQL (Query vars conj) = do
     (tablelist, cond1) <- translateConjToSQL conj
     (_, _, _, repmap, _, _, _) <- get 
@@ -163,7 +176,7 @@ translateQueryToSQL (Query vars conj) = do
                             SQLColExpr col -> col
                             _ -> error (var ++ " doesn't correspond to a column")
     let cols = map extractCol vars
-    return (SQL cols tablelist cond1)
+    return (vars, SQL cols tablelist cond1)
 
 translateConjToSQL :: [Disjunction] -> TransMonad (SQLTableList, SQLCond)
 translateConjToSQL [] = error "empty conjuction"
@@ -200,6 +213,8 @@ sqlExprFromArg repmap arg = do
             return (Left (SQLIntConstExpr i))
         StringExpr s ->
             return (Left (SQLStringConstExpr s))
+        PatternExpr s ->
+            return (Left (SQLPatternExpr s))
 
 update :: (a -> a) -> State a ()
 update f = do
@@ -259,12 +274,12 @@ translateLitToSQL (Lit thesign (Atom (Pred name _) args)) = do
 -- assume that all atoms in conj involves var
 -- should use subquery in from clause
 translateLitToSQL (Lit Pos (Exists var conj)) = do
-    sql <- translateQueryToSQL (Query [var] conj)
+    (_, sql) <- translateQueryToSQL (Query [var] conj)
     return ([], SQLExistsCond sql)
 
 -- assume that all atoms in conj involves var
 translateLitToSQL (Lit Neg (Exists var conj)) = do
-    sql <- translateQueryToSQL (Query [var] conj)
+    (_, sql) <- translateQueryToSQL (Query [var] conj)
     return ([], SQLNotExistsCond sql)
 
 condFromArg :: (SQLExpr -> SQLExpr -> SQLCond) -> (Expr, SQLQualifiedCol) -> TransMonad SQLCond
@@ -279,32 +294,27 @@ condFromArg op (arg, col) = do
             return SQLTrueCond
     
 data SQLTrans = SQLTrans Schema BuiltIn PredTableMap
-translate :: SQLTrans -> Query -> SQL
-translate (SQLTrans schema builtin predtablemap) query = 
-    evalState (translateQueryToSQL query) (schema, builtin, predtablemap, empty, empty, empty, [])
-    
-translateWithParams :: SQLTrans -> Query -> MapResultRow -> (SQL, [Var])
-translateWithParams (SQLTrans schema builtin predtablemap) query env = 
-    let env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env
-        (sql, (_,_,_,_,_,_,vars)) = runState (translateQueryToSQL query) (schema, builtin, predtablemap, env2, empty, empty, []) in
-        (sql, vars)
-    
-resultValueToSQLExpr :: ResultValue -> SQLExpr
-resultValueToSQLExpr resval = 
-    case resval of 
-        IntValue i -> SQLIntConstExpr i
-        StringValue s -> SQLStringConstExpr s
 
-
-data SQLDBAdapter connInfo conn stmt where
-    SQLDBAdapter :: DBConnection conn stmt SQLQuery SQLExpr => {   
+    
+data SQLDBAdapter connInfo conn where
+    SQLDBAdapter :: DBConnection conn SQLQuery => {   
         sqlDBConn :: conn,
         sqlDBName :: String,
         sqlDBPreds :: [Pred],
         sqlTrans :: SQLTrans
-    } -> SQLDBAdapter connInfo conn stmt
+    } -> SQLDBAdapter connInfo conn
 
-instance (QueryDB connInfo conn stmt SQLQuery SQLExpr) => Database_ (SQLDBAdapter connInfo conn stmt) (DBAdapterMonad stmt SQLExpr) MapResultRow where
+instance (QueryDB connInfo conn SQLQuery) => Translate (SQLDBAdapter connInfo conn) MapResultRow SQLQuery where
+    translate db query =
+        let (SQLTrans schema builtin predtablemap) = sqlTrans db in
+            evalState (translateQueryToSQL query) (schema, builtin, predtablemap, empty, empty, empty, [])
+    translateWithParams db query env =
+        let (SQLTrans schema builtin predtablemap) = sqlTrans db
+            env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env
+            (sql, (_,_,_,_,_,_,vars)) = runState (translateQueryToSQL query) (schema, builtin, predtablemap, env2, empty, empty, []) in
+            (sql, vars)
+
+instance (QueryDB connInfo conn SQLQuery) => Database_ (SQLDBAdapter connInfo conn) DBAdapterMonad MapResultRow where
     dbStartSession _ = put (DBAdapterState empty)
     dbStopSession _ = closeAllCachedPreparedStatements
     getName = sqlDBName
@@ -319,21 +329,21 @@ instance (QueryDB connInfo conn stmt SQLQuery SQLExpr) => Database_ (SQLDBAdapte
             maxArgDomainSize = dmaxList argsDomainSize
             isBuiltIn = name `member` builtin 
             (SQLTrans _ (BuiltIn builtin) predtablemap) = sqlTrans db
-    doQuery db query@(Query queryvars _) = do
-        let sql = translate (sqlTrans db) query
+    doQuery db query = do
+        let sqlquery = translate db query
         let conn = sqlDBConn db
-        execStatement conn (queryvars, sql)
+        execStatement conn sqlquery
         
-    doFilter db query@(Query queryvars _) stream = do
+    doFilter db query stream = do
         row <- stream
         let conn = sqlDBConn db
-        let (sql, params) = translateWithParams (sqlTrans db) query row
+        let (sqlquery, params) = translateWithParams db query row
         let vars = foldlWithKey (\vars2 key _ -> vars2 ++ [key]) [] row
         (DBAdapterState preparedstmtcache) <- liftDBAdapter get
-        preparedstmt <- case lookup vars preparedstmtcache  of
+        (PreparedStatement preparedstmt) <- case lookup vars preparedstmtcache  of
             Just preparedstmt -> return preparedstmt
             Nothing -> do
-                preparedstmt <- liftIO $ prepareStatement conn (queryvars, sql)
+                preparedstmt <- liftIO $ prepareStatement conn sqlquery
                 liftDBAdapter $ put (DBAdapterState (insert vars preparedstmt preparedstmtcache))
                 return preparedstmt
-        execWithParams preparedstmt (map (\param -> resultValueToSQLExpr (row ! param)) params)
+        execWithParams preparedstmt (map (\param -> resultValueToExpr (row ! param)) params)

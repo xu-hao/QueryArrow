@@ -12,12 +12,12 @@ import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert)
 
 
-data HDBCStatement expr = HDBCStatement [Var] Statement
+data HDBCStatement = HDBCStatement [Var] Statement
 
-convertSQLExprToSQL :: SQLExpr -> SqlValue
-convertSQLExprToSQL (SQLIntConstExpr i) = toSql i
-convertSQLExprToSQL (SQLStringConstExpr s) = toSql s
-convertSQLExprToSQL e = error ("unsupported sql expr type: " ++ show e)
+convertExprToSQL :: Expr -> SqlValue
+convertExprToSQL (IntExpr i) = toSql i
+convertExprToSQL (StringExpr s) = toSql s
+convertExprToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
 convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
@@ -31,10 +31,11 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
 
 class HDBCConnection conn where
         extractHDBCConnection :: conn -> ConnWrapper
+        showSQL :: conn -> SQL -> String
 
-instance PreparedStatement HDBCStatement SQLExpr where
+instance PreparedStatement_ HDBCStatement where
         execWithParams (HDBCStatement vars stmt) args = ResultStream (\iteratee seed -> do
-                liftIO $ execute stmt (map convertSQLExprToSQL args)
+                liftIO $ execute stmt (map convertExprToSQL args)
                 let rows = fetchAllRows stmt
                 foldlM2 iteratee seed (map (convertSQLToResult vars) <$> rows)
                 ) where 
@@ -52,11 +53,14 @@ instance PreparedStatement HDBCStatement SQLExpr where
                                                                 foldlM2 iteratee seednew2 (return rest)
         closePreparedStatement _ = return ()
 
-instance HDBCConnection conn => DBConnection conn HDBCStatement SQLQuery SQLExpr where
+prepareHDBCStatement :: HDBCConnection conn => conn -> SQLQuery -> IO HDBCStatement
+prepareHDBCStatement conn (vars, query) = HDBCStatement vars <$> prepare ( (extractHDBCConnection conn)) (showSQL conn query)
+
+instance HDBCConnection conn => DBConnection conn SQLQuery where
         execStatement conn query = do
-                stmt <- liftIO $ prepareStatement conn query
+                stmt <- liftIO $ prepareHDBCStatement conn query
                 execWithParams stmt []
-        prepareStatement conn (vars, query) = HDBCStatement vars <$> prepare ( (extractHDBCConnection conn)) (show query)
+        prepareStatement conn query = PreparedStatement <$> prepareHDBCStatement conn query
         dbClose = disconnect . extractHDBCConnection
 
 -- the QueryDB instance is provided for each DB type
