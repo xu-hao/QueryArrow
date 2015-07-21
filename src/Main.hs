@@ -33,14 +33,11 @@ module Main where
 --        print a
 import FO
 import Parser
-import SQL.SQL
-import SQL.HDBC.Sqlite3
-import SQL.HDBC.PostgreSQL
 import DBQuery
 import ICAT
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (empty, fromList,lookup)
+import Data.Map.Strict (empty, lookup)
 import Text.Parsec (runParser)
 import Data.Functor.Identity
 import Control.Monad.Trans.State.Strict (evalStateT)
@@ -49,7 +46,7 @@ import Data.List (intercalate, transpose)
 import Data.Aeson
 import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as B
-import System.Plugins.DynamicLoader
+import System.Plugins.Load
 
 pgt :: Pred
 pgt = Pred "gt" ["Num", "Num"]
@@ -115,36 +112,6 @@ main = do
                     print rs
                     print report
         
-            let query2 = "predicate filename(String, String) predicate coll(String, String) predicate size(String, Int) predicate le(Int, Int)\
-            \ filename(a, \"John\") coll(a, \"X\") size(a, x) le(x,1000) return a"
-            conn <- dbConnect (Sqlite3DBConnInfo "./db.sqlite3")
-            let db3 = SQLDBAdapter {
-                        sqlDBConn = conn,
-                        sqlDBName = "test_sqlite3_db",
-                        sqlDBPreds = [
-                                Pred "filename" ["ObjectId", "String"],
-                                Pred "coll" ["ObjectId", "CollId"],
-                                Pred "size" ["ObjectId", "BigInt"],
-                                Pred "le" ["BigInt", "BigInt"] ],
-                        sqlTrans = SQLTrans
-                                (fromList [("data", (["id", "filename", "collId", "size"], ["id"]))])
-                                (BuiltIn (fromList [("le", \thesign args -> do
-                                                return ([], SQLCompCond (case thesign of 
-                                                        Pos -> "<"
-                                                        Neg -> ">=") (head args) (args !! 1)))]))
-                                (fromList [
-                                        ("filename", (OneTable "data" "1", [( "1", "id"), ( "1", "filename")])),
-                                        ("size", (OneTable "data" "1", [( "1", "id"), ( "1", "size")])),
-                                        ("coll", (OneTable "data" "1", [( "1", "id"), ( "1", "collId")]))
-                                        ])
-                }
-            case runParser progp (constructPredMap [Database db3]) "" query2 of
-                Left err -> print err
-                Right (qu2, _) -> do 
-                    let sql = translate db3 qu2
-                    print sql
-                    (rows, _) <- evalStateT (getAllResults [Database db3] qu2) (DBAdapterState empty)
-                    print rows
             let query3 = "DATA_NAME(a, b) COLL(a, c) COLL_NAME(c, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000) return a b"
             run2 query3
         else
@@ -166,20 +133,15 @@ pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
         | length s < n  = s ++ replicate (n - length s) ' '
         | otherwise     = s
 
-    
-
-getDBFromPlugin :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String)
-getDBFromPlugin icatDBConnInfo = do
-    let pluginName = "M" ++ catalog_database_type icatDBConnInfo
-    print ("load plugin " ++ pluginName)
-    modul <- loadModule pluginName Nothing Nothing
-    print ("resolve functions")
-    resolveFunctions
-    print ("load function getDB")
-    getDBFunc <- loadFunction modul "getDB"
-    print ("return")
-    getDBFunc icatDBConnInfo
-
+-- the plugin must be compiled with -fPIC -dynamic -shared    
+getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String)
+getDB ps = do
+    let objname = "M" ++ catalog_database_type ps ++ ".o"
+    print ("loading" ++ objname)
+    getDBFuncLoadStatus <- load objname ["."] [] "getDB"
+    case getDBFuncLoadStatus of
+        LoadSuccess _ getDBFunc -> getDBFunc ps
+        LoadFailure err -> error (show err)
 
 --                        conn <- dbConnect (Sqlite3DBConnInfo (db_name ps))
 --                        let db3 = makeICATSQLDBAdapter conn
@@ -191,7 +153,7 @@ run2 query = do
     case d of
         Left err -> putStrLn err
         Right ps -> do
-            (db3, printFunc) <- getDBFromPlugin ps
+            (db3, printFunc) <- getDB ps
             let predmap = constructPredMap [db3]
             case runParser progp predmap "" query of
                 Left err -> print err

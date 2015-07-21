@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, FlexibleContexts #-}
 module ICAT where
 
 import FO
