@@ -1,7 +1,6 @@
 module Msqlite3 where
 
 import FO
-import SQL.SQL
 import SQL.HDBC
 import SQL.HDBC.Sqlite3
 import DBQuery
