@@ -21,9 +21,9 @@ executable QueryArrow
                    HDBC,
                    aeson,
                    bytestring,
-                   dynamic-loader,
+                   plugins,
                    hspec
-  ghc-options:     -Wall
+  ghc-options:     -Wall -fPIC
   other-modules:
 library
   hs-source-dirs:  src
@@ -37,5 +37,5 @@ library
                    semigroupoids,
                    HDBC-postgresql,
                    HDBC
-  ghc-options:     -Wall
+  ghc-options:     -Wall -fPIC -shared -dynamic
                    

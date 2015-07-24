@@ -117,12 +117,16 @@ main = do
         else
             run2 (head args2)
             
+maximumd :: Int -> [Int] -> Int
+maximumd d [] = d
+maximumd _ l = maximum l
+
 pprint :: [Var] -> [MapResultRow] -> String
 pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
     join = intercalate " " . map (uncurry pad) . zip collen
     rowstrs = map join m2
     m2 = transpose m
-    collen = map (maximum . map length) m
+    collen = map (maximumd 0 . map length) m
     m = map f vars
     f var = map (g var) rows
     g::Var->MapResultRow->String

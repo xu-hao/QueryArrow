@@ -73,7 +73,7 @@ instance Show Table where
             showOtherTables ((othertablename, othervar, cond1):tables2) = " JOIN " ++ othertablename ++ " " ++ othervar ++ " ON " ++ show cond1 ++ showOtherTables tables2 
 
 instance Show SQLCond where
-    show (SQLCompCond op lhs rhs) = show lhs ++ op ++ show rhs
+    show (SQLCompCond op lhs rhs) = show lhs ++ " " ++ op ++ " " ++ show rhs
     show (SQLAndCond a b) = "(" ++ show a ++ " AND " ++ show b ++ ")"
     show (SQLOrCond a b) = "(" ++ show a ++ " OR " ++ show b ++ ")"
     show SQLTrueCond = "@TRUE"
