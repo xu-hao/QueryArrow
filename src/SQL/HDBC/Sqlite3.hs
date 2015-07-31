@@ -1,25 +1,21 @@
 {-# LANGUAGE GADTs, TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
 module SQL.HDBC.Sqlite3 where
 
-import SQL.SQL
 import DBQuery
 import FO
 import SQL.HDBC
+import ICAT
+import SQL.ICAT
 
-import Database.HDBC
 import Database.HDBC.Sqlite3
-import Control.Applicative ((<$>))
 
+instance HDBCConnection Connection where
+        showSQLQuery _ (vars, query) = show query
+        showSQLInsert _ = show
 
-newtype Sqlite3DBConnInfo = Sqlite3DBConnInfo String
-
-data Sqlite3Connection where
-        Sqlite3Connection :: IConnection conn => conn -> Sqlite3Connection
-
-instance QueryDB Sqlite3DBConnInfo Sqlite3Connection  SQLQuery  where
-        dbConnect (Sqlite3DBConnInfo path) = Sqlite3Connection <$> connectSqlite3 path
-
-
-instance HDBCConnection Sqlite3Connection where
-        extractHDBCConnection (Sqlite3Connection conn) = ConnWrapper conn
-        showSQL _ = show
+getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String, Insert -> String)
+getDB ps = do
+    conn <- connectSqlite3 (db_name ps)
+    let db = makeICATSQLDBAdapter conn
+    case db of
+        GenericDB _ _ _ trans -> return (Database db, show . translateQuery trans, show . translateInsert trans)

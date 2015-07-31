@@ -4,15 +4,16 @@ module SQL.HDBC where
 import DBQuery
 import SQL.SQL
 import FO
-
+import ResultStream
 
 import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
 import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert)
+import Control.Monad.Trans.State.Strict (execStateT)
 
-
-data HDBCStatement = HDBCStatement [Var] Statement
+data HDBCQueryStatement = HDBCQueryStatement [Var] Statement
+data HDBCInsertStatement = HDBCInsertStatement [Statement]
 
 convertExprToSQL :: Expr -> SqlValue
 convertExprToSQL (IntExpr i) = toSql i
@@ -27,40 +28,61 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         SqlInteger _ -> IntValue (fromSql sqlvalue)
                         SqlString _ -> StringValue (fromSql sqlvalue)
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
-                        _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues) 
+                        _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
 class HDBCConnection conn where
-        extractHDBCConnection :: conn -> ConnWrapper
-        showSQL :: conn -> SQL -> String
+        showSQLQuery :: conn -> SQLQuery -> String
+        showSQLInsert :: conn -> SQLInsert -> String
 
-instance PreparedStatement_ HDBCStatement where
-        execWithParams (HDBCStatement vars stmt) args = ResultStream (\iteratee seed -> do
+instance PreparedStatement_ HDBCQueryStatement where
+        execWithParams (HDBCQueryStatement vars stmt) args = ResultStream (\iteratee seed -> do
                 liftIO $ execute stmt (map convertExprToSQL args)
-                let rows = fetchAllRows stmt
-                foldlM2 iteratee seed (map (convertSQLToResult vars) <$> rows)
-                ) where 
-                        foldlM2 iteratee seed mrows = do 
-                                rows <- liftIO $ mrows
-                                case rows of
-                                        [] -> return seed
-                                        (row : rest) -> do
-                                                seednew <- iteratee row seed
-                                                case seednew of
-                                                        Left seednew2 -> do
-                                                                liftIO $ finish stmt
-                                                                return seednew2
-                                                        Right seednew2 ->
-                                                                foldlM2 iteratee seednew2 (return rest)
+                rows <- liftIO $ fetchAllRows stmt
+                foldlM2 iteratee seed (map (convertSQLToResult vars) rows)
+                ) where
+                    -- keep this type signature, otherwise it won't compile
+                    foldlM2 :: Iteratee row seed DBAdapterMonad -> seed -> [row] -> DBAdapterMonad (Either seed seed)
+                    foldlM2 iteratee seed rows = case rows of
+                        [] -> return (Right seed)
+                        (row : rest) -> do
+                            seednew <- iteratee row seed
+                            case seednew of
+                                Left seednew2 -> do
+                                    liftIO $ finish stmt
+                                    return seednew
+                                Right seednew2 ->
+                                    foldlM2 iteratee seednew2 rest
         closePreparedStatement _ = return ()
 
-prepareHDBCStatement :: HDBCConnection conn => conn -> SQLQuery -> IO HDBCStatement
-prepareHDBCStatement conn (vars, query) = HDBCStatement vars <$> prepare ( (extractHDBCConnection conn)) (showSQL conn query)
+instance PreparedStatement_ HDBCInsertStatement where
+        execWithParams (HDBCInsertStatement stmts) args = do
+            let exprs = map convertExprToSQL args
+            totals <- liftIO $ mapM (\stmt -> do
+                res <- execute stmt exprs
+                return (fromIntegral res)) stmts
+            intResultStream (sum totals)
+        closePreparedStatement _ = return ()
 
-instance HDBCConnection conn => DBConnection conn SQLQuery where
-        execStatement conn query = do
-                stmt <- liftIO $ prepareHDBCStatement conn query
+prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLQuery -> IO HDBCQueryStatement
+prepareHDBCQueryStatement conn sqlquery@(vars, query) = HDBCQueryStatement vars <$> prepare conn (showSQLQuery conn sqlquery)
+
+prepareHDBCInsertStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLInserts -> IO HDBCInsertStatement
+prepareHDBCInsertStatement conn query = HDBCInsertStatement <$> mapM (prepare conn) (map (showSQLInsert conn) query)
+
+instance (HDBCConnection conn, IConnection conn) => DBConnection conn SQLQuery SQLInserts where
+        execQueryStatement conn query = do
+                stmt <- liftIO $ prepareHDBCQueryStatement conn query
                 execWithParams stmt []
-        prepareStatement conn query = PreparedStatement <$> prepareHDBCStatement conn query
-        dbClose = disconnect . extractHDBCConnection
+        execInsertStatement conn query = do
+                stmt <- liftIO $ prepareHDBCInsertStatement conn query
+                rs <- execWithParams stmt []
+                return rs
+
+        prepareQueryStatement conn query = PreparedStatement <$> prepareHDBCQueryStatement conn query
+        prepareInsertStatement conn query = PreparedStatement <$> prepareHDBCInsertStatement conn query
+        connBegin _ = return ()
+        connCommit = commit
+        connRollback = rollback
+        connClose = disconnect
 
 -- the QueryDB instance is provided for each DB type

@@ -2,19 +2,19 @@
 module DBQuery where
 
 import FO
+import ResultStream
 
 import Prelude hiding (lookup, foldl)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.State.Strict (StateT, get)
-import Data.Map.Strict (Map, foldl, empty)
-import Control.Applicative ((<$>))
-
+import Control.Monad.Trans.State.Strict (StateT, get, put)
+import Data.Map.Strict (Map, foldl, empty, (!))
+import Data.Convertible
 
 data DBConnInfo = DBConnInfo {
-    dbHost :: String, 
+    dbHost :: String,
     dbPort :: Int,
-    dbUser :: String, 
-    dbPassword :: String, 
+    dbUser :: String,
+    dbPassword :: String,
     dbDB :: String
     }
 
@@ -27,27 +27,32 @@ newtype DBAdapterState = DBAdapterState {
 type DBAdapterMonad = StateT DBAdapterState IO
 
 class PreparedStatement_ stmt where
-    execWithParams :: stmt -> [Expr] -> ResultStream DBAdapterMonad seed MapResultRow
+    execWithParams :: stmt -> [Expr] -> ResultStream DBAdapterMonad MapResultRow
     closePreparedStatement :: stmt -> IO ()
 
 data PreparedStatement = forall stmt. PreparedStatement_ stmt => PreparedStatement {
     unPreparedStatement :: stmt
 }
 
-class DBConnection conn query | conn -> query where
-    execStatement :: conn -> query -> ResultStream DBAdapterMonad seed MapResultRow
-    prepareStatement :: conn -> query -> IO PreparedStatement 
-    dbClose :: conn -> IO ()    
+class DBConnection conn query insert | conn -> query insert where
+    execQueryStatement :: conn -> query -> ResultStream DBAdapterMonad MapResultRow
+    prepareQueryStatement :: conn -> query -> IO PreparedStatement
+    execInsertStatement :: conn -> insert -> ResultStream DBAdapterMonad MapResultRow
+    prepareInsertStatement :: conn -> insert -> IO PreparedStatement
+    connBegin :: conn -> IO ()
+    connCommit :: conn -> IO ()
+    connRollback :: conn -> IO ()
+    connClose :: conn -> IO ()
 
-class DBConnection  conn query => QueryDB connInfo conn query | connInfo -> conn query, conn -> connInfo query where
-    dbConnect :: connInfo -> IO conn
-    
-class Translate db row query | db -> row query where
-    translate :: db -> Query -> query
-    translateWithParams :: db -> Query -> row -> (query, [Var])
+class ConnectionDB m conn trans | conn -> m  where
+    extractDomainSize :: conn -> trans -> DomainSizeMap -> Sign -> Atom -> m DomainSizeMap
 
-liftDBAdapter :: DBAdapterMonad a -> ResultStream DBAdapterMonad seed a
-liftDBAdapter a = ResultStream (\iteratee seed -> a >>= \b -> runResultStream (return b) iteratee seed)
+class Translate trans row query insert | trans -> row query insert where
+    translateQuery :: trans -> Query -> query
+    translateQueryWithParams :: trans -> Query -> row -> (query, [Var])
+    translateInsert :: trans -> Insert -> insert
+    translateInsertWithParams :: trans -> Insert -> row ->  insert
+
 
 -- call this to clear all dbs
 closeAllCachedPreparedStatements :: DBAdapterMonad ()
@@ -55,3 +60,35 @@ closeAllCachedPreparedStatements = do
     (DBAdapterState cache) <- get
     let stmts = foldl (\stmts2 stmt -> stmts2 ++ [stmt]) [] cache
     liftIO $ mapM_ (\ ps -> case ps of PreparedStatement ps_ -> closePreparedStatement ps_) stmts
+
+data GenericDB conn trans where
+    GenericDB :: (ConnectionDB DBAdapterMonad conn trans, DBConnection conn query insert, Translate trans MapResultRow query insert) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
+
+instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow where
+    dbBegin (GenericDB conn _ _ _) = do
+        liftIO $ connBegin conn
+        put (DBAdapterState empty)
+    dbCommit (GenericDB conn _ _ _) = do
+        liftIO $ connCommit conn
+        closeAllCachedPreparedStatements
+    dbRollback (GenericDB conn _ _ _) = do
+        liftIO $ connRollback conn
+        closeAllCachedPreparedStatements
+    getName (GenericDB _ name _ _)= name
+    getPreds (GenericDB _ _ preds _)= preds
+    domainSize (GenericDB conn _  _ trans)= extractDomainSize conn trans
+    doQuery (GenericDB conn _ _ trans) query = do
+        let sqlquery = translateQuery trans query
+        execQueryStatement conn sqlquery
+
+    doFilter (GenericDB conn _ _ trans) query stream = do
+        row <- stream
+        let (sqlquery, params) = translateQueryWithParams trans query row
+        (PreparedStatement stmt) <- liftIO $ prepareQueryStatement conn sqlquery
+        execWithParams stmt (map (\param -> convert (row ! param)) params)
+    doInsert (GenericDB conn _ _ trans) insert = do
+        let sqlupdate = translateInsert trans insert
+        rows <- getAllResultsInStream (execInsertStatement conn sqlupdate)
+        return (map (\row -> case row ! "i" of
+                IntValue i -> i
+                _ -> error "unsupported result value") rows)

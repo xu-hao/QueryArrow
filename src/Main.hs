@@ -26,8 +26,8 @@ module Main where
 --g = graphFromList [("1","a","2"), ("1","a","4"), ("4","c","3"), ("4","c","5"), ("3","a","5"), ("5","d","4"), ("2", "b","3"), ("3", "c", "1")]
 --
 --main :: IO ()
---main = 
---    let (a, _) = runCQuery (startV "1" >>> selectE "a" >>> selectOutV >>> groupCount (Kleisli (\ p -> 
+--main =
+--    let (a, _) = runCQuery (startV "1" >>> selectE "a" >>> selectOutV >>> groupCount (Kleisli (\ p ->
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
@@ -35,12 +35,14 @@ import FO
 import Parser
 import DBQuery
 import ICAT
+import ResultStream
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (empty, lookup)
 import Text.Parsec (runParser)
-import Data.Functor.Identity
-import Control.Monad.Trans.State.Strict (evalStateT)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.Class (lift)
 import System.Environment
 import Data.List (intercalate, transpose)
 import Data.Aeson
@@ -48,31 +50,13 @@ import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as B
 import System.Plugins.Load
 
-pgt :: Pred
-pgt = Pred "gt" ["Num", "Num"]
-
-pFile :: Pred
-pFile = Pred "File" ["Path"]
-
-pMeta :: Pred
-pMeta = Pred "Meta" ["Path", "String"]
- 
-a1 :: Atom
-a1 = Atom pgt [VarExpr "x", IntExpr 1]
-
-a2 :: Atom
-a2 = Atom pFile [VarExpr "y"]
-
-a3 :: Atom
-a3 = Atom pMeta [VarExpr "y", VarExpr "z"]
-
-db :: MapDB
-db = MapDB "Container" "elem" [(StringValue "ObjA", StringValue "ObjB"), 
-    (StringValue "ObjB", StringValue "ObjC"), (StringValue "ObjB", StringValue "ObjD"), 
-    (StringValue "ObjD", StringValue "ObjA"), (StringValue "ObjD", StringValue "ObjP"), 
+db :: MapDB DBAdapterMonad
+db = MapDB "Container" "elem" [(StringValue "ObjA", StringValue "ObjB"),
+    (StringValue "ObjB", StringValue "ObjC"), (StringValue "ObjB", StringValue "ObjD"),
+    (StringValue "ObjD", StringValue "ObjA"), (StringValue "ObjD", StringValue "ObjP"),
     (StringValue "ObjQ", StringValue "ObjR"), (StringValue "ObjR", StringValue "ObjS")]
 
-db2 :: EqDB
+db2 :: EqDB DBAdapterMonad
 db2 = EqDB "Eq"
 
 main::IO()
@@ -80,10 +64,6 @@ main = do
     args2 <- getArgs
     if null args2
         then do
-            print pgt
-            print a1
-            print a2
-            print a3
             let prog = "predicate gt(Num, Num)\n\
             \predicate File(Path)\n\
             \predicate Meta(Path, String)\n\
@@ -98,25 +78,33 @@ main = do
             \elem(x, y) elem(y, z) ~elem(y, \"ObjC\") eq(b,\"test\") eq(a,b) return x y z w b"
             case runParser progp empty "" query0 of
                 Left err -> print err
-                Right (atoms, _) -> case  getAllResults [ Database db, Database db2] atoms of 
-                    Identity ( results, _) -> print results
+                Right (Q atoms, _) ->
+                    evalStateT (dbWithSession [ Database db, Database db2] $ do
+                        results <- getAllResults  atoms
+                        liftIO $ print results) (DBAdapterState empty)
             print "test2"
-            let query = "elem(x, y) elem(y, z) | elem(w, y) \
-            \(exists u.elem(y, u)) ~(exists u.(exists v.elem(v,u) elem(u,y))) \
+            let query = "elem(x, y) (elem(y, z) | elem(w, y)) \
+            \(exists u.elem(y, u)) ~(exists u. exists v.elem(v,u) elem(u,y)) \
             \~elem(y, \"ObjC\") ~eq(x, \"ObjB\") eq(b,\"test\") eq(a,b) return x y z w b"
-            
+
             case runParser progp (constructPredMap [Database db, Database db2]) "" query of
                 Left err -> print err
-                Right (qu, _) -> do 
-                    let (Identity  (rs, report)) =  getAllResults [Database db, Database db2] qu
-                    print rs
-                    print report
-        
-            let query3 = "DATA_NAME(a, b) COLL(a, c) COLL_NAME(c, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000) return a b"
-            run2 query3
-        else
-            run2 (head args2)
-            
+                Right (Q qu, _) -> do
+                    evalStateT (dbWithSession [Database db, Database db2] $ do
+                        rs <- getAllResults qu
+                        liftIO $ print rs
+                        report <- getReportFromDBSession
+                        liftIO $ print report) (DBAdapterState empty)
+
+            --let query3 = "DATA_NAME(a, b) COLL(a, c) COLL_NAME(c, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000) return a b"
+            --run2 query3
+        else do
+            d <- eitherDecode <$> B.readFile (if length args2 == 1 then "/etc/irods/database_config.json" else args2 !! 1)
+            case d of
+                Left err -> putStrLn err
+                Right ps -> run2 (head args2) ps
+
+
 maximumd :: Int -> [Int] -> Int
 maximumd d [] = d
 maximumd _ l = maximum l
@@ -137,10 +125,10 @@ pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
         | length s < n  = s ++ replicate (n - length s) ' '
         | otherwise     = s
 
--- the plugin must be compiled with -fPIC -dynamic -shared    
-getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String)
+-- the plugin must be compiled with -fPIC -dynamic -shared
+getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String, Insert->String    )
 getDB ps = do
-    let objname = "M" ++ catalog_database_type ps ++ ".o"
+    let objname = catalog_database_type ps ++ ".o"
     print ("loading" ++ objname)
     getDBFuncLoadStatus <- load objname ["."] [] "getDB"
     case getDBFuncLoadStatus of
@@ -150,19 +138,32 @@ getDB ps = do
 --                        conn <- dbConnect (Sqlite3DBConnInfo (db_name ps))
 --                        let db3 = makeICATSQLDBAdapter conn
 --                        return (Database db3, show . translate db3)
-                        
-run2 :: String -> IO ()
-run2 query = do
-    d <- eitherDecode <$> B.readFile "/etc/irods/database_config.json"
-    case d of
-        Left err -> putStrLn err
-        Right ps -> do
-            (db3, printFunc) <- getDB ps
-            let predmap = constructPredMap [db3]
-            case runParser progp predmap "" query of
-                Left err -> print err
-                Right (qu@(Query vars _), _) -> do
-                    print (printFunc qu)
-                    (rows, report) <- evalStateT (getAllResults [db3] qu) (DBAdapterState empty)
-                    print report
-                    putStr (pprint vars rows)
+
+-- for cypher
+--     (db, trans) <- getDB ICATDBConnInfo {
+--        db_host = "127.0.0.1",
+--        db_password = "",
+--        db_name = "",
+--        catalog_database_type = "neo4j",
+--        db_port = 7474,
+--        db_username = ""
+--    }
+
+run2 :: String -> ICATDBConnInfo -> IO ()
+run2 query ps = do
+            (db3, printFunc, a) <- getDB ps
+            evalStateT (dbWithSession [db3] $ do
+                let predmap = constructPredMap [db3]
+                case runParser progp predmap "" query of
+                    Left err -> liftIO $ print err
+                    Right (Q qu@(Query vars _), _) -> do
+                        liftIO $ print (printFunc qu)
+                        rows <- getAllResults qu
+                        report <- getReportFromDBSession
+                        liftIO $ print report
+                        liftIO $ putStr (pprint vars rows)
+                    Right (I qu, _) -> do
+                        liftIO $ print (a qu)
+                        res <- case db3 of
+                            Database db -> lift $ lift $ (doInsert db qu :: DBAdapterMonad [Int])
+                        liftIO $ print res) (DBAdapterState empty)

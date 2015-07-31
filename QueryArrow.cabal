@@ -7,7 +7,7 @@ author:         Hao Xu
 executable QueryArrow
   hs-source-dirs:  src
   main-is:         Main.hs
-  build-depends:   
+  build-depends:
                    base >= 4,
                    containers,
                    mtl,
@@ -22,13 +22,20 @@ executable QueryArrow
                    aeson,
                    bytestring,
                    plugins,
-                   hspec
+                   hspec,
+                   haskell-neo4j-client,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   MissingH,
+                   lattices
   ghc-options:     -Wall -fPIC
   other-modules:
 library
   hs-source-dirs:  src
   exposed-modules: Mpostgres
-  build-depends:   
+  build-depends:
                    base >= 4,
                    containers,
                    mtl,
@@ -38,4 +45,3 @@ library
                    HDBC-postgresql,
                    HDBC
   ghc-options:     -Wall -fPIC -shared -dynamic
-                   

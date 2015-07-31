@@ -1,24 +1,21 @@
 {-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses #-}
 module SQL.HDBC.PostgreSQL where
 
-import SQL.SQL
 import DBQuery
 import FO
 import SQL.HDBC
+import ICAT
+import SQL.ICAT
 
-import Database.HDBC
 import Database.HDBC.PostgreSQL
-import Control.Applicative ((<$>))
 
-newtype PostgreSQLDBConnInfo = PostgreSQLDBConnInfo DBConnInfo
+instance HDBCConnection Connection where
+        showSQLQuery _ (vars, query) = show query
+        showSQLInsert _ = show
 
-data PostgreSQLConnection where
-        PostgreSQLConnection :: IConnection conn => conn -> PostgreSQLConnection
-
-instance QueryDB PostgreSQLDBConnInfo PostgreSQLConnection  SQLQuery  where
-        dbConnect (PostgreSQLDBConnInfo (DBConnInfo host port user password db)) = 
-                PostgreSQLConnection <$> connectPostgreSQL ("host="++host++ " port="++show port++" dbname="++db++" user="++user++" password="++password)
-
-instance HDBCConnection PostgreSQLConnection where
-        extractHDBCConnection (PostgreSQLConnection conn) = ConnWrapper conn
-        showSQL _ = show
+getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String, Insert -> String)
+getDB ps = do
+    conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_name ps++" user="++db_username ps++" password="++db_password ps)
+    let db = makeICATSQLDBAdapter conn
+    case db of
+        GenericDB _ _ _ trans -> return (Database db, show . translateQuery trans, show . translateInsert trans)
