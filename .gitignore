@@ -1,5 +1,5 @@
-/.dist-buildwrapper/
-/obs/
-/.project
-/.settings/
 /dist/
+/obs/
+/coverage/
+/build/
+/.hpc/

@@ -1,63 +1,79 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
-module Parser where
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
+module Parser (progp, QueryVariant(..)) where
 
+import FO.Data
 import FO
-import Data.Map.Strict (Map, (!), member, insert)
-import Text.ParserCombinators.Parsec
+
+import Prelude hiding (lookup)
+import Data.Map.Strict (Map, (!), member, insert,lookup)
+import Text.ParserCombinators.Parsec hiding (State)
+import Data.Maybe
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
-import Control.Arrow (first, second)
+import qualified Text.Parsec.Token as T
+
+lexer = T.makeTokenParser T.LanguageDef {
+    T.commentStart = "/*",
+    T.commentEnd = "*/",
+    T.commentLine = "//",
+    T.nestedComments = False,
+    T.identStart = letter <|> char '_',
+    T.identLetter = alphaNum <|> char '_',
+    T.opStart = oneOf "~|",
+    T.opLetter = oneOf "~|",
+    T.reservedNames = ["insert", "return", "key", "object", "properyt", "predicate", "exists", "forall"],
+    T.reservedOpNames = ["~", "|"],
+    T.caseSensitive = True
+}
+
+identifier = T.identifier lexer
+reserved = T.reserved lexer
+reservedOp = T.reservedOp lexer
+
+parens :: FOParser a -> FOParser a
+parens = T.parens lexer
+
+integer = T.integer lexer
+stringp = T.stringLiteral lexer
+comma = T.comma lexer
+semi = T.semi lexer
+symbol = T.symbol lexer
+whiteSpace = T.whiteSpace lexer
+dot = T.dot lexer
 
 -- parser
 type FOParser = GenParser Char (Map String Pred)
 
-identifier :: FOParser String
-identifier  = do
-    c  <- letter
-    cs <- many (alphaNum <|> char '_')
-    return (c:cs)
-
-oper :: Char -> FOParser ()
-oper ch = do
-    spaces
-    _ <- char ch
-    spaces
-    return ()
-
 argp :: FOParser Expr
-argp = (
-    (VarExpr <$> identifier)
-    <|> (IntExpr . read <$> many1 digit)
-    <|> try (string "pattern" >> space >> spaces >> PatternExpr <$> str )
-    <|> StringExpr <$> str) where
-        str = char '\"' >> many (noneOf "\"") <* char '\"'
+argp =
+    (VarExpr <$> Var <$> identifier)
+    <|> (IntExpr . fromIntegral <$> integer)
+    <|> (reserved "pattern" >> PatternExpr <$> stringp )
+    <|> (StringExpr <$> stringp)
 
 arglistp :: FOParser [Expr]
 arglistp =
-    oper '(' >> sepBy argp (oper ',') <* oper ')'
+    parens (sepBy argp comma)
 
 atomp :: FOParser Atom
 atomp = do
     predname <- identifier
     arglist <- arglistp
     predmap <- getState
-    if not (predname `member` predmap)
-        then error ("undefined predicate " ++ predname)
-        else do
-            let thepred = predmap ! predname
-            return (Atom thepred arglist)
+    let thepred = fromMaybe (error ("undefined predicate " ++ predname)) (lookup predname predmap)
+    return (Atom thepred arglist)
 
 
 litp :: FOParser Lit
-litp = (oper '~' >> Lit <$> return Neg <*> atomp)
-    <|> Lit <$> return Pos <*> atomp
+litp = Lit <$> (reservedOp "~" *> return Neg <|> return Pos) <*> atomp
 
 litsp :: FOParser [Lit]
 litsp = many1 litp
 
 formula1p :: FOParser Formula
-formula1p = (try (oper '(') >> formulap <* oper ')')
-       <|> (Not <$> (try (oper '~') >> formulap))
-       <|> (Exists <$> (try (string "exists" >> space) >> spaces >> identifier) <*> (oper '.' >> formulap))
+formula1p = try (parens formulap)
+       <|> (Not <$> (reservedOp "~" >> formula1p))
+       <|> (Exists <$> (reserved "exists" >> Var <$> identifier) <*> (dot >> formulap))
+       <|> (Forall <$> (reserved "forall" >> Var <$> identifier) <*> (dot >> formulap))
        <|> (Atomic <$> try atomp)
 
 formulaConjp :: FOParser Formula
@@ -69,32 +85,29 @@ formulaConjp = do
 
 formulap :: FOParser Formula
 formulap = do
-    formulaConjs <- sepBy formulaConjp (oper '|')
+    formulaConjs <- sepBy formulaConjp (reservedOp "|")
     return (case formulaConjs of
         [a] -> a
         _ -> Disjunction formulaConjs)
 
 paramtypep :: FOParser ParamType
-paramtypep = (try (string "key" >> space >> spaces >> return Key) <|> (string "property" >> space >> spaces >> return Property)) <*> identifier
+paramtypep = ((reserved "key" >> return Key) <|> (reserved "property" >> return Property)) <*> identifier
 
 predtypep :: FOParser PredType
-predtypep = PredType <$> (try (string "object" >> space >> spaces >> return ObjectPred) <|> try (string "property" >> space >> spaces >> return PropertyPred)) <*>
-    (oper '(' >> sepBy paramtypep (oper ',') <* oper ')')
+predtypep = PredType <$> (reserved "object" *> return ObjectPred <|> reserved "property" *> return PropertyPred) <*>
+    parens (sepBy paramtypep comma)
 
 predp :: FOParser ()
 predp = do
-    name <- try (do
-        string "predicate"
-        space
-        spaces
-        identifier)
+    reserved "predicate"
+    name <- identifier
     t <- predtypep
     let thepred = Pred name t
     updateState (insert name thepred)
 
 
 varp :: FOParser Var
-varp = spaces >> identifier <* spaces
+varp = Var <$> identifier
 
 varsp :: FOParser [Var]
 varsp = many1 varp
@@ -103,10 +116,9 @@ data QueryVariant = Q Query | I Insert deriving Show
 
 progp :: FOParser (QueryVariant, Map String Pred)
 progp = do
-    spaces
+    whiteSpace
     q <- formulap
-    spaces
-    qv <- try (string "return" >> space >> spaces >> (Q <$> (Query <$> varsp <*> return q)))
-      <|> (string "insert" >> space >> spaces >> (I <$> (Insert <$> litsp <*> return q)))
+    qv <- (reserved "return" >> (Q <$> (Query <$> varsp <*> return q)))
+      <|> (reserved "insert" >> (I <$> (Insert <$> litsp <*> return q)))
     predmap <- getState
     return (qv, predmap)

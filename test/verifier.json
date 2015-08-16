@@ -1,0 +1,7 @@
+{
+   "verifier_type" : "FO/CVC4",
+   "verifier_path" : "external/CVC4/cvc4-1.4-x86_64-linux-opt",
+   "rule_file_path" : "gen/rules.tptp",
+   "cpu_limit" : 1,
+   "memory_limit" : 32
+}

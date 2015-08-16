@@ -3,6 +3,7 @@ module SQL.HDBC.PostgreSQL where
 
 import DBQuery
 import FO
+import FO.Data
 import SQL.HDBC
 import ICAT
 import SQL.ICAT

@@ -2,15 +2,20 @@
 module SQL.SQL where
 
 import FO
+import FO.Data hiding (Subst, subst)
+import FO.Domain
 import DBQuery
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\),union)
-import Control.Monad.Trans.State.Strict (State, get, put, evalState, runState)
+import Control.Monad.Trans.State.Strict (StateT, get, put, evalStateT, runStateT)
 import Control.Monad (foldM)
-import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, unionWith, keys, alter, toList)
+import Control.Monad.Trans.Class (lift)
+import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, unionWith, keys, alter, toList, elems)
 import Data.Monoid
+import Data.Maybe
 import Control.Applicative ((<$>))
+import Control.Monad.Trans.Error
 
 type Col = String
 type TableName = String
@@ -24,7 +29,7 @@ type SQLTableList = [Table]
 mergeTables :: SQLTableList -> SQLTableList -> SQLTableList
 mergeTables = union
 
-type SQLVar = String
+newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord)
 
 type SQLQualifiedCol = (SQLVar, Col)
 
@@ -103,18 +108,18 @@ instance ConvertQualified SQL where
     convertQualified _ = error "unsupported"
 
 instance Show SQL where
-    show (SQL cols tables conds) = "SELECT " ++ intercalate "," (map (\(var,col)->var ++"."++col) cols) ++ " FROM " ++
+    show (SQL cols tables conds) = "SELECT " ++ intercalate "," (map (\(var,col)->show var ++"."++col) cols) ++ " FROM " ++
             intercalate "," (map show tables) ++
             (case conds of
                 SQLAndCond [] -> ""
                 _ -> " WHERE " ++ show conds)
 
 instance Show Table where
-    show (OneTable tablename var) = tablename ++ " " ++ var
+    show (OneTable tablename var) = tablename ++ " " ++ show var
     show (JoinTables tablename var tables) =
-        tablename ++ " " ++ var ++ showOtherTables tables where
+        tablename ++ " " ++ show var ++ showOtherTables tables where
             showOtherTables [] = ""
-            showOtherTables ((othertablename, othervar, cond1):tables2) = " JOIN " ++ othertablename ++ " " ++ othervar ++ " ON " ++ show cond1 ++ showOtherTables tables2
+            showOtherTables ((othertablename, othervar, cond1):tables2) = " JOIN " ++ othertablename ++ " " ++ show othervar ++ " ON " ++ show cond1 ++ showOtherTables tables2
 
 instance Show SQLCond where
     show (SQLCompCond op lhs rhs) = show lhs ++ " " ++ op ++ " " ++ show rhs
@@ -122,15 +127,17 @@ instance Show SQLCond where
     show (SQLOrCond as) = "(" ++ intercalate " OR " (map show as) ++ ")"
     show (SQLExistsCond sql) = "(EXISTS (" ++ show sql ++ "))"
     show (SQLNotExistsCond sql) = "(NOT EXISTS (" ++ show sql ++ "))"
-
 instance Show SQLExpr where
     show (SQLColNameExpr col) = col
-    show (SQLColExpr (var, col)) = var ++ "." ++ col
+    show (SQLColExpr (var, col)) = show var ++ "." ++ col
     show (SQLIntConstExpr i) = show i
     show (SQLStringConstExpr s) = "'" ++ sqlStringEscape s ++ "'"
     show (SQLPatternExpr s) = "'" ++ sqlPatternEscape s ++ "'"
     show SQLParamExpr = "?"
     show SQLNullExpr = "NULL"
+
+instance Show SQLVar where
+    show (SQLVar var) = var
 
 showWhereCond :: SQLCond -> String
 showWhereCond cond = case cond of
@@ -142,7 +149,7 @@ instance Show SQLInsert where
         let (cols, exprs) = unzip colsexprs in
             "INSERT INTO " ++ tname ++ " (" ++ intercalate "," cols ++ ")" ++
                 if all isSQLConstExpr exprs
-                    then " VALUES ("++ intercalate "," (map show exprs)++ ")"
+                    then " VALUES (" ++ intercalate "," (map show exprs)++ ")"
                     else " SELECT " ++ intercalate "," (map show exprs) ++ " FROM " ++ intercalate "," (map show tables) ++ showWhereCond cond
 
 
@@ -238,20 +245,14 @@ type Schema = Map TableName ([Col], [Col])
 newtype BuiltIn = BuiltIn (Map String (Sign -> [SQLExpr] -> TransMonad SQL))
 -- int is for generating fresh var
 type TableVarMap = Map TableName Int
-type TransMonad a = State (Schema, BuiltIn, PredTableMap, RepMap, TableMap, TableVarMap, [Var]) a
+type TransMonad a = StateT (Schema, BuiltIn, PredTableMap, RepMap, TableMap, [Var]) NewEnv a
 
 freshSQLVar :: TableName -> TransMonad SQLVar
-freshSQLVar tablename = do
-    (schema, builtin, predtablemap, repmap, pkmap, tvmap, params) <- get
-    let (tvmapnew, vid) = case lookup tablename tvmap of
-            Just n -> (adjust (+1) tablename tvmap, show n)
-            Nothing -> (insert tablename 0 tvmap, "")
-    put (schema, builtin, predtablemap, repmap, pkmap, tvmapnew, params)
-    return (tablename ++ vid)
+freshSQLVar tablename = lift $ SQLVar <$> new (StringWrapper tablename)
 
 sqlExprFromArg :: Expr -> TransMonad (Either SQLExpr Var)
 sqlExprFromArg arg = do
-    (schema, builtin, predtablemap, repmap, pkmap, vid, params) <- get
+    (schema, builtin, predtablemap, repmap, pkmap, params) <- get
     case arg of
         VarExpr var2 ->
             if var2 `member` repmap
@@ -259,7 +260,7 @@ sqlExprFromArg arg = do
                     let expr = repmap ! var2 in
                         case expr of
                             SQLParamExpr -> do
-                                put (schema, builtin, predtablemap, repmap, pkmap, vid, params ++ [var2])
+                                put (schema, builtin, predtablemap, repmap, pkmap, params ++ [var2])
                                 return (Left expr)
                             _ ->
                                 return (Left expr)
@@ -272,10 +273,8 @@ sqlExprFromArg arg = do
             return (Left (SQLPatternExpr s))
 
 addVarRep :: Var -> SQLExpr -> TransMonad ()
-addVarRep var expr = do
-    (schema, builtin, a, repmap, c, vid, params) <- get
-    let repmapnew = insert var expr repmap
-    put (schema, builtin, a, repmapnew, c, vid, params)
+addVarRep var expr =
+    update (\(schema, builtin, a, repmap, c, params)-> (schema, builtin, a, insert var expr repmap, c, params))
 
 condFromArg :: (SQLExpr -> SQLExpr -> SQLCond) -> (Expr, SQLQualifiedCol) -> TransMonad SQLCond
 condFromArg op (arg, col) = do
@@ -286,7 +285,7 @@ condFromArg op (arg, col) = do
             addVarRep var2 (SQLColExpr col)
             return strue
 
-update :: (a -> a) -> State a ()
+update :: (Monad m) => (a -> a) -> StateT a m ()
 update f = do
     a <- get
     put (f a)
@@ -294,15 +293,15 @@ update f = do
 -- add a sql representing the row identified by the keys
 addTable :: TableName -> [Expr] -> SQLVar -> TransMonad ()
 addTable tablename prikeyargs sqlvar2 =
-    update (\(schema, builtin, predtablemap, repmap, pkmap, vid, params) -> (schema, builtin, predtablemap, repmap, insert (tablename, prikeyargs) sqlvar2 pkmap, vid, params))
+    update (\(schema, builtin, predtablemap, repmap, pkmap, params) -> (schema, builtin, predtablemap, repmap, insert (tablename, prikeyargs) sqlvar2 pkmap, params))
 
 translateQueryToSQL :: Query -> TransMonad SQLQuery
 translateQueryToSQL (Query vars formula) = do
     (SQL _ tablelist cond1) <- translateFormulaToSQL formula
-    (_, _, _, repmap, _, _, _) <- get
-    let extractCol var = case repmap ! var of
-                            SQLColExpr col -> col
-                            _ -> error (var ++ " doesn't correspond to a column")
+    (_, _, _, repmap, _, _) <- get
+    let extractCol var = case lookup var repmap of
+                            Just (SQLColExpr col) -> col
+                            _ -> error (show var ++ " doesn't correspond to a column")
     let cols = map extractCol vars
     return (vars, SQL cols tablelist cond1)
 
@@ -335,7 +334,7 @@ translateForumlaToSQL (Not _) = error "not not pushed"
 
 translateAtomToSQL :: Sign -> Atom -> TransMonad SQL
 translateAtomToSQL thesign (Atom (Pred name _) args) = do
-    (schema, BuiltIn builtin, predtablemap, repmap, pkmap, vid, params) <- get
+    (schema, BuiltIn builtin, predtablemap, repmap, pkmap, params) <- get
     let err m = do
         a <- m
         case a of
@@ -357,7 +356,7 @@ translateAtomToSQL thesign (Atom (Pred name _) args) = do
 
                 (tables, varmap, cols2, args2) <- case table of
                     OneTable tablename sqlvar -> do
-                        let (_, prikeycols) = schema ! tablename
+                        let (_, prikeycols) = fromMaybe (error (tablename ++ " is not defined in the schema")) (lookup tablename schema)
                         let (prikeyargs, prikeyargcols) = unzip [(arg, (sqlvar2, col)) | prikeycol <- prikeycols, (arg, (sqlvar2, col)) <- zip args cols, prikeycol == col ]
                         if length prikeyargs == length prikeycols -- if primary key columns correspond to args
                             then if (tablename, prikeyargs) `member` pkmap -- check if there already is a table with same primary key
@@ -389,7 +388,8 @@ type SQLInserts = [SQLInsert]
 translateInsertToSQL :: Insert -> TransMonad SQLInserts
 translateInsertToSQL (Insert lits conj) = do
     (SQL _ tablelist cond) <- translateFormulaToSQL conj
-    insertparts <- sortParts <$> combineLits lits
+    let keymap = sortByKey lits
+    insertparts <- sortParts <$> (concat <$> mapM combineLitsSQL (elems keymap))
     return (map (toInsert tablelist cond) insertparts)
 
 sortParts :: [SQLInsert] -> [SQLInsert]
@@ -401,7 +401,7 @@ sortParts (p : ps) = b++[a] where
                 | tname == tname2 && compatible colexprs colexprs2 ->
                     (SQLInsert tname ( colexprs `union` colexprs2) (tablelist ++ tablelist2) (cond .&&. cond2), done)
             _ -> (part, active : done)) (p,[]) ps where
-            compatible colexpr = allTrue (\(col, expr) -> allTrue (\(col2, expr2) ->col2 /= col || expr2 == expr) colexpr)
+            compatible colexpr = all (\(col, expr) -> all (\(col2, expr2) ->col2 /= col || expr2 == expr) colexpr)
 
 toInsert :: [Table] -> SQLCond -> SQLInsert -> SQLInsert
 toInsert tablelist cond (SQLInsert tname colexprs tablelist2 cond2) = SQLInsert tname colexprs (tablelist ++ tablelist2) (cond .&&. cond2)
@@ -409,54 +409,8 @@ toInsert tablelist cond (SQLDelete tname cond2) = SQLDelete tname (cond .&&. con
 toInsert tablelist cond (SQLUpdate tname colexprs cond2) = SQLUpdate tname colexprs (cond .&&. cond2)
 
 
-keyComponents :: PredType -> [a] -> [a]
-keyComponents (PredType _ paramtypes) = map snd . filter (\(type1, arg) -> case type1 of
-    Key _ -> True
-    _ -> False) . zip paramtypes
-
-propComponents :: PredType -> [a] -> [a]
-propComponents (PredType _ paramtypes) = map snd . filter (\(type1, arg) -> case type1 of
-    Property _ -> True
-    _ -> False) . zip paramtypes
-
-
-sortByKey :: [Lit] -> Map [Expr] [Lit]
-sortByKey = foldl insertByKey empty where
-    insertByKey map1 lit@(Lit _ (Atom (Pred _ predtype) args)) =
-        let keyargs = keyComponents predtype args in
-            alter (\l -> case l of
-                Nothing -> Just [lit]
-                Just lits -> Just (lits ++ [lit])) keyargs map1
-
-isObjectPredAtom :: Atom -> Bool
-isObjectPredAtom (Atom (Pred _ (PredType ObjectPred _)) _) = True
-isObjectPredAtom _ = False
-
-isObjectPredLit :: Lit -> Bool
-isObjectPredLit (Lit _ a) = isObjectPredAtom a
-
-sortAtomByPred :: [Atom] -> Map String [Atom]
-sortAtomByPred = foldl insertAtomByPred empty where
-    insertAtomByPred map1 atom@(Atom (Pred name _) _) =
-        alter (\asmaybe -> case asmaybe of
-            Nothing -> Just [atom]
-            Just as -> Just (as ++ [atom])) name map1
-
-combineLits :: [Lit] -> TransMonad SQLInserts
-combineLits lits = do
-    let objpredlits = filter isObjectPredLit lits
-    let proppredlits = lits \\ objpredlits
-    let (posobjpredatoms, negobjpredatoms) = splitPosNegLits objpredlits
-    let (pospropredatoms, negproppredatoms) = splitPosNegLits proppredlits
-    case (posobjpredatoms, negobjpredatoms) of
-        ([], []) ->  generateUpdateSQL pospropredatoms negproppredatoms   -- update property
-        ([posobjatom], []) ->  case negproppredatoms of
-            [] -> generateInsertSQL (posobjatom:pospropredatoms)      -- insert
-            _ -> error "trying to delete properties of an object to be created"
-        ([], [negobjatom]) ->   case (pospropredatoms, negproppredatoms) of
-            ([], []) -> generateDeleteSQL negobjatom
-            _ -> error "tyring to modify propertiese of an object to be deleted" -- delete
-        ([posobjatom], [negobjatom]) -> generateUpdateSQL (posobjatom:pospropredatoms) (negobjatom:negproppredatoms) -- update property
+combineLitsSQL :: [Lit] -> TransMonad SQLInserts
+combineLitsSQL lits = combineLits lits generateUpdateSQL generateInsertSQL generateDeleteSQL
 
 generateDeleteSQL :: Atom -> TransMonad SQLInserts
 generateDeleteSQL atom = do
@@ -488,7 +442,7 @@ generateUpdateSQLForPred (pred, _, _) = error "unsupported number of pos and neg
 
 translateDeleteAtomToSQL :: Atom -> TransMonad SQLInsert
 translateDeleteAtomToSQL (Atom (Pred pred predtype) args) = do
-    (_, _, predtablemap, _, _, _, _) <- get
+    (_, _, predtablemap, _, _, _) <- get
     case lookup pred predtablemap of
         Just (OneTable tname _, qcols) -> do
             let qcol_args = zip qcols args
@@ -499,7 +453,7 @@ translateDeleteAtomToSQL (Atom (Pred pred predtype) args) = do
 
 translatePosInsertAtomToSQL :: Atom -> TransMonad SQLInsert
 translatePosInsertAtomToSQL (Atom (Pred pred predtype) args) = do
-    (_, _, predtablemap, _, _, _, _) <- get
+    (_, _, predtablemap, _, _, _) <- get
     case lookup pred predtablemap of
         Just (OneTable tname _, qcols) -> do
             let qcol_args = zip qcols args
@@ -511,7 +465,7 @@ translatePosInsertAtomToSQL (Atom (Pred pred predtype) args) = do
 
 translatePosUpdateAtomToSQL :: Atom -> TransMonad SQLInsert
 translatePosUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
-    (_, _, predtablemap, _, _, _, _) <- get
+    (_, _, predtablemap, _, _, _) <- get
     case lookup pred predtablemap of
         Just (OneTable tname _, qcols) -> do
             let qcol_args = zip qcols args
@@ -526,7 +480,7 @@ translatePosUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
 
 translateNegUpdateAtomToSQL :: Atom -> TransMonad SQLInsert
 translateNegUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
-    (_, _, predtablemap, _, _, _, _) <- get
+    (_, _, predtablemap, _, _, _) <- get
     case lookup pred predtablemap of
         Just (OneTable tname _, qcols) -> do
             let qcol_args = zip qcols args
@@ -594,19 +548,19 @@ data SQLTrans = SQLTrans Schema BuiltIn PredTableMap
 instance Translate SQLTrans MapResultRow SQLQuery SQLInserts where
     translateQuery trans query =
         let (SQLTrans schema builtin predtablemap) = trans in
-            evalState (translateQueryToSQL query) (schema, builtin, predtablemap, empty, empty, empty, [])
+            runNew (evalStateT (translateQueryToSQL query) (schema, builtin, predtablemap, empty, empty, []))
     translateQueryWithParams trans query env =
         let (SQLTrans schema builtin predtablemap) = trans
             env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env
-            (sql, (_,_,_,_,_,_,vars)) = runState (translateQueryToSQL query) (schema, builtin, predtablemap, env2, empty, empty, []) in
+            (sql, (_,_,_,_,_,vars)) = runNew (runStateT (translateQueryToSQL query) (schema, builtin, predtablemap, env2, empty, [])) in
             (sql, vars)
     translateInsert trans query =
         let (SQLTrans schema builtin predtablemap) = trans in
-            evalState (translateInsertToSQL query) (schema, builtin, predtablemap, empty, empty, empty, [])
+            runNew (evalStateT (translateInsertToSQL query) (schema, builtin, predtablemap, empty, empty, []))
     translateInsertWithParams trans query env =
         let (SQLTrans schema builtin predtablemap) = trans
             env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env in
-            evalState (translateInsertToSQL query) (schema, builtin, predtablemap, env2, empty, empty, [])
+            runNew (evalStateT (translateInsertToSQL query) (schema, builtin, predtablemap, env2, empty, []))
 
 instance DBConnection conn SQLQuery SQLInserts => ConnectionDB DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize thesign (Atom (Pred name _) args) =

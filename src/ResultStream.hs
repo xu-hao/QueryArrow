@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
    RankNTypes, FlexibleContexts, GADTs #-}
 module ResultStream (eos, ResultStream(..), Iteratee, listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream,
-    resultStreamTake, emptyResultStream) where
+    resultStreamTake, emptyResultStream, foldlM2) where
 
 import Prelude  hiding (lookup)
 import Control.Applicative ((<$>))
@@ -75,7 +75,19 @@ instance (Functor m, Monad m) => Monad (ResultStream m) where
         enumerator (\row seed2 -> runResultStream (f row) iteratee seed2) seed)
 
 instance MonadIO (ResultStream IO) where
-    liftIO f = ResultStream (\iteratee seed -> f >>= \a-> runResultStream (return a) iteratee seed)
+    liftIO = lift
 
-instance MonadIO (ResultStream (StateT s IO)) where
-    liftIO f = ResultStream (\iteratee seed -> lift f >>= \a-> runResultStream (return a) iteratee seed)
+instance (Functor m, MonadIO m) => MonadIO (ResultStream m) where
+    liftIO = lift . liftIO
+
+foldlM2 :: (MonadIO m) => Iteratee row seed m -> m () -> seed -> [row] -> m (Either seed seed)
+foldlM2 iteratee finish seed rows = case rows of
+    [] -> return (Right seed)
+    (row : rest) -> do
+        seednew <- iteratee row seed
+        case seednew of
+            Left _ -> do
+                finish
+                return seednew
+            Right seednew2 ->
+                foldlM2 iteratee finish seednew2 rest

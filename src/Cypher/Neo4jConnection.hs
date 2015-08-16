@@ -1,10 +1,11 @@
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs #-}
 module Cypher.Neo4jConnection where
 
-import FO
+import FO.Data
 import DBQuery
 import ResultStream
 import Cypher.Cypher
+import FO
 
 import Prelude hiding (lookup)
 import Control.Monad.IO.Class (liftIO)
@@ -42,17 +43,6 @@ instance Convertible ([Var], [A.Value]) MapResultRow where
                         A.Null -> StringValue "<null>"
                         _ -> error ("unsupported json value: " ++ show value)) row) empty (zip vars values) )
 
-foldlM2 iteratee seed rows =
-        case rows of
-                [] -> return (Right seed)
-                (row : rest) -> do
-                        seednew <- iteratee row seed
-                        case seednew of
-                                Left seednew2 ->
-                                        return seednew
-                                Right seednew2 ->
-                                        foldlM2 iteratee seednew2 rest
-
 instance PreparedStatement_ Neo4jQueryStatement where
         execWithParams (Neo4jQueryStatement (host, port) (vars, stmt)) args = ResultStream (\iteratee seed -> do
                 resp <- liftIO $ withConnection (pack host) port $ do
@@ -60,7 +50,7 @@ instance PreparedStatement_ Neo4jQueryStatement where
                 case resp of
                     Left t -> error (T.unpack t)
                     Right (C.Response cols rows) ->
-                        foldlM2 iteratee seed (map (\row -> convert (vars, row)) rows)
+                        foldlM2 iteratee (return ()) seed (map (\row -> convert (vars, row)) rows)
                 )
         closePreparedStatement _ = return ()
 
@@ -71,7 +61,7 @@ instance PreparedStatement_ Neo4jInsertStatement where
                   case resp of
                       Left t -> error (T.unpack t)
                       Right (C.Response cols rows) ->
-                          foldlM2 iteratee seed (map (\row -> convert (["i"], row)) rows)
+                          foldlM2 iteratee (return ()) seed (map (\row -> convert ([Var "i"], row)) rows)
                   )
         closePreparedStatement _ = return ()
 

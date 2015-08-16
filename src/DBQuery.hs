@@ -1,14 +1,17 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, FunctionalDependencies, GADTs #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FunctionalDependencies, GADTs #-}
 module DBQuery where
 
 import FO
 import ResultStream
+import FO.Data
+import FO.Domain
 
 import Prelude hiding (lookup, foldl)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.State.Strict (StateT, get, put)
 import Data.Map.Strict (Map, foldl, empty, (!))
 import Data.Convertible
+import qualified Data.Text as T
 
 data DBConnInfo = DBConnInfo {
     dbHost :: String,
@@ -89,6 +92,6 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow where
     doInsert (GenericDB conn _ _ trans) insert = do
         let sqlupdate = translateInsert trans insert
         rows <- getAllResultsInStream (execInsertStatement conn sqlupdate)
-        return (map (\row -> case row ! "i" of
+        return (map (\row -> case row ! Var "i" of
                 IntValue i -> i
                 _ -> error "unsupported result value") rows)

@@ -1,4 +1,4 @@
-{-# LANGUAGE MonadComprehensions #-}
+{-# LANGUAGE MonadComprehensions, ForeignFunctionInterface #-}
 module Main where
 
 --import QueryArrowList
@@ -32,10 +32,11 @@ module Main where
 --                              VCons v _ -> v)))) g () in
 --        print a
 import FO
+import FO.Data
 import Parser
 import DBQuery
 import ICAT
-import ResultStream
+import Plugins
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (empty, lookup)
@@ -48,7 +49,6 @@ import Data.List (intercalate, transpose)
 import Data.Aeson
 import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as B
-import System.Plugins.Load
 
 db :: MapDB DBAdapterMonad
 db = MapDB "Container" "elem" [(StringValue "ObjA", StringValue "ObjB"),
@@ -104,13 +104,12 @@ main = do
                 Left err -> putStrLn err
                 Right ps -> run2 (head args2) ps
 
-
 maximumd :: Int -> [Int] -> Int
 maximumd d [] = d
 maximumd _ l = maximum l
 
 pprint :: [Var] -> [MapResultRow] -> String
-pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+pprint vars rows = join  (map unVar vars) ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
     join = intercalate " " . map (uncurry pad) . zip collen
     rowstrs = map join m2
     m2 = transpose m
@@ -125,29 +124,6 @@ pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
         | length s < n  = s ++ replicate (n - length s) ' '
         | otherwise     = s
 
--- the plugin must be compiled with -fPIC -dynamic -shared
-getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow, Query -> String, Insert->String    )
-getDB ps = do
-    let objname = catalog_database_type ps ++ ".o"
-    print ("loading" ++ objname)
-    getDBFuncLoadStatus <- load objname ["."] [] "getDB"
-    case getDBFuncLoadStatus of
-        LoadSuccess _ getDBFunc -> getDBFunc ps
-        LoadFailure err -> error (show err)
-
---                        conn <- dbConnect (Sqlite3DBConnInfo (db_name ps))
---                        let db3 = makeICATSQLDBAdapter conn
---                        return (Database db3, show . translate db3)
-
--- for cypher
---     (db, trans) <- getDB ICATDBConnInfo {
---        db_host = "127.0.0.1",
---        db_password = "",
---        db_name = "",
---        catalog_database_type = "neo4j",
---        db_port = 7474,
---        db_username = ""
---    }
 
 run2 :: String -> ICATDBConnInfo -> IO ()
 run2 query ps = do

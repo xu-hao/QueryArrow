@@ -5,7 +5,7 @@ build-type:     Simple
 author:         Hao Xu
 
 executable QueryArrow
-  hs-source-dirs:  src
+  hs-source-dirs:  src gen
   main-is:         Main.hs
   build-depends:
                    base >= 4,
@@ -29,7 +29,14 @@ executable QueryArrow
                    text >= 1.2.1.1,
                    scientific,
                    MissingH,
-                   lattices
+                   logict,
+                   monadplus,
+                   funsat,
+                   array,
+                   temporary,
+                   process,
+                   logic-TPTP,
+                   template-haskell
   ghc-options:     -Wall -fPIC
   other-modules:
 library

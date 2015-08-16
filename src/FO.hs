@@ -1,37 +1,20 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
-   RankNTypes, FlexibleContexts, GADTs #-}
+   RankNTypes, FlexibleContexts, GADTs, DeriveGeneric #-}
 module FO where
 
 import ResultStream
+import FO.Data
+import FO.Domain
+import FO.FunSat
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, delete)
-import Data.Maybe (catMaybes)
+import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete)
 import Data.List ((\\), intercalate, union)
-import Control.Monad (liftM2,foldM ,filterM, liftM, join)
-import Control.Monad.Trans.State.Strict (StateT, evalStateT, get, put   )
-import Control.Monad.Trans.Class (lift,)
+import Control.Monad.Trans.State.Strict (StateT, evalStateT,evalState, get, put, State, runState   )
+import Control.Applicative ((<$>), liftA2)
 import Data.Convertible.Base
-
--- variable types
-type Type = String
-
-data PredKind = ObjectPred | PropertyPred deriving Eq
-
--- predicate types
-data PredType = PredType PredKind [ParamType] deriving Eq
-
-data ParamType = Key Type
-               | Property Type deriving Eq
-
--- predicate
-data Pred = Pred { predName :: String, predType :: PredType} deriving Eq
-
--- variables
-type Var = String
-
--- expression
-data Expr = VarExpr Var | IntExpr Int | StringExpr String | PatternExpr String deriving (Eq, Ord)
+import Control.Monad.Logic
+import Data.Maybe
 
 -- result value
 data ResultValue = StringValue String | IntValue Int deriving (Eq , Show)
@@ -44,26 +27,13 @@ instance Convertible Expr ResultValue where
     safeConvert (StringExpr s) = Right (StringValue s)
     safeConvert (IntExpr i) = Right (IntValue i)
     safeConvert _ = Left (ConvertError "" "" "" "")
--- atoms
-data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } deriving Eq
 
--- sign of literal
-data Sign = Pos | Neg deriving Eq
-
--- literals
-data Lit = Lit { sign :: Sign,  atom :: Atom } deriving Eq
-
-data Formula = Atomic Atom
-             | Disjunction [Formula]
-             | Conjunction [Formula]
-             | Not Formula
-             | Exists { boundvar :: Var, formula :: Formula } deriving Eq
 -- query
 data Query = Query { select :: [Var], cond :: Formula }
 data Insert = Insert { ilits :: [Lit], icond :: Formula }
 
 intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
-intResultStream i = return (insert "i" (IntValue i) empty)
+intResultStream i = return (insert (Var "i") (IntValue i) empty)
 
 -- database
 class Database_ db m row | db -> m row where
@@ -83,160 +53,25 @@ class Database_ db m row | db -> m row where
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
 data Database m  row = forall db. Database_ db m  row => Database { unDatabase :: db }
 
--- predicate map
-type PredMap = Map String Pred
-
 -- map from predicate name to database names
 type PredDBMap = Map String [String]
 
-unique :: [a] -> a
-unique as = if length as /= 1
-        then error "More than one primary parameters and nonzero secondary parameters"
-        else head as
-
-allTrue :: forall a. (a -> Bool) -> [a] -> Bool
-allTrue f = foldr ((&&) . f) True
-
-someTrue :: forall a. (a -> Bool) -> [a] -> Bool
-someTrue f = foldr ((||) . f) False
-
-isConst :: Expr -> Bool
-isConst (VarExpr _) = False
-isConst _ = True
-
--- free variables
-
-class FreeVars a where
-    freeVars :: a -> [Var]
-
 class SubstituteResultValue a where
     substResultValue :: MapResultRow -> a -> a
-
-instance FreeVars Expr where
-    freeVars (VarExpr var) = [var]
-    freeVars _ = []
 
 instance SubstituteResultValue Expr where
     substResultValue varmap expr@(VarExpr var) = case lookup var varmap of
         Nothing -> expr
         Just res -> convert res
 
-instance FreeVars Atom where
-    freeVars (Atom _ theargs) = foldl (\fvs expr ->
-        fvs `union` freeVars expr) [] theargs
-
 instance SubstituteResultValue Atom where
     substResultValue varmap (Atom thesign theargs) = Atom thesign newargs where
         newargs = map (substResultValue varmap) theargs
-
-
-instance FreeVars Lit where
-    freeVars (Lit _ theatom) = freeVars theatom
-
 instance SubstituteResultValue Lit where
     substResultValue varmap (Lit thesign theatom) = Lit thesign newatom where
         newatom = substResultValue varmap theatom
-instance FreeVars [Expr] where
-    freeVars = unions. map freeVars
-
-instance FreeVars [Lit] where
-    freeVars = unions . map freeVars
-
-instance FreeVars [Formula] where
-    freeVars = unions . map freeVars
-
-instance FreeVars Formula where
-    freeVars (Atomic atom1) = freeVars atom1
-    freeVars (Conjunction formulas) =
-        unions (map freeVars formulas)
-    freeVars (Disjunction formulas) =
-        unions (map freeVars formulas)
-    freeVars (Not formula1) =
-        freeVars formula1
-    freeVars (Exists var formula1) =
-        freeVars formula1 \\ [var]
 
 
--- Int must be nonnegative
-data DomainSize = Unbounded
-                | Bounded Int deriving Show
-
-dmin :: DomainSize -> DomainSize -> DomainSize
-dmin Unbounded b = b
-dmin a Unbounded = a
-dmin (Bounded a) (Bounded b) = Bounded (min a b)
-
-dmax :: DomainSize -> DomainSize -> DomainSize
-dmax Unbounded _ = Unbounded
-dmax _ Unbounded = Unbounded
-dmax (Bounded a) (Bounded b) = Bounded (max a b)
-
--- dmul :: DomainSize -> DomainSize -> DomainSize
--- dmul (Infinite a) (Infinite b) = liftM2 (*)
-
-dmaxs :: [DomainSize] -> DomainSize
-dmaxs = foldl dmax (Bounded 0)
-
-exprDomainSizeMap :: DomainSizeMap -> DomainSize -> Expr -> DomainSizeMap
-exprDomainSizeMap varDomainSize maxval expr = case expr of
-    VarExpr var -> insert var (dmin (lookupDomainSize var varDomainSize) maxval) empty
-    _ -> empty
-
--- estimate domain size (upper bound)
-type DomainSizeMap = Map Var DomainSize
-
-lookupDomainSize :: Var -> DomainSizeMap -> DomainSize
-lookupDomainSize var map1 = case lookup var map1 of
-    Nothing -> Unbounded
-    Just a -> a
-
--- anything DomainSize value is less than or equal to Unbounded so we can use union and intersection operations on DomainSizeMaps
-mmins :: [DomainSizeMap] -> DomainSizeMap
-mmins = unionsWith dmin
-
-mmin :: DomainSizeMap -> DomainSizeMap -> DomainSizeMap
-mmin = unionWith dmin
-mmaxs :: [DomainSizeMap] -> DomainSizeMap
-mmaxs = foldl1 (intersectionWith dmax) -- must have at least one
-
-type DomainSizeFunction m a = Sign -> a -> m DomainSizeMap
-
-class DeterminedVars a where
-    determinedVars :: Monad m => DomainSizeFunction m Atom -> Sign -> a -> m DomainSizeMap
-
-instance DeterminedVars Atom where
-    determinedVars dsp = dsp
-
-instance DeterminedVars Formula where
-    determinedVars dsp sign (Atomic atom) = determinedVars dsp sign atom
-    determinedVars dsp Pos (Conjunction formulas) = do
-        maps <- mapM (determinedVars dsp Pos) formulas
-        return (mmins maps)
-    determinedVars dsp Neg (Conjunction formulas) = do
-        maps <- mapM (determinedVars dsp Neg) formulas
-        return (mmaxs maps)
-    determinedVars dsp Pos (Disjunction formulas) = do
-        maps <- mapM (determinedVars dsp Pos) formulas
-        return (mmins maps)
-    determinedVars dsp Neg (Disjunction formulas) = do
-        maps <- mapM (determinedVars dsp Neg) formulas
-        return (mmaxs maps)
-    determinedVars dsp Pos (Not formula) =
-        determinedVars dsp Neg formula
-    determinedVars dsp Neg (Not formula) =
-        determinedVars dsp Pos formula
-    determinedVars dsp Pos (Exists var formula) = do
-        map1 <- determinedVars dsp Pos formula
-        return (delete var map1)
-    determinedVars dsp Neg (Exists var formula) = do
-        return empty -- this may be an underestimation, need look into this more
-
-intersects :: Eq a => [[a]] -> [a]
-intersects [] = error "can't intersect zero lists"
-intersects (hd : tl) = foldl (\ as bs -> [ x | x <- as, x `elem` bs ]) hd tl
-
-unions :: Eq a => [[a]] -> [a]
-unions = foldl union []
 
 type Report = [[Formula]]
 
@@ -282,7 +117,7 @@ execQuery (Query vars formula) = (do
                         (Database db, map1) -> do
                             writeReportToDBSession [effective1]
                             let freevars1 = freeVars effective1
-                            return (rest1, map1, doQuery db (Query (vars `union` freevars1) (Conjunction effective1)))
+                            return (rest1, map1, doQuery db (Query (vars `union` freevars1) (conj effective1)))
 
         -- doTheFilters :: [Database m row] -> [Disjunction] -> [Var] -> ResultStream m seed row -> DBSession m row (ResultStream m seed row)
         doTheFilters _ _ [] results2 = return results2
@@ -299,8 +134,7 @@ execQuery (Query vars formula) = (do
                         (Database db, map3) -> do
                             writeReportToDBSession [effective3]
                             let freevars3 = freeVars effective3
-                            return (rest3, map3, doFilter db (Query (vars `union` freevars3) (Conjunction effective3)) results3)
-
+                            return (rest3, map3, doFilter db (Query (vars `union` freevars3) (conj effective3)) results3)
 
 constructPredMap :: [Database m  row] -> PredMap
 constructPredMap = foldr addPredFromDBToMap empty where
@@ -318,10 +152,6 @@ constructPredDBMap = foldr addPredFromDBToMap empty where
             alterValue (Just dbnames) = Just (dbname : dbnames)
         preds = getPreds db
 
--- get the top level conjucts
-getConjuncts :: Formula -> [Formula]
-getConjuncts (Conjunction conjuncts) = conjuncts
-getConjuncts a = [a]
 
 -- a formula is called "effective" only when it has a finite domain size.
 -- a variable is called "determined" only when it has a finite domain size.
@@ -349,7 +179,7 @@ findEffectiveFormulas (db_maps, effective, candidates@(formula : rest)) = do
         map1' <- determinedVars (domainSize db_ map1) Pos formula'
         let map2 = mmin map1 map1'
         let freevars = freeVars formula'
-        return (if allTrue (\freevar -> case lookupDomainSize freevar map2 of
+        return (if all (\freevar -> case lookupDomainSize freevar map2 of
             Bounded _ -> True
             Unbounded -> False) freevars
                 then (Just (db, map2))
@@ -360,24 +190,24 @@ findEffectiveFormulas (db_maps, effective, candidates@(formula : rest)) = do
         then return (db_maps, effective, candidates)
         else findEffectiveFormulas (db_mapsnew, effective ++ [formula], rest)
 
-splitPosNegLits :: [Lit] -> ([Atom], [Atom])
-splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
-    Pos -> (theatom : pos, neg)
-    Neg -> (pos, theatom : neg)) ([],[])
+combineLits :: [Lit] -> ([Atom] -> [Atom] -> a) -> ([Atom] -> a) -> (Atom -> a) -> a
+combineLits lits generateUpdate generateInsert generateDelete = do
+    let objpredlits = filter isObjectPredLit lits
+    let proppredlits = lits \\ objpredlits
+    let (posobjpredatoms, negobjpredatoms) = splitPosNegLits objpredlits
+    let (pospropredatoms, negproppredatoms) = splitPosNegLits proppredlits
+    case (posobjpredatoms, negobjpredatoms) of
+        ([], []) ->  generateUpdate pospropredatoms negproppredatoms   -- update property
+        ([posobjatom], []) ->  case negproppredatoms of
+            [] -> generateInsert (posobjatom:pospropredatoms)      -- insert
+            _ -> error "trying to delete properties of an object to be created"
+        ([], [negobjatom]) ->   case (pospropredatoms, negproppredatoms) of
+            ([], []) -> generateDelete negobjatom
+            _ -> error "tyring to modify propertiese of an object to be deleted" -- delete
+        ([posobjatom], [negobjatom]) -> generateUpdate (posobjatom:pospropredatoms) (negobjatom:negproppredatoms) -- update property
 
-pushNegations :: Sign -> Formula -> Formula
-pushNegations Pos (Conjunction formulas) = Conjunction (map (pushNegations Pos) formulas)
-pushNegations Pos (Disjunction formulas) = Disjunction (map (pushNegations Pos) formulas)
-pushNegations Pos (Not formula) = pushNegations Neg formula
-pushNegations Pos (Exists var formula) = Exists var (pushNegations Pos formula)
-pushNegations Pos a@(Atomic _ ) = a
-pushNegations Neg (Conjunction formulas) = Disjunction (map (pushNegations Neg) formulas)
-pushNegations Neg (Disjunction formulas) = Conjunction (map (pushNegations Neg) formulas)
-pushNegations Neg (Not formula) = pushNegations Pos formula
-pushNegations Neg (Exists var formula) = Not (Exists var (pushNegations Pos formula))
-pushNegations Neg a@(Atomic _) = Not a
 
-pushNegations' = pushNegations Pos
+
 
 -- example MapDB
 
@@ -430,15 +260,15 @@ filterResults _ _ _ _ _ _ excludeBy _ results (Not (Atomic (Atom thepred args)))
         VarExpr var1 : VarExpr var2 : _ ->
             if var1 `member` resrow && var2 `member` resrow
                 then excludeBy thepred (resrow ! var1) (resrow ! var2) resrow
-                else error ("unconstrained variable " ++ var1 ++ " or " ++ var2)
+                else error ("unconstrained variable " ++ show var1 ++ " or " ++ show var2)
         VarExpr var1 : StringExpr str2 : _ ->
             if var1 `member` resrow
                 then excludeBy thepred (resrow ! var1) (StringValue str2) resrow
-                else error ("unconstrained variable " ++ var1 ++ " in " ++ show (Lit Neg (Atom thepred args)))
+                else error ("unconstrained variable " ++ show var1 ++ " in " ++ show (Lit Neg (Atom thepred args)))
         StringExpr str1 : VarExpr var2 : _ ->
             if var2 `member` resrow
                 then excludeBy thepred (StringValue str1) (resrow ! var2) resrow
-                else error ("unconstrained variable " ++ var2 ++ " in " ++ show (Lit Neg (Atom thepred args)))
+                else error ("unconstrained variable " ++ show var2 ++ " in " ++ show (Lit Neg (Atom thepred args)))
         StringExpr str1 : StringExpr str2 : _ ->
             excludeBy thepred (StringValue str1) (StringValue str2) resrow
         _ -> listResultStream [resrow]
@@ -493,9 +323,11 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow where
 
 
 
+
+
 mapDBFilterResults :: (Functor m, Monad m) => MapDB m -> [Var] -> ResultStream m MapResultRow -> Formula -> ResultStream m MapResultRow
 mapDBFilterResults db vars results formula =
-        filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists results (pushNegations' formula) where
+        filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists results (convertForall Pos formula) where
             (MapDB _ _ rows) = db
             filterBy _ str1 str2 resrow = listResultStream [resrow | (str1, str2) `elem` rows]
             excludeBy _ str1 str2 resrow = listResultStream [resrow | (str1, str2) `notElem` rows ]
@@ -533,7 +365,7 @@ instance (Functor m, Monad m) => Database_ (EqDB m) m MapResultRow where
 
     doQuery db query = doFilter db query (return empty)
     doFilter db (Query vars disjs) stream = (do
-        row2 <- filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists stream (pushNegations' disjs)
+        row2 <- filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists stream (convertForall Pos disjs)
         return (limitvarsInRow vars row2)) where
             filterBy _ str1 str2 resrow = listResultStream [resrow | str1 == str2]
             excludeBy _ str1 str2 resrow = listResultStream [resrow | str1 /= str2 ]
@@ -551,42 +383,163 @@ instance (Functor m, Monad m) => Database_ (EqDB m) m MapResultRow where
 
 
 
+
+
 -- UI
 
 instance Show Query where
-    show (Query vars disjs) = show disjs ++ " return " ++ intercalate " " vars
+    show (Query vars disjs) = show disjs ++ " return " ++ intercalate " " (map show vars)
 
 instance Show Insert where
     show (Insert atoms disjs) = show disjs ++ " insert " ++ intercalate " " (map show atoms)
 
-instance Show Pred where
-    show (Pred name t) = name ++ show t
+-- The purpose of this function is to eliminate the situation where the negative literals in the insert clause
+-- causes additional constraints to be added to the translated statement. These constraints are cause by the non-key
+-- parameters. For example, if we have P(x,y) where x is a key parameter and y is a non key parameter, the mapping of
+-- P to a target database contains two parts. One is a condition under which a data structure (such as a row or a subgraph)
+-- matches the key argument (thereby fixing the data structure). The other is a data strcuture which stores the
+-- information in y. When inserting P(a,b) for arbitrary a and b, P is translated to (schematically):
+-- INSERT b WHERE a, whereas when deleting P(a, b), P is translated to: DELETE WHERE a AND b. This create an asymmetry.
+-- In the deletion case, if b is added to the condition and subsequently merged to the condition of the whole query, then
+-- it may constrain the value of a, thereby constraining other literals in the insertion clause (possibly indirectly)
+-- constrained by a. For example, insert ~P(a,b) Q(a,c) /= insert ~P(a,b); insert Q(a,c)
+-- To avoid this situation, we require that when a negative literal (~P(a, b)) appears in the insert clause,
+-- its positive counterpart (P(a, b)) must be a logical consequence of condition of the statement, given a set of rules.
+-- This ensures that this literal (~P(a, b)) doesn't constraint a more than the condition of the statement already does.
+-- The set of rules given has to reflect the mapping f, i.e., the mapping must have the following property:
+-- If condition & rule -> b in FO then f(condition) -> f(b) in the target database.
+validate :: Insert -> Maybe (Lit, CounterExample)
+validate (Insert lits cond) =
+    if length lits == 1
+        then Nothing -- if there is only one literal we don't have to validate
+        else validateNegLits cond neg where
+            (_, neg) = splitPosNegLits lits
+            validateNegLits _ [] = Nothing
+            validateNegLits cond (a : as) =
+                case valid (cond --> Atomic a) of
+                    Nothing -> validateNegLits cond as
+                    Just ce -> Just (Lit Neg a, ce)
 
-instance Show PredType where
-    show (PredType ObjectPred types) = "OP" ++ "(" ++ intercalate "," (map show types) ++ ")"
-    show (PredType PropertyPred types) = "PP" ++ "(" ++ intercalate "," (map show types) ++ ")"
+type ValEnv a = StateT (Map Pred Pred) NewEnv a
 
-instance Show ParamType where
-    show (Key type1) = "KEY " ++ type1
-    show (Property type1) = "PROP " ++ type1
 
-instance Show Atom where
-    show (Atom (Pred name _) args) = name ++ "(" ++ intercalate "," (map show args) ++ ")"
+instance New Pred Pred where
+    new pred@(Pred p pt) = do
+      newp <- new (StringWrapper p)
+      return (Pred newp pt)
 
-instance Show Expr where
-    show (VarExpr var) = var
-    show (IntExpr i) = show i
-    show (StringExpr s) = show s
-    show (PatternExpr p) = show p
+newPred :: Pred -> ValEnv Pred
+newPred pred@(Pred p pt) = do
+    newpred <- lift $ new pred
+    map1 <- get
+    put (insert pred newpred map1)
+    return newpred
 
-instance Show Lit where
-    show (Lit thesign theatom) = case thesign of
-        Pos -> show theatom
-        Neg -> "~" ++ show theatom
+getPredCurrent :: Pred -> ValEnv Pred
+getPredCurrent pred = do
+    map1 <- get
+    return (fromMaybe pred (lookup pred map1))
+-- here we implement a restricted version functional dependency
+-- given a predicate P with parameters x, and parameters y such that
+-- y functionally depend on x, written P(x,y) | x -> y
+-- the create action: C insert P(s,t) where C is a condition modifies P -> P'
+-- P' is uniquely determined by the following formula:
+-- let vc = fv C \\ fv s \\ fv t
+--     vs = fv s
+--     (fv t \\ fv s should be [] since y functionally dependent on x)
+-- forall vs. (exists vc. C & x == s) -> (P'(x, y) <-> y == t)) &
+--           ~(exists vc. C & x == s) -> (P'(x, y) <-> P(x, y))
+ruleP' :: Formula -> Pred -> [Expr] -> ValEnv Formula
+ruleP' cond pred@(Pred p pt@(PredType _ paramtypes)) args = do
+    lift $ registerVars (freeVars args)
+    lift $ register [p]
+    newvars <- lift $ new args
+    let s = keyComponents pt args
+        x = keyComponents pt newvars
+        t = propComponents pt args
+        y = propComponents pt newvars
+        vc = (freeVars cond `union` freeVars s) \\ freeVars t
+        vc1 = (freeVars cond `union` freeVars s)
+    oldpred <- getPredCurrent pred
+    newpred <- newPred pred
+    let newcond = foldr Exists (cond & x === s) vc
+    let newcond1 = foldr Exists (cond & x === s) vc1
+    return (if not (null (freeVars t \\ freeVars s))
+        then error "unbounded vars"
+        else (newcond --> (newpred @@ newvars <--> y === t)) &
+                (Not newcond1 --> (newpred @@ newvars <--> oldpred @@ newvars)))
 
-instance Show Formula where
-    show (Conjunction formulas) = "(" ++ intercalate " " (map show formulas) ++ ")"
-    show (Disjunction formulas) = "(" ++ intercalate "|" (map show formulas) ++ ")"
-    show (Exists var formula) = "(exists " ++ var ++ "." ++ show formula ++ ")"
-    show (Atomic a) = show a
-    show (Not formula) = "~" ++ show formula
+-- given a predicate P with parameters x, and parameters y, such that P(x,y) | x -> y
+-- the delete action: C insert ~P(s,t) where C is a condition modifies P -> P'
+-- P' is uniquely determined by the following formula:
+-- let vc = fv C \\ fv t \\ fv s
+--     vs = fv s
+-- forall vs. (exists vc. C & P(s, t) & x == s & y == t) -> ~P'(x, y) &
+--           ~(exists vc. C & P(s, t) & x == s & y == t) -> (P'(x, y) <-> P(x, y))
+ruleQ' :: Formula -> Pred -> [Expr] -> ValEnv Formula
+ruleQ' cond pred@(Pred p pt@(PredType _ paramtypes)) args = do
+    lift $ registerVars (freeVars args)
+    lift $ register [p]
+    newvars <- lift $ new args
+    let s = keyComponents pt args
+        x = keyComponents pt newvars
+        t = propComponents pt args
+        y = propComponents pt newvars
+        vc = freeVars cond `union` freeVars t `union` freeVars s
+    oldpred <- getPredCurrent pred
+    newpred <- newPred pred
+    let newcond = foldr Exists (cond & oldpred @@ args & newvars === args) vc
+    return ((newcond --> Not (newpred @@ newvars)) &
+                (Not newcond --> (newpred @@ newvars <--> oldpred @@ newvars)))
+
+-- the update action: C insert L1 ... Ln is similar to TL's \otimes
+rulePQ' :: Formula -> [Lit] -> ValEnv [Formula]
+rulePQ' cond lits = mapM insertOneLit lits where
+    insertOneLit (Lit Pos (Atom pred args)) =
+        ruleP' cond pred args
+    insertOneLit (Lit Neg (Atom pred args)) =
+        ruleQ' cond pred args
+
+-- inserts and deletes preserves invariants
+ruleInsert :: [Formula] -> Formula -> [Lit] -> ValEnv ([Formula], Formula)
+ruleInsert rules cond atoms = do
+    formulas <- rulePQ' cond atoms
+    map1 <- get
+    let newrules =  substPred map1 (conj rules)
+    return (rules ++ formulas, newrules)
+
+-- insert preserves condition
+ruleInsertCond :: [Formula] -> Formula -> [Lit] -> ValEnv ([Formula], Formula)
+ruleInsertCond rules cond lits = do
+    formulas <- rulePQ' cond lits
+    map1 <- get
+    let newcond =  substPred map1 cond
+    return (rules ++ formulas, newcond)
+
+validateInsert :: TheoremProver -> [Formula] -> Insert -> IO (Maybe Bool)
+validateInsert (TheoremProver a) rules (Insert insertlits cond) = (do
+    print (runNew (evalStateT (ruleInsert rules cond insertlits) empty))
+    let execplan = elems (sortByKey insertlits)
+    let steps = take (length execplan - 1) execplan
+    result <- validateRules insertlits
+    case result of
+        Nothing -> return Nothing
+        Just False -> return (Just False)
+        _ -> validateCond steps) where
+        validateCond [] = return (Just True)
+        validateCond (s : ss) = do
+            let (axioms, conjecture) = runNew (evalStateT (ruleInsertCond rules cond s) empty)
+            putStrLn ("validating that " ++ show s ++ " doesn't change the condition")
+            mapM (\a -> putStrLn ("axiom: " ++ show a)) axioms
+            putStrLn ("conjecture: " ++ show conjecture)
+            result <- prove a axioms conjecture
+            case result of
+                Nothing -> return Nothing
+                Just False -> return (Just False)
+                _ -> validateCond ss
+        validateRules lits = do
+            let (axioms, conjecture) = runNew (evalStateT (ruleInsert rules cond lits) empty)
+            putStrLn ("validating that " ++ show lits ++ " doesn't change the invariant")
+            mapM (\a -> putStrLn ("axiom: " ++ show a)) axioms
+            putStrLn ("conjecture: " ++ show conjecture)
+            prove a axioms conjecture

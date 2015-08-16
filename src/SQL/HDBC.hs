@@ -5,12 +5,12 @@ import DBQuery
 import SQL.SQL
 import FO
 import ResultStream
+import FO.Data
 
 import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
 import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert)
-import Control.Monad.Trans.State.Strict (execStateT)
 
 data HDBCQueryStatement = HDBCQueryStatement [Var] Statement
 data HDBCInsertStatement = HDBCInsertStatement [Statement]
@@ -38,20 +38,9 @@ instance PreparedStatement_ HDBCQueryStatement where
         execWithParams (HDBCQueryStatement vars stmt) args = ResultStream (\iteratee seed -> do
                 liftIO $ execute stmt (map convertExprToSQL args)
                 rows <- liftIO $ fetchAllRows stmt
-                foldlM2 iteratee seed (map (convertSQLToResult vars) rows)
-                ) where
+                foldlM2 iteratee (liftIO $ finish stmt) seed (map (convertSQLToResult vars) rows)
+                )
                     -- keep this type signature, otherwise it won't compile
-                    foldlM2 :: Iteratee row seed DBAdapterMonad -> seed -> [row] -> DBAdapterMonad (Either seed seed)
-                    foldlM2 iteratee seed rows = case rows of
-                        [] -> return (Right seed)
-                        (row : rest) -> do
-                            seednew <- iteratee row seed
-                            case seednew of
-                                Left seednew2 -> do
-                                    liftIO $ finish stmt
-                                    return seednew
-                                Right seednew2 ->
-                                    foldlM2 iteratee seednew2 rest
         closePreparedStatement _ = return ()
 
 instance PreparedStatement_ HDBCInsertStatement where
