@@ -408,8 +408,8 @@ instance Show Insert where
 -- This ensures that this literal (~P(a, b)) doesn't constraint a more than the condition of the statement already does.
 -- The set of rules given has to reflect the mapping f, i.e., the mapping must have the following property:
 -- If condition & rule -> b in FO then f(condition) -> f(b) in the target database.
--- validate :: [Formula] -> Insert -> NewEnv Formula
-validate rules (Insert lits cond) =
+validate :: Insert -> Maybe (Lit, CounterExample)
+validate (Insert lits cond) =
     if length lits == 1
         then Nothing -- if there is only one literal we don't have to validate
         else validateNegLits cond neg where

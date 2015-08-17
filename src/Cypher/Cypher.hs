@@ -6,7 +6,7 @@ module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, var, cnull, ctrue, dot, app, match,
     create, set, delete, cnot, cwhere, creturn, cor, cfalse) where
 
-import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, conj, disj)
+import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, conj, disj, Unify,unify)
 import FO.Domain
 import DBQuery
 import FO
