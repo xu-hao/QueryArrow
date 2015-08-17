@@ -9,6 +9,7 @@ import Data.Map.Strict (Map, (!), empty, member, insert, singleton, foldrWithKey
 import Data.List ((\\), intercalate, union)
 import Control.Monad.Trans.State.Strict (evalState,get, put, State)
 import Control.Applicative ((<$>))
+import Control.Monad (foldM)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe
@@ -99,6 +100,24 @@ instance FreeVars Formula where
 
 instance FreeVars a => FreeVars [a] where
     freeVars = unions. map freeVars
+
+class Unify a where
+    unify :: a -> a -> Maybe Substitution
+
+instance Unify Expr where
+    unify (VarExpr var) e = Just (Map.singleton var e)
+    unify e (VarExpr var) = Just (Map.singleton var e)
+    unify _ _ = Nothing
+
+instance (Unify a, Subst a) => Unify [a] where
+    unify as1 as2 | length as1 == length as2 =
+        foldM (\s (a1, a2) -> do
+            s' <- unify (subst s a1) (subst s a2)
+            return (subst s' s)) empty (zip as1 as2)
+
+instance Unify Atom where
+    unify (Atom p1 args1) (Atom p2 args2) | p1 == p2 = unify args1 args2
+    unify _ _ = Nothing
 
 pushNegations :: Sign -> Formula -> Formula
 pushNegations Pos (Conjunction formulas) = conj (map (pushNegations Pos) formulas)

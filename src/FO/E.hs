@@ -12,7 +12,7 @@ import Data.List (isInfixOf, intercalate)
 data E = E String Int Int
 
 getVerifier :: VerificationInfo -> IO TheoremProver
-getVerifier (VerificationInfo _ path _ cpu memory)= return ( TheoremProver (E path (round cpu) (round memory)))
+getVerifier (VerificationInfo _ path _ cpu memory _ _)= return ( TheoremProver (E path (round cpu) (round memory)))
 
 instance TheoremProver_ E where
     prove (E proverpath cpulimit memorylimit) rules formula = do

@@ -10,7 +10,9 @@ data VerificationInfo = VerificationInfo {
     verifier_path :: String,
     rule_file_path :: String,
     cpu_limit:: Float,
-    memory_limit::Float
+    memory_limit::Float,
+    add_set :: String,
+    delete_set :: String
 } deriving (Show, Generic)
 
 instance FromJSON VerificationInfo

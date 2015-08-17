@@ -211,8 +211,9 @@ generateRule (Stmt tablename coldefs) = runNew $ do
                         let dummypred2 = Pred predname2 (PredType PropertyPred [])
                         newvar <- new (Var "")
                         return (Exists newvar (dummypred2 @@ (keyvarexprs ++ [VarExpr newvar])))
-                proppreds <- conj <$> mapM propPred notnulls
-                return [(predname++"_not_null", "axiom", objatom <--> proppreds)]
+                proppreds <- mapM propPred notnulls
+                proppreds2 <- mapM propPred props
+                return [(predname++"_not_null", "axiom", (objatom --> conj proppreds) & (disj proppreds2 --> objatom))]
 
 generateRules :: [Stmt2] -> [Input]
 generateRules = concatMap generateRule

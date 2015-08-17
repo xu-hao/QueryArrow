@@ -3,5 +3,7 @@
    "verifier_path" : "external/CVC4/cvc4-1.4-x86_64-linux-opt",
    "rule_file_path" : "gen/rules.tptp",
    "cpu_limit" : 1,
-   "memory_limit" : 32
+   "memory_limit" : 32,
+   "add_set" : "gen/add_set.tptp",
+   "delete_set" : "gen/delete_set.tptp"
 }

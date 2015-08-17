@@ -12,7 +12,7 @@ import Data.List (isInfixOf, intercalate)
 data CVC4 = CVC4 String Int Int Int
 
 getVerifier :: VerificationInfo -> IO TheoremProver
-getVerifier (VerificationInfo  _ path _ cpu memory)= return (TheoremProver (CVC4 path (round (cpu * 1000)) (round (cpu * 1000)) (round memory)))
+getVerifier (VerificationInfo  _ path _ cpu memory _ _)= return (TheoremProver (CVC4 path (round (cpu * 1000)) (round (cpu * 1000)) (round memory)))
 
 instance TheoremProver_ CVC4 where
     prove (CVC4 proverpath cpulimit cpulimit2 _) rules formula = do

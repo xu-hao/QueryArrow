@@ -202,7 +202,7 @@ combineLits lits generateUpdate generateInsert generateDelete = do
             [] -> generateInsert (posobjatom:pospropredatoms)      -- insert
             _ -> error "trying to delete properties of an object to be created"
         ([], [negobjatom]) ->   case (pospropredatoms, negproppredatoms) of
-            ([], []) -> generateDelete negobjatom
+            ([], _) -> generateDelete negobjatom
             _ -> error "tyring to modify propertiese of an object to be deleted" -- delete
         ([posobjatom], [negobjatom]) -> generateUpdate (posobjatom:pospropredatoms) (negobjatom:negproppredatoms) -- update property
 
@@ -408,8 +408,8 @@ instance Show Insert where
 -- This ensures that this literal (~P(a, b)) doesn't constraint a more than the condition of the statement already does.
 -- The set of rules given has to reflect the mapping f, i.e., the mapping must have the following property:
 -- If condition & rule -> b in FO then f(condition) -> f(b) in the target database.
-validate :: Insert -> Maybe (Lit, CounterExample)
-validate (Insert lits cond) =
+-- validate :: [Formula] -> Insert -> NewEnv Formula
+validate rules (Insert lits cond) =
     if length lits == 1
         then Nothing -- if there is only one literal we don't have to validate
         else validateNegLits cond neg where
@@ -517,29 +517,29 @@ ruleInsertCond rules cond lits = do
     return (rules ++ formulas, newcond)
 
 validateInsert :: TheoremProver -> [Formula] -> Insert -> IO (Maybe Bool)
-validateInsert (TheoremProver a) rules (Insert insertlits cond) = (do
-    print (runNew (evalStateT (ruleInsert rules cond insertlits) empty))
-    let execplan = elems (sortByKey insertlits)
-    let steps = take (length execplan - 1) execplan
-    result <- validateRules insertlits
-    case result of
-        Nothing -> return Nothing
-        Just False -> return (Just False)
-        _ -> validateCond steps) where
-        validateCond [] = return (Just True)
-        validateCond (s : ss) = do
-            let (axioms, conjecture) = runNew (evalStateT (ruleInsertCond rules cond s) empty)
-            putStrLn ("validating that " ++ show s ++ " doesn't change the condition")
-            mapM (\a -> putStrLn ("axiom: " ++ show a)) axioms
-            putStrLn ("conjecture: " ++ show conjecture)
-            result <- prove a axioms conjecture
+validateInsert (TheoremProver a) rules i@(Insert insertlits cond) = (
+    do
+            let execplan = elems (sortByKey insertlits)
+            let steps = take (length execplan - 1) execplan
+            result <- validateRules insertlits
             case result of
                 Nothing -> return Nothing
                 Just False -> return (Just False)
-                _ -> validateCond ss
-        validateRules lits = do
-            let (axioms, conjecture) = runNew (evalStateT (ruleInsert rules cond lits) empty)
-            putStrLn ("validating that " ++ show lits ++ " doesn't change the invariant")
-            mapM (\a -> putStrLn ("axiom: " ++ show a)) axioms
-            putStrLn ("conjecture: " ++ show conjecture)
-            prove a axioms conjecture
+                _ -> validateCond steps) where
+                validateCond [] = return (Just True)
+                validateCond (s : ss) = do
+                    let (axioms, conjecture) = runNew (evalStateT (ruleInsertCond rules cond s) empty)
+                    putStrLn ("validating that " ++ show s ++ " doesn't change the condition")
+                    mapM (\a -> putStrLn ("axiom: " ++ show a)) axioms
+                    putStrLn ("conjecture: " ++ show conjecture)
+                    result <- prove a axioms conjecture
+                    case result of
+                        Nothing -> return Nothing
+                        Just False -> return (Just False)
+                        _ -> validateCond ss
+                validateRules lits = do
+                    let (axioms, conjecture) = runNew (evalStateT (ruleInsert rules cond lits) empty)
+                    putStrLn ("validating that " ++ show lits ++ " doesn't change the invariant")
+                    mapM (\a -> putStrLn ("axiom: " ++ show a)) axioms
+                    putStrLn ("conjecture: " ++ show conjecture)
+                    prove a axioms conjecture
