@@ -2,6 +2,7 @@
 module SQL.SQL where
 
 import FO
+import QueryPlan
 import FO.Data hiding (Subst, subst)
 import FO.Domain
 import DBQuery
@@ -561,6 +562,7 @@ instance Translate SQLTrans MapResultRow SQLQuery SQLInserts where
         let (SQLTrans schema builtin predtablemap) = trans
             env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env in
             runNew (evalStateT (translateInsertToSQL query) (schema, builtin, predtablemap, env2, empty, []))
+    translateable _ _ = True
 
 instance DBConnection conn SQLQuery SQLInserts => ConnectionDB DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize thesign (Atom (Pred name _) args) =

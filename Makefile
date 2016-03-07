@@ -1,5 +1,9 @@
 all: build
 
+ubuntu: 
+	sudo apt-get install alex happy zlib1g-dev libsqlite3-dev postgresql-server-dev-all
+	cabal install --dependencies-only --enable-shared
+
 gen: src/*
 	mkdir -p gen
 	mkdir -p gen/SQL

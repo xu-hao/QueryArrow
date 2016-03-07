@@ -31,7 +31,6 @@ executable QueryArrow
                    MissingH,
                    logict,
                    monadplus,
-                   funsat,
                    array,
                    temporary,
                    process,

@@ -18,7 +18,7 @@ import qualified Data.Map as Map
 -- variable types
 type Type = String
 
-data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show)
+data PredKind = ObjectPred | PropertyPred | EssentialPred deriving (Eq, Ord, Show)
 
 -- predicate types
 data PredType = PredType PredKind [ParamType] deriving (Eq, Ord, Show)
@@ -323,9 +323,11 @@ instance Subst a => Subst [a] where
 instance (Subst a, Ord a) => Subst (Set a) where
     subst s = Set.map (subst s)
 
-instance Monoid Substitution where
-    mempty = empty
-    s1 `mappend` s2 = subst s2 s1 `Map.union` s2
+comp s1 s2 = subst s2 s1 `Map.union` s2
+
+-- instance Monoid Substitution where
+--    mempty = empty
+--    s1 `mappend` s2 = comp
 
 class GatherConstants a where
     gatherConstants :: a -> Set Expr

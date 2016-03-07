@@ -2,6 +2,7 @@
 module Cypher.Neo4j where
 
 import FO
+import QueryPlan
 import DBQuery
 import ICAT
 import Cypher.ICAT

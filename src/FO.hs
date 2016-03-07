@@ -6,9 +6,11 @@ import ResultStream
 import FO.Data
 import FO.Domain
 import FO.FunSat
+import QueryPlan
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete)
+import qualified Data.Map.Strict
 import Data.List ((\\), intercalate, union)
 import Control.Monad.Trans.State.Strict (StateT, evalStateT,evalState, get, put, State, runState   )
 import Control.Applicative ((<$>), liftA2)
@@ -17,41 +19,22 @@ import Control.Monad.Logic
 import Data.Maybe
 
 -- result value
-data ResultValue = StringValue String | IntValue Int deriving (Eq , Show)
+data ResultValue = StringValue String | IntValue Int | Null deriving (Eq , Show)
 
 instance Convertible ResultValue Expr where
     safeConvert (StringValue s) = Right (StringExpr s)
     safeConvert (IntValue i) = Right (IntExpr i)
+    safeConvert _ = Left (ConvertError "" "" "" "")
 
 instance Convertible Expr ResultValue where
     safeConvert (StringExpr s) = Right (StringValue s)
     safeConvert (IntExpr i) = Right (IntValue i)
     safeConvert _ = Left (ConvertError "" "" "" "")
 
--- query
-data Query = Query { select :: [Var], cond :: Formula }
-data Insert = Insert { ilits :: [Lit], icond :: Formula }
-
 intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
 intResultStream i = return (insert (Var "i") (IntValue i) empty)
 
--- database
-class Database_ db m row | db -> m row where
-    dbBegin :: db -> m ()
-    dbCommit :: db -> m ()
-    dbRollback :: db -> m ()
-    getName :: db -> String
-    getPreds :: db -> [Pred]
-    -- domainSize function is a function from arguments to domain size
-    -- it is used to compute the optimal query plan
-    domainSize :: db -> DomainSizeMap -> DomainSizeFunction m Atom
-    doQuery :: db -> Query -> ResultStream m row
-    -- filter takes a result stream, a list of input vars, a query, and generate a result stream
-    doFilter :: db -> Query -> ResultStream m row -> ResultStream m row
-    doInsert :: db -> Insert -> m [Int]
 
--- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data Database m  row = forall db. Database_ db m  row => Database { unDatabase :: db }
 
 -- map from predicate name to database names
 type PredDBMap = Map String [String]
@@ -97,15 +80,31 @@ writeReportToDBSession report = lift $ do
     put (reports ++ report)
 
 -- exec query from dbname
-getAllResults :: (Monad m, Functor m) => Query -> DBSession m row [row]
+getAllResults :: (Monad m, ResultRow row) => Query -> DBSession m row [row]
 getAllResults query = do
     stream <- execQuery query
     lift $ lift $ getAllResultsInStream stream
 
-execQuery :: (Monad m) => Query -> DBSession m row (ResultStream m row)
-execQuery (Query vars formula) = (do
-    let conjuncts = getConjuncts formula
+execPlan :: (ResultRow row, Monad m) => [Database m row] -> Formula -> QueryPlan 
+execPlan dbs formula = 
+    let qp = formulaToQueryPlan dbs formula
+        qp2 = simplifyQueryPlan qp in
+        optimizeQueryPlan dbs qp2
+        
+execQuery :: (ResultRow row, Monad m) => Query -> DBSession m row (ResultStream m row)
+execQuery (Query vars formula) = do
     dbs <- getDBsFromDBSession
+    let qp3 = execPlan dbs formula
+    effective <- lift (lift (checkQueryPlan' dbs qp3))
+    case effective of
+        Left formula -> error ("can't find effective literals, try reordering the literals: " ++ show formula)
+        Right _ ->
+            let(vars2, rs) = (execQueryPlan dbs Nothing qp3 ) in
+                return (transformResultStream vars2 vars rs)
+{-
+    
+    (do
+    let conjuncts = getConjuncts formula
     (rest, mapnew, results) <- doTheQuery dbs conjuncts
     doTheFilters dbs mapnew rest results)  where
         doTheQuery dbs1 conjucts1 = do
@@ -135,6 +134,7 @@ execQuery (Query vars formula) = (do
                             writeReportToDBSession [effective3]
                             let freevars3 = freeVars effective3
                             return (rest3, map3, doFilter db (Query (vars `union` freevars3) (conj effective3)) results3)
+-}
 
 constructPredMap :: [Database m  row] -> PredMap
 constructPredMap = foldr addPredFromDBToMap empty where
@@ -216,6 +216,11 @@ combineLits lits generateUpdate generateInsert generateDelete = do
 -- result row
 type MapResultRow = Map Var ResultValue
 
+instance ResultRow MapResultRow where
+    transform vars vars2 map1 = foldr (\var map2 -> case lookup var map1 of
+                                                        Nothing -> insert var Null map1
+                                                        Just rv -> insert var rv map1) empty vars2
+                                                        
 filterResults :: (Functor m, Monad m) => [Var] -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
     -> (Pred-> Var -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
     -> (Pred-> ResultValue -> Var -> MapResultRow -> ResultStream m MapResultRow)
@@ -320,6 +325,9 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow where
                         Pos -> add
                         Neg -> remove) rows'' (arg12 (substResultValue row1 lit))) rows' rows1) rows lits
         return [0]
+    supported (MapDB _ predname _) (Atomic (Atom (Pred p _) _)) | p == predname = True
+    supported (MapDB _ predname _) (Not (Atomic (Atom (Pred p _) _))) | p == predname = True
+    supported _ _ = False
 
 
 
@@ -380,6 +388,9 @@ instance (Functor m, Monad m) => Database_ (EqDB m) m MapResultRow where
             expand12 _ _ _ _ = error "unconstrained eq predicate"
     doInsert _ _ = do
         error "cannot update equality constaints"
+    supported _ (Atomic (Atom (Pred "eq" _) _)) = True
+    supported _ (Not (Atomic (Atom (Pred "eq" _) _))) = True
+    supported _ _ = False
 
 
 
@@ -439,6 +450,9 @@ getPredCurrent :: Pred -> ValEnv Pred
 getPredCurrent pred = do
     map1 <- get
     return (fromMaybe pred (lookup pred map1))
+    
+generalize formula = let fv = freeVars formula in foldr Forall formula fv
+                         
 -- here we implement a restricted version functional dependency
 -- given a predicate P with parameters x, and parameters y such that
 -- y functionally depend on x, written P(x,y) | x -> y
@@ -466,8 +480,8 @@ ruleP' cond pred@(Pred p pt@(PredType _ paramtypes)) args = do
     let newcond1 = foldr Exists (cond & x === s) vc1
     return (if not (null (freeVars t \\ freeVars s))
         then error "unbounded vars"
-        else (newcond --> (newpred @@ newvars <--> y === t)) &
-                (Not newcond1 --> (newpred @@ newvars <--> oldpred @@ newvars)))
+        else generalize ((newcond --> (newpred @@ newvars <--> y === t)) &
+                (Not newcond1 --> (newpred @@ newvars <--> oldpred @@ newvars))))
 
 -- given a predicate P with parameters x, and parameters y, such that P(x,y) | x -> y
 -- the delete action: C insert ~P(s,t) where C is a condition modifies P -> P'
@@ -489,8 +503,8 @@ ruleQ' cond pred@(Pred p pt@(PredType _ paramtypes)) args = do
     oldpred <- getPredCurrent pred
     newpred <- newPred pred
     let newcond = foldr Exists (cond & oldpred @@ args & newvars === args) vc
-    return ((newcond --> Not (newpred @@ newvars)) &
-                (Not newcond --> (newpred @@ newvars <--> oldpred @@ newvars)))
+    return (generalize (((newcond --> Not (newpred @@ newvars)) &
+                (Not newcond --> (newpred @@ newvars <--> oldpred @@ newvars)))))
 
 -- the update action: C insert L1 ... Ln is similar to TL's \otimes
 rulePQ' :: Formula -> [Lit] -> ValEnv [Formula]
@@ -514,7 +528,7 @@ ruleInsertCond rules cond lits = do
     formulas <- rulePQ' cond lits
     map1 <- get
     let newcond =  substPred map1 cond
-    return (rules ++ formulas, newcond)
+    return (rules ++ formulas, cond --> newcond)
 
 validateInsert :: TheoremProver -> [Formula] -> Insert -> IO (Maybe Bool)
 validateInsert (TheoremProver a) rules i@(Insert insertlits cond) = (

@@ -1,0 +1,1 @@
+fof('META_OBJ_not_null',axiom,! [V] : ((('META_OBJ'(V) => (? [V0] : ('META_ATTR_NAME'(V,V0)) & ? [V1] : ('META_ATTR_VALUE'(V,V1)))) & (((( ? [V3] : ('META_ATTR_NAME'(V,V3))) | ? [V4] : ('META_ATTR_VALUE'(V,V4))) | ? [V5] : ('META_ATTR_UNIT'(V,V5)))  => 'META_OBJ'(V))))).

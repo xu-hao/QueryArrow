@@ -43,7 +43,7 @@ cypherBuiltIn = CypherBuiltIn ( fromList [
     ])
 
 cypherTrans :: CypherTrans
-cypherTrans = CypherTrans cypherBuiltIn  (fromList [
+cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] (fromList [
         ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
         ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
         ("META_OBJ", mappingPattern0 "obj_id" "AVU"),
@@ -51,17 +51,17 @@ cypherTrans = CypherTrans cypherBuiltIn  (fromList [
         ("DATA_SIZE", mappingPattern1 "obj_id" "DataObject" "data_size"),
         ("COLL_NAME", mappingPattern1 "obj_id" "Collection" "coll_name"),
         ("DATA_REPL_NUM", mappingPattern1 "obj_id" "DataObject" "data_repl_num"),
-        ("COLL", mappingPattern2 "obj_id" "DataObject"  "obj_id" "Collection"  "coll"),
+        ("DATA_COLL", mappingPattern2 "obj_id" "DataObject"  "obj_id" "Collection"  "coll"),
         ("DATA_PATH", mappingPattern1 "obj_id" "DataObject" "data_path"),
         ("DATA_CHECKSUM", mappingPattern1 "obj_id" "DataObject" "data_checksum"),
         ("DATA_CREATE_TIME", mappingPattern1 "obj_id" "DataObject" "create_ts"),
         ("DATA_MODIFY_TIME", mappingPattern1 "obj_id" "DataObject" "modify_ts"),
         ("COLL_CREATE_TIME", mappingPattern1 "obj_id" "Collection" "create_ts"),
         ("COLL_MODIFY_TIME", mappingPattern1 "obj_id" "Collection" "modify_ts"),
-        ("META", mappingPattern2m "obj_id" "obj_id" "meta"),
+        ("OBJT_METAMAP_OBJ", mappingPattern2m "obj_id" "obj_id" "meta"),
         ("META_ATTR_NAME", mappingPattern1 "obj_id" "AVU" "meta_attr_name"),
         ("META_ATTR_VALUE", mappingPattern1 "obj_id" "AVU" "meta_attr_value"),
-        ("META_ATTR_UNITS", mappingPattern1 "obj_id" "AVU" "meta_attr_unit")
+        ("META_ATTR_UNIT", mappingPattern1 "obj_id" "AVU" "meta_attr_unit")
         ])
 
 
@@ -73,24 +73,24 @@ mappingPattern0 :: String -> String -> CypherMapping
 mappingPattern0 id nodetype =
         (
                 [CypherVar "1"],
-                GraphPattern [],
-                GraphPattern [nodevlp "0" nodetype [(PropertyKey id, var "1")]],
+                GraphPattern [] [],
+                GraphPattern [] [nodevlp "0" nodetype [(PropertyKey id, var "1")]],
                 [(CypherVar "0", [CypherVar "1"])]
         )
 mappingPattern1 :: String -> String -> String -> CypherMapping
 mappingPattern1 id nodetype prop =
         (
                 [CypherVar"1", CypherVar"2"],
-                GraphPattern [nodevlp "0" nodetype [(PropertyKey id, var "1")]],
-                GraphPattern [nodevlp "0" nodetype [(PropertyKey prop, var "2")]],
+                GraphPattern [nodevlp "0" nodetype [(PropertyKey id, var "1")]] [],
+                GraphPattern [] [nodevlp "0" nodetype [(PropertyKey prop, var "2")]],
                 [(CypherVar"0", [CypherVar"1"])]
         )
 mappingPattern2 :: String -> String -> String -> String -> String -> CypherMapping
 mappingPattern2 id1 nodetype1 id2 nodetype2 edge =
             (
                 [CypherVar"1", CypherVar"2"],
-                GraphPattern [nodevlp "d" nodetype1 [(PropertyKey id1, var "1")], nodevlp "c" nodetype2 [(PropertyKey id2, var "2")]],
-                GraphPattern [edgevl (nodev "d") "e" edge (nodev "c")],
+                GraphPattern [nodevlp "d" nodetype1 [(PropertyKey id1, var "1")], nodevlp "c" nodetype2 [(PropertyKey id2, var "2")]] [],
+                GraphPattern [] [edgevl (nodev "d") "e" edge (nodev "c")],
                 [(CypherVar"d", [CypherVar"1"]), (CypherVar"e", [CypherVar"1", CypherVar"2"]), (CypherVar"c", [CypherVar"2"])]
             )
 
@@ -98,7 +98,7 @@ mappingPattern2m::String -> String -> String -> CypherMapping
 mappingPattern2m id1 id2 edge =
             (
                 [CypherVar"1", CypherVar"2"],
-                GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]],
-                GraphPattern [edgevl (nodev "d") "e" edge (nodev "c")],
+                GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]] [],
+                GraphPattern [] [edgevl (nodev "d") "e" edge (nodev "c")],
                 [(CypherVar"d", [CypherVar"1"]), (CypherVar"e", [CypherVar"1", CypherVar"2"]), (CypherVar"c", [CypherVar"2"])]
             )

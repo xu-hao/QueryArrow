@@ -2,6 +2,7 @@
 module DBQuery where
 
 import FO
+import QueryPlan
 import ResultStream
 import FO.Data
 import FO.Domain
@@ -55,6 +56,7 @@ class Translate trans row query insert | trans -> row query insert where
     translateQueryWithParams :: trans -> Query -> row -> (query, [Var])
     translateInsert :: trans -> Insert -> insert
     translateInsertWithParams :: trans -> Insert -> row ->  insert
+    translateable :: trans -> Formula -> Bool
 
 
 -- call this to clear all dbs
@@ -95,3 +97,4 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow where
         return (map (\row -> case row ! Var "i" of
                 IntValue i -> i
                 _ -> error "unsupported result value") rows)
+    supported (GenericDB _ _ _ trans) formula = translateable trans formula

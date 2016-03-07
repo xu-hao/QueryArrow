@@ -3,6 +3,7 @@ module Parser (progp, QueryVariant(..), Completion, transformDeletion) where
 
 import FO.Data
 import FO
+import QueryPlan
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (Map, (!), member, insert, lookup, fromList)

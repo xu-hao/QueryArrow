@@ -2,6 +2,8 @@
 
 import FO hiding (validateInsert)
 import qualified FO
+import QueryPlan
+import ResultStream
 import FO.FunSat
 import FO.Data
 import FO.Parser
@@ -96,7 +98,7 @@ instance Arbitrary (LimitedMapDB m) where
         let arbitraryList = replicateM m1 (oneof ((return . StringValue) <$> strList))
         LimitedMapDB <$> (MapDB <$> string2 <*> string2 <*> (zip <$> arbitraryList <*> arbitraryList))
 
-runQuery ::  [Database Identity row] -> String -> [row]
+runQuery ::  (ResultRow row, Show row) => [Database Identity row] -> String -> [row]
 runQuery dbs query2 =
     case runParser progp (constructPredMap dbs) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
@@ -154,7 +156,7 @@ test3 (LimitedMapDB db) = case db of
             results = to1 [Var "x", Var "y"] (runQuery [Database db] query2)
             rr = to2 rows in
             -- trace ("rr: " ++show rr++"\nresults: "++show results)
-                results == [ [a,b] | [a,b] <- rr, _ <- [ [a1,b1] | [a1,b1] <- rr, b==a1]]
+                results == [ [a,b] | [a,b] <- rr, not (null [ [a1,b1] | [a1,b1] <- rr, b==a1])]
 
 -- test that simple query of the form p(x,y) p(y,z) ~p(x,z)
 test4 :: LimitedMapDB Identity -> Bool
@@ -351,14 +353,14 @@ main = hspec $ do
         let e = (var "e")
         let f = (var "f")
         it "monoid <> graph 0" $ do
-            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] `shouldBe`
-                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]]
+            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] [] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] [] `shouldBe`
+                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] []
         it "monoid <> graph 1" $ do
-            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "p", b)]] `shouldBe`
-                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)], nodevlp "0" "l" [(PropertyKey "p", b)]]
+            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] [] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "p", b)]] [] `shouldBe`
+                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)], nodevlp "0" "l" [(PropertyKey "p", b)]] []
         it "monoid <> graph 2" $ do
-            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] `shouldBe`
-                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]]
+            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] [] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] [] `shouldBe`
+                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] []
         it "unifyOne 0" $ do
             unifyOne ("a" `dot` "l") ["b" `dot` "l"] `shouldBe`
                 Just (["b" `dot` "l"], cypherVarExprMap (CypherVar "a") b)

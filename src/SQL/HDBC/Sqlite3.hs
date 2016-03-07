@@ -3,6 +3,7 @@ module SQL.HDBC.Sqlite3 where
 
 import DBQuery
 import FO
+import QueryPlan
 import FO.Data
 import SQL.HDBC
 import ICAT
