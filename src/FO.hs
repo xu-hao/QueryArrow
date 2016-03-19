@@ -5,39 +5,31 @@ module FO where
 import ResultStream
 import FO.Data
 import FO.Domain
-import FO.FunSat
+import FO.Parser
 import QueryPlan
+import Rewriting
+import Config
+import Parser
+import DBQuery
+import Utils
+-- import Plugins
+import SQL.HDBC.PostgreSQL
+import FO.E
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete)
+import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete, singleton, keys, filterWithKey)
 import qualified Data.Map.Strict
 import Data.List ((\\), intercalate, union)
 import Control.Monad.Trans.State.Strict (StateT, evalStateT,evalState, get, put, State, runState   )
 import Control.Applicative ((<$>), liftA2)
 import Data.Convertible.Base
 import Control.Monad.Logic
+import Control.Monad.Except
 import Data.Maybe
-
--- result value
-data ResultValue = StringValue String | IntValue Int | Null deriving (Eq , Show)
-
-instance Convertible ResultValue Expr where
-    safeConvert (StringValue s) = Right (StringExpr s)
-    safeConvert (IntValue i) = Right (IntExpr i)
-    safeConvert _ = Left (ConvertError "" "" "" "")
-
-instance Convertible Expr ResultValue where
-    safeConvert (StringExpr s) = Right (StringValue s)
-    safeConvert (IntExpr i) = Right (IntValue i)
-    safeConvert _ = Left (ConvertError "" "" "" "")
-
-intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
-intResultStream i = return (insert (Var "i") (IntValue i) empty)
-
-
-
--- map from predicate name to database names
-type PredDBMap = Map String [String]
+import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy.Char8 as B8
+import Text.ParserCombinators.Parsec hiding (State)
+import Debug.Trace
 
 class SubstituteResultValue a where
     substResultValue :: MapResultRow -> a -> a
@@ -85,24 +77,34 @@ getAllResults query = do
     stream <- execQuery query
     lift $ lift $ getAllResultsInStream stream
 
-execPlan :: (ResultRow row, Monad m) => [Database m row] -> Formula -> QueryPlan 
-execPlan dbs formula = 
+queryPlan :: (ResultRow row, Monad m) => [Database m row] -> Formula -> QueryPlan
+queryPlan dbs formula =
     let qp = formulaToQueryPlan dbs formula
         qp2 = simplifyQueryPlan qp in
         optimizeQueryPlan dbs qp2
-        
+
+insertPlan :: (ResultRow row, Monad m) => [Database m row] -> InsertMap -> Insert -> QueryPlan
+insertPlan dbs insmap ins =
+    let qp = insertToQueryPlan dbs insmap ins
+        qp2 = simplifyQueryPlan qp in
+        optimizeQueryPlan dbs qp2
+
 execQuery :: (ResultRow row, Monad m) => Query -> DBSession m row (ResultStream m row)
-execQuery (Query vars formula) = do
+execQuery qu = do
     dbs <- getDBsFromDBSession
-    let qp3 = execPlan dbs formula
-    effective <- lift (lift (checkQueryPlan' dbs qp3))
+    return (execQuery' dbs qu [] (pure mempty))
+
+execQuery' :: (ResultRow row, Monad m) => [Database m row] -> Query -> [Var] -> ResultStream m row -> (ResultStream m row)
+execQuery' dbs (Query vars formula) rsvars rs = do
+    let qp3 = queryPlan dbs formula
+    effective <- lift (runExceptT (checkQueryPlan' dbs qp3))
     case effective of
         Left formula -> error ("can't find effective literals, try reordering the literals: " ++ show formula)
         Right _ ->
-            let(vars2, rs) = (execQueryPlan dbs Nothing qp3 ) in
-                return (transformResultStream vars2 vars rs)
+            let (vars2, rs') = (execQueryPlan dbs (rsvars, rs)  qp3 ) in
+                transformResultStream vars2 vars rs'
 {-
-    
+
     (do
     let conjuncts = getConjuncts formula
     (rest, mapnew, results) <- doTheQuery dbs conjuncts
@@ -135,76 +137,100 @@ execQuery (Query vars formula) = do
                             let freevars3 = freeVars effective3
                             return (rest3, map3, doFilter db (Query (vars `union` freevars3) (conj effective3)) results3)
 -}
+execInsert :: (ResultRow row, Monad m, MonadIO m) => TheoremProver -> [Input] -> InsertMap -> Insert -> DBSession m row (ResultStream m row)
+execInsert  verifier rules insmap qu = do
+    dbs <- getDBsFromDBSession
+    return (execInsert' dbs verifier rules insmap qu [] (pure mempty))
 
-constructPredMap :: [Database m  row] -> PredMap
-constructPredMap = foldr addPredFromDBToMap empty where
-    addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
-        addPredToMap thepred = insert (predName thepred) thepred
-        preds = getPreds db
+execInsert' :: (ResultRow row, Monad m, MonadIO m) => [Database m row] -> TheoremProver -> [Input] -> InsertMap -> Insert -> [Var] -> ResultStream m row -> (ResultStream m row)
+execInsert' dbs verifier rules insmap qu vars rs = do
+    let formulas = map (\(_,_,a) -> a) rules
+    let insp = insertPlan dbs insmap qu
+    let (vars2, rs2) = execQueryPlan dbs (vars, rs) insp
+    rs2
+{-    liftIO $ print "calling verifier"
+    vres0 <- liftIO $    validate verifier qu
+    case vres0 of
+                Just lit -> error ("Deleting a literal not implied by condition " ++ show lit)
+                Nothing -> do
+                    vres1 <- liftIO $ validateInsert verifier formulas qu
+                    case vres1 of
+                        Just True -> do
+                            let insp = insertPlan dbs insmap qu
+                            let (vars, rs) = execQueryPlan dbs (vars, rs) insp
+                            rs
+                        _ -> error "cannot verify insert statement is correct"
+-}
 
--- construct map from predicates to db names
-constructPredDBMap :: [Database m  row] -> PredDBMap
-constructPredDBMap = foldr addPredFromDBToMap empty where
-    addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
-        dbname = getName db
-        addPredToMap thepred = alter alterValue (predName thepred) where
-            alterValue Nothing = Just [dbname]
-            alterValue (Just dbnames) = Just (dbname : dbnames)
-        preds = getPreds db
 
+defaultRewritingLimit = 100
 
--- a formula is called "effective" only when it has a finite domain size.
--- a variable is called "determined" only when it has a finite domain size.
--- the first stage is a query and subsequent stages are filters
--- each stage T is associated with a database D
--- a set S of literals is assigned a stage T. Denote by A -> T -> D. The assignment must satisfy the following
--- for each L in S
--- (1) the predicate in L is provided by D and
--- (2) all variable in L are determined by S and D or previous stages
--- a variable is determined by S and D, iff
--- there is a literal L in S such that
--- (1) x in fv(L) and
--- (2) L has a finite domain size in D given the variables determined in previous stages
+type RewritingRuleSets = ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+data TransDB m row = TransDB String [Database m row] TheoremProver [Input] [Pred] RewritingRuleSets InsertMap
 
--- given
--- a list of variables that has already been determined
--- a list of databases
--- a list of effective literals
--- a list of literal
--- find the longest prefix of the literal list the literals in which become effective in at least one databases
-findEffectiveFormulas :: (Monad m ) => ([(Database m  row, DomainSizeMap)], [Formula], [Formula]) -> m ([(Database m  row, DomainSizeMap)], [Formula], [Formula])
-findEffectiveFormulas (db_maps, effective, []) = return (db_maps, effective, [])
-findEffectiveFormulas (db_maps, effective, candidates@(formula : rest)) = do
-    let isFormulaEffective formula' (db@(Database db_), map1) = do
-        map1' <- determinedVars (domainSize db_ map1) Pos formula'
-        let map2 = mmin map1 map1'
-        let freevars = freeVars formula'
-        return (if all (\freevar -> case lookupDomainSize freevar map2 of
-            Bounded _ -> True
-            Unbounded -> False) freevars
-                then (Just (db, map2))
-                else Nothing)
-    db_mapmaybes <- mapM (isFormulaEffective formula) db_maps
-    let db_mapsnew = catMaybes db_mapmaybes
-    if null db_mapsnew
-        then return (db_maps, effective, candidates)
-        else findEffectiveFormulas (db_mapsnew, effective ++ [formula], rest)
+rewriteQuery :: [QueryRewritingRule] -> Query -> Query
+rewriteQuery qr (Query vars form) = Query vars (rewrites defaultRewritingLimit form qr)
 
-combineLits :: [Lit] -> ([Atom] -> [Atom] -> a) -> ([Atom] -> a) -> (Atom -> a) -> a
-combineLits lits generateUpdate generateInsert generateDelete = do
-    let objpredlits = filter isObjectPredLit lits
-    let proppredlits = lits \\ objpredlits
-    let (posobjpredatoms, negobjpredatoms) = splitPosNegLits objpredlits
-    let (pospropredatoms, negproppredatoms) = splitPosNegLits proppredlits
-    case (posobjpredatoms, negobjpredatoms) of
-        ([], []) ->  generateUpdate pospropredatoms negproppredatoms   -- update property
-        ([posobjatom], []) ->  case negproppredatoms of
-            [] -> generateInsert (posobjatom:pospropredatoms)      -- insert
-            _ -> error "trying to delete properties of an object to be created"
-        ([], [negobjatom]) ->   case (pospropredatoms, negproppredatoms) of
-            ([], _) -> generateDelete negobjatom
-            _ -> error "tyring to modify propertiese of an object to be deleted" -- delete
-        ([posobjatom], [negobjatom]) -> generateUpdate (posobjatom:pospropredatoms) (negobjatom:negproppredatoms) -- update property
+rewriteInsert :: [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Insert -> Insert
+rewriteInsert qr ir dr (Insert lits form) = (Insert lits2 (Conjunction (form : forms))) where
+    (lits2, forms) = foldMap (\lit@(Lit s a) ->
+                            case rewrites1 a (case s of
+                                    Pos -> ir
+                                    Neg -> dr) of
+                                        Nothing -> ([lit], [])
+                                        Just (atoms, h) -> (map (Lit s) atoms, [rewrites defaultRewritingLimit h qr]) ) lits
+
+instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row where
+    dbBegin (TransDB _ dbs _ _ _ _ _) = mapM_ (\(Database db) -> dbBegin db) dbs
+    dbCommit (TransDB _ dbs _ _ _ _ _) =     mapM_ (\(Database db) -> dbCommit db) dbs
+    dbRollback (TransDB _ dbs _ _ _ _ _) =    mapM_ (\(Database db) -> dbRollback db) dbs
+    dbBeginCommand (TransDB _ dbs _ _ _ _ _) = mapM_ (\(Database db) -> dbBeginCommand db) dbs
+    dbEndCommand (TransDB _ dbs _ _ _ _ _) =     mapM_ (\(Database db) -> dbEndCommand db) dbs
+    getName (TransDB name _ _ _ _ _ _) = name
+    getPreds (TransDB _ dbs _ _ predmap _ _) = predmap -- unions (map (\(Database db) -> getPreds db) dbs)
+    domainSize (TransDB _ dbs _ _ _ _ _) varDomainSize sign atom@(Atom pred args) = do
+        mps <- mapM (\ (Database db) ->
+                if pred `elem` getPreds db then do
+                    map2 <- (domainSize db varDomainSize sign atom)
+                    return [map2]
+                else
+                    return []) dbs
+        return (foldl1 (intersectionWith (+)) (concat mps))
+    doQuery (TransDB _ dbs _ _  _ (qr, _, _) _) qu = execQuery' dbs (rewriteQuery qr qu)
+    doInsert (TransDB _ dbs verifier rules _ (qr, ir, dr) insmap) qu =
+        execInsert' dbs verifier rules insmap (rewriteInsert qr ir dr qu)
+    supported _ _ = True
+    supportedInsert _ _ _ = True
+
+getRules :: PredMap -> VerificationInfo -> IO  [Input]
+getRules predmap ps = do
+    d0 <- B8.unpack <$> B.readFile (rule_file_path ps)
+    let d = parseTPTP predmap d0
+    return d
+
+getRewriting :: PredMap -> TranslationInfo -> IO RewritingRuleSets
+getRewriting predmap ps = do
+    d0 <- B8.unpack <$> B.readFile (rewriting_file_path ps)
+    case runParser rulesp predmap "" d0 of
+        Left err -> error (show err)
+        Right rules -> return rules
+
+transDB :: String -> TranslationInfo -> IO (TransDB DBAdapterMonad MapResultRow)
+transDB name transinfo = do
+    dbs <- concat <$> mapM (\(DBTrans ps) -> do
+            db <- getDB ps
+            return db) (db_plugins transinfo)
+    let veriinfo = verifier transinfo
+    let predmap0 = constructPredMap dbs
+    let hiding = hide_predicate transinfo
+    let predmap1 = filterWithKey (\k _ -> not (k `elem` hiding)) predmap0
+    let add = add_predicate transinfo
+    let predmap2 = foldMap (\(PredInfo n arity) -> singleton n (Pred n (PredType ObjectPred (replicate arity (Key "Any"))))) add
+    tp <- getVerifier veriinfo
+    rules <- getRules predmap0 veriinfo
+    rewriting <- getRewriting (predmap0 `Data.Map.Strict.union` predmap2) transinfo
+    let insmap = fromList (map (\(InsMapInfo k i d) -> (predmap0 ! k, ([i], d))) (insert_map transinfo))
+    return (TransDB name dbs tp rules (elems (predmap1 `Data.Map.Strict.union` predmap2)) rewriting insmap)
 
 
 
@@ -212,15 +238,6 @@ combineLits lits generateUpdate generateInsert generateDelete = do
 -- example MapDB
 
 
-
--- result row
-type MapResultRow = Map Var ResultValue
-
-instance ResultRow MapResultRow where
-    transform vars vars2 map1 = foldr (\var map2 -> case lookup var map1 of
-                                                        Nothing -> insert var Null map1
-                                                        Just rv -> insert var rv map1) empty vars2
-                                                        
 filterResults :: (Functor m, Monad m) => [Var] -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
     -> (Pred-> Var -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
     -> (Pred-> ResultValue -> Var -> MapResultRow -> ResultStream m MapResultRow)
@@ -289,7 +306,7 @@ filterResults freevars2 _ _ _ _ _ _ notExists results (Not (Exists var conj)) = 
 filterResults _ _ _ _ _ _ _ _ _ (Not _) = error "not not pushed to atoms or existential quantifications"
 
 limitvarsInRow :: [Var] -> MapResultRow -> MapResultRow
-limitvarsInRow vars = foldrWithKey (\ var val newresrow -> if var `elem` vars then insert var val newresrow else newresrow) empty
+limitvarsInRow vars row = transform (keys row) vars row
 
 data MapDB (m :: * -> * )= MapDB String String [(ResultValue, ResultValue)] deriving Show
 
@@ -308,44 +325,106 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow where
                 mmins (map (exprDomainSizeMap varDomainSize Unbounded) args)) -- this just look up each var from the varDomainSize
     domainSize _ _ _ _ = return empty
 
-    doQuery db query = doFilter db query (return empty)
-    doFilter db (Query vars disjs) stream  = do
-        row2 <- mapDBFilterResults db vars stream disjs
+    doQuery (MapDB _ _ rows) (Query vars disjs) _ stream  = do
+        row2 <- mapDBFilterResults rows  stream disjs
         return (limitvarsInRow vars row2)
-    doInsert db (Insert lits disjs) = do
+    doInsert db (Insert lits disjs) rsvars stream = do
         let (MapDB _ _ rows) = db
         let freevars = freeVars lits
         let add rows1 row = rows1 `union` [row]
         let remove rows1 row = rows1 \\ [row]
         let arg12 (Lit _ (Atom _ [a,b])) = (convert a, convert b)
             arg12 _ = error "wrong number of args"
-        rows1 <- getAllResultsInStream (doQuery db (Query freevars disjs))
+        rows1 <- lift (getAllResultsInStream (doQuery db (Query freevars disjs) rsvars stream))
         let rows2 = foldl (\rows' lit@(Lit thesign (Atom _ _)) ->
                 foldl (\rows'' row1 -> (case thesign of
                         Pos -> add
                         Neg -> remove) rows'' (arg12 (substResultValue row1 lit))) rows' rows1) rows lits
-        return [0]
+        return empty
     supported (MapDB _ predname _) (Atomic (Atom (Pred p _) _)) | p == predname = True
-    supported (MapDB _ predname _) (Not (Atomic (Atom (Pred p _) _))) | p == predname = True
     supported _ _ = False
+    supportedInsert _ _ _ = False
+
+
+-- update mapdb
+
+data StateMapDB (m :: * -> * )= StateMapDB String String deriving Show
+
+instance (Functor m, Monad m) => Database_ (StateMapDB m) (StateT [(ResultValue, ResultValue)] m) MapResultRow where
+    dbBegin _ = return ()
+    dbCommit _ = return ()
+    dbRollback _ = return ()
+    getName (StateMapDB name _) = name
+    getPreds (StateMapDB _ predname) = [ Pred predname (PredType ObjectPred [Key "String", Key "String"]) ]
+    domainSize db varDomainSize thesign (Atom thepred args)
+        | thepred `elem` getPreds db = case thesign of
+            Pos -> do
+                rows <- get
+                return (mmins (map (exprDomainSizeMap varDomainSize (Bounded (length rows))) args))
+            Neg ->
+                return (mmins (map (exprDomainSizeMap varDomainSize Unbounded) args)) -- this just look up each var from the varDomainSize
+    domainSize _ _ _ _ = return empty
+
+    doQuery db (Query vars disjs) _ stream  = do
+        rows <- lift get
+        row2 <- mapDBFilterResults rows stream disjs
+        return (limitvarsInRow vars row2)
+    doInsert db (Insert lits disjs) rsvars stream = do
+        rows <- lift get
+        let freevars = freeVars lits
+        let add rows1 row = rows1 `union` [row]
+        let remove rows1 row = rows1 \\ [row]
+        let arg12 (Lit _ (Atom _ [a,b])) = (convert a, convert b)
+            arg12 _ = error "wrong number of args"
+        rows1 <- lift (getAllResultsInStream (doQuery db (Query freevars disjs) rsvars stream))
+        let rows2 = foldl (\rows' lit@(Lit thesign (Atom _ _)) ->
+                foldl (\rows'' row1 -> (case thesign of
+                        Pos -> add
+                        Neg -> remove) rows'' (arg12 (substResultValue row1 lit))) rows' rows1) rows lits
+        lift $ put rows2
+        return empty
+    supported _ (Atomic _) = True
+    supported _ _ = False
+    supportedInsert _ (Conjunction []) [_]  = True
+    supportedInsert _ _ _ = False
 
 
 
 
+mapDBFilterResults :: (Functor m, Monad m) => [(ResultValue, ResultValue)] -> ResultStream m MapResultRow -> Formula -> ResultStream m MapResultRow
+mapDBFilterResults rows  results (Atomic (Atom thepred args)) = do
+    resrow <- results
+    case args of
+        VarExpr var1 : (VarExpr var2 : _)
+            | var1 `member` resrow ->
+                if var2 `member` resrow then do
+                    guard ((resrow ! var1, resrow ! var2) `elem` rows)
+                    return mempty
+                else
+                    listResultStream [singleton var2 (snd x) | x <- rows, fst x == resrow ! var1]
 
-mapDBFilterResults :: (Functor m, Monad m) => MapDB m -> [Var] -> ResultStream m MapResultRow -> Formula -> ResultStream m MapResultRow
-mapDBFilterResults db vars results formula =
-        filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists results (convertForall Pos formula) where
-            (MapDB _ _ rows) = db
-            filterBy _ str1 str2 resrow = listResultStream [resrow | (str1, str2) `elem` rows]
-            excludeBy _ str1 str2 resrow = listResultStream [resrow | (str1, str2) `notElem` rows ]
-            exists freevars _ conj resrow = doFilter db (Query freevars conj) (return resrow)
-            notExists freevars _ conj resrow = do
-                e <- eos (doFilter db (Query freevars conj) (return (resrow)))
-                listResultStream (if e then [resrow] else [])
-            expand1 _ var1 str2 resrow = listResultStream [insert var1 (fst row) resrow | row <- rows, snd row == str2 ]
-            expand2 _ str1 var2 resrow = listResultStream [insert var2 (snd row) resrow | row <- rows, fst row == str1 ]
-            expand12 _ var1 var2 resrow = listResultStream [ insert var1 (fst row) (insert var2 (snd row) resrow) | row <- rows ]
+            | var2 `member` resrow ->
+                listResultStream [singleton var1 (fst x) | x <- rows, snd x == resrow ! var2]
+            | otherwise ->
+                listResultStream [fromList [(var1, fst x), (var2, snd x)] | x <- rows]
+        VarExpr var1 : StringExpr str2 : _ ->
+            if var1 `member` resrow then do
+                guard ((resrow ! var1, StringValue str2) `elem` rows)
+                return mempty
+            else
+                listResultStream [singleton var1 (fst x) | x <- rows, snd x == StringValue str2]
+        StringExpr str1 : VarExpr var2 : _ ->
+            if var2 `member` resrow then do
+                guard ((StringValue str1, resrow ! var2) `elem` rows)
+                return mempty
+            else
+                listResultStream [singleton var2 (snd x) | x <- rows, snd x == StringValue str1]
+        StringExpr str1 : StringExpr str2 : _ -> do
+                guard ((StringValue str1, StringValue str2) `elem` rows)
+                return mempty
+        _ -> do
+            guard False
+            return mempty
 
 
 -- example EqDB
@@ -356,7 +435,7 @@ instance (Functor m, Monad m) => Database_ (EqDB m) m MapResultRow where
     dbCommit _ = return ()
     dbRollback _ = return ()
     getName (EqDB name) = name
-    getPreds _ = [ Pred "eq" (PredType ObjectPred [Key "String", Key "String"]) ]
+    getPreds _ = [ Pred "eq" (PredType EssentialPred [Key "String", Key "String"]) ]
     domainSize db varDomainSize thesign (Atom thepred args)
         | thepred `elem` getPreds db =
             let [d1, d2] = map (exprDomainSizeMap varDomainSize Unbounded) args in
@@ -366,43 +445,32 @@ instance (Functor m, Monad m) => Database_ (EqDB m) m MapResultRow where
                         [(var1, ds1)] -> case toList d2 of
                             [] -> d1
                             [(var2, ds2)] ->
-                                let ds = dmin ds1 ds2 in
+                                let ds = min ds1 ds2 in
                                     fromList [(var, ds) | var <- [var1, var2]]
                     Neg -> mmin d1 d2)
     domainSize _ _ _ _ = return empty
 
-    doQuery db query = doFilter db query (return empty)
-    doFilter db (Query vars disjs) stream = (do
+    doQuery db (Query vars disjs) rsvars stream = (do
         row2 <- filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists stream (convertForall Pos disjs)
         return (limitvarsInRow vars row2)) where
             filterBy _ str1 str2 resrow = listResultStream [resrow | str1 == str2]
             excludeBy _ str1 str2 resrow = listResultStream [resrow | str1 /= str2 ]
-            exists freevars _ conj resrow = doFilter db (Query freevars conj) (return resrow)
+            exists freevars _ conj resrow = doQuery db (Query freevars conj) rsvars (return resrow)
             notExists freevars _ conj resrow = do
-                e <- eos (doFilter db (Query freevars conj) (return resrow))
+                e <- eos (doQuery db (Query freevars conj) rsvars (return resrow))
                 listResultStream (if e
                     then [resrow]
                     else [])
             expand1 _ var1 str2 resrow = listResultStream [insert var1 str2 resrow ]
             expand2 _ str1 var2 resrow = listResultStream [insert var2 str1 resrow ]
             expand12 _ _ _ _ = error "unconstrained eq predicate"
-    doInsert _ _ = do
+    doInsert _ _ _ _ = do
         error "cannot update equality constaints"
     supported _ (Atomic (Atom (Pred "eq" _) _)) = True
     supported _ (Not (Atomic (Atom (Pred "eq" _) _))) = True
     supported _ _ = False
+    supportedInsert _ _ _ = False
 
-
-
-
-
--- UI
-
-instance Show Query where
-    show (Query vars disjs) = show disjs ++ " return " ++ intercalate " " (map show vars)
-
-instance Show Insert where
-    show (Insert atoms disjs) = show disjs ++ " insert " ++ intercalate " " (map show atoms)
 
 -- The purpose of this function is to eliminate the situation where the negative literals in the insert clause
 -- causes additional constraints to be added to the translated statement. These constraints are cause by the non-key
@@ -419,17 +487,18 @@ instance Show Insert where
 -- This ensures that this literal (~P(a, b)) doesn't constraint a more than the condition of the statement already does.
 -- The set of rules given has to reflect the mapping f, i.e., the mapping must have the following property:
 -- If condition & rule -> b in FO then f(condition) -> f(b) in the target database.
-validate :: Insert -> Maybe (Lit, CounterExample)
-validate (Insert lits cond) =
+validate :: TheoremProver -> Insert -> IO (Maybe Lit)
+validate (TheoremProver a) (Insert lits cond) =
     if length lits == 1
-        then Nothing -- if there is only one literal we don't have to validate
+        then return Nothing -- if there is only one literal we don't have to validate
         else validateNegLits cond neg where
             (_, neg) = splitPosNegLits lits
-            validateNegLits _ [] = Nothing
-            validateNegLits cond (a : as) =
-                case valid (cond --> Atomic a) of
-                    Nothing -> validateNegLits cond as
-                    Just ce -> Just (Lit Neg a, ce)
+            validateNegLits _ [] = return Nothing
+            validateNegLits cond (a1 : as) = do
+                p <- prove a [cond] (Atomic a1)
+                case p of
+                    Just True -> validateNegLits cond as
+                    _ -> return (Just (Lit Neg a1))
 
 type ValEnv a = StateT (Map Pred Pred) NewEnv a
 
@@ -450,9 +519,9 @@ getPredCurrent :: Pred -> ValEnv Pred
 getPredCurrent pred = do
     map1 <- get
     return (fromMaybe pred (lookup pred map1))
-    
+
 generalize formula = let fv = freeVars formula in foldr Forall formula fv
-                         
+
 -- here we implement a restricted version functional dependency
 -- given a predicate P with parameters x, and parameters y such that
 -- y functionally depend on x, written P(x,y) | x -> y
@@ -539,8 +608,8 @@ validateInsert (TheoremProver a) rules i@(Insert insertlits cond) = (
             case result of
                 Nothing -> return Nothing
                 Just False -> return (Just False)
-                _ -> validateCond steps) where
-                validateCond [] = return (Just True)
+                _ -> return (Just True)) where
+{-                validateCond [] =
                 validateCond (s : ss) = do
                     let (axioms, conjecture) = runNew (evalStateT (ruleInsertCond rules cond s) empty)
                     putStrLn ("validating that " ++ show s ++ " doesn't change the condition")
@@ -551,6 +620,7 @@ validateInsert (TheoremProver a) rules i@(Insert insertlits cond) = (
                         Nothing -> return Nothing
                         Just False -> return (Just False)
                         _ -> validateCond ss
+-}
                 validateRules lits = do
                     let (axioms, conjecture) = runNew (evalStateT (ruleInsert rules cond lits) empty)
                     putStrLn ("validating that " ++ show lits ++ " doesn't change the invariant")

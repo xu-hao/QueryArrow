@@ -1,12 +1,12 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
-module Parser (progp, QueryVariant(..), Completion, transformDeletion) where
+module Parser (progp, rulesp, QueryVariant(..), Completion, transformDeletion) where
 
 import FO.Data
-import FO
 import QueryPlan
+import Rewriting
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, (!), member, insert, lookup, fromList)
+import Data.Map.Strict (Map, (!), member, insert, lookup, fromList, keys)
 import Text.ParserCombinators.Parsec hiding (State)
 import Data.Maybe
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
@@ -22,7 +22,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "~|",
     T.opLetter = oneOf "~|",
-    T.reservedNames = ["insert", "return", "delete", "key", "object", "properyt", "predicate", "exists", "forall"],
+    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "essential", "rewrite", "predicate", "exists", "forall"],
     T.reservedOpNames = ["~", "|"],
     T.caseSensitive = True
 }
@@ -61,7 +61,7 @@ atomp = do
     predname <- identifier
     arglist <- arglistp
     predmap <- getState
-    let thepred = fromMaybe (error ("undefined predicate " ++ predname)) (lookup predname predmap)
+    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ predname ++ ", available " ++ show (keys predmap))) (lookup predname predmap)
     return (Atom thepred arglist)
 
 
@@ -115,6 +115,7 @@ varsp :: FOParser [Var]
 varsp = many1 varp
 
 data QueryVariant = Q Query | I Insert  | D [Atom] Formula deriving Show
+data RewritingVariant = QR QueryRewritingRule | IR InsertRewritingRule  | DR InsertRewritingRule deriving Show
 
 progp :: FOParser (QueryVariant, Map String Pred)
 progp = do
@@ -123,8 +124,31 @@ progp = do
     qv <- reserved "return" *> (Q <$> (Query <$> varsp <*> return q))
       <|> reserved "insert" *> (I <$> (Insert <$> litsp <*> return q))
       <|> reserved "delete" *> (D <$> many atomp <*> return q)
+    eof
     predmap <- getState
     return (qv, predmap)
+
+rulep :: FOParser RewritingVariant
+rulep = (do
+    whiteSpace
+    many predp
+    reserved "rewrite"
+    a <- atomp
+    form <- formulap
+    reserved "insert" *> (IR <$> irulep a form)
+      <|> reserved "delete" *> (DR <$> irulep a form)
+      <|> pure (QR (qrule a form))) where
+          qrule a form = QueryRewritingRule a form
+          irulep a form = InsertRewritingRule a <$> many atomp <*> pure form
+
+rulesp :: FOParser ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+rulesp = do
+    rules <- many rulep
+    eof
+    return (foldMap (\r0 -> case r0 of
+        IR r -> ([], [r], [])
+        DR r -> ([], [], [r])
+        QR r -> ([r], [], [])) rules)
 
 type Completion = [(Atom, [Atom])]
 

@@ -35,6 +35,10 @@ executable QueryArrow
                    temporary,
                    process,
                    logic-TPTP,
+                   lens,
+                   distributive,
+                   pretty-tree,
+                   conduit-combinators,
                    template-haskell
   ghc-options:     -Wall -fPIC
   other-modules:

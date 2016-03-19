@@ -5,7 +5,7 @@ import FO.Data
 import DBQuery
 import ResultStream
 import Cypher.Cypher
-import FO
+import QueryPlan
 
 import Prelude hiding (lookup)
 import Control.Monad.IO.Class (liftIO)
@@ -66,13 +66,7 @@ instance PreparedStatement_ Neo4jInsertStatement where
         closePreparedStatement _ = return ()
 
 instance DBConnection Neo4jConnection CypherQuery Cypher where
-        execQueryStatement conn query = do
-                let stmt = Neo4jQueryStatement conn query
-                execWithParams stmt []
         prepareQueryStatement conn query = return (PreparedStatement (Neo4jQueryStatement conn query))
-        execInsertStatement conn query = do
-                let stmt = Neo4jInsertStatement conn query
-                execWithParams stmt []
         prepareInsertStatement conn query = return (PreparedStatement (Neo4jInsertStatement conn query))
         connClose _ = return ()
         connCommit _ = return ()

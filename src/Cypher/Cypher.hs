@@ -10,7 +10,6 @@ import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, co
 import qualified FO.Data as FO
 import FO.Domain
 import DBQuery
-import FO
 import QueryPlan
 
 import Prelude hiding (lookup)
@@ -18,7 +17,7 @@ import Data.List (intercalate, (\\), union , partition)
 import Control.Monad.Trans.State.Strict (State, StateT, get, put, evalState, runState, evalStateT, runStateT)
 import Control.Monad (foldM, guard)
 import Control.Arrow ((***))
-import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, fromList, toList, elems, update)
+import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, fromList, toList, elems, update, keys)
 import qualified Data.Map.Strict as Map
 import Data.Convertible.Base
 import Data.Monoid
@@ -138,7 +137,7 @@ instance FVType NodePattern where
             nonvarprops = filter (\(_, expr) -> case expr of
                 CypherVarExpr _ -> False
                 _ -> True) props in
-            [(v, case label of 
+            [(v, case label of
                     Just l -> addLabel l path
                     Nothing -> path, nonvarprops, CypherNodeVar)] `union` unions (map (\(prop, expr)-> fvType (Dot v prop ) expr) props)
 
@@ -262,7 +261,7 @@ instance Show CypherValue where
     show (CypherNullValue) = "NULL"
 
 instance Show Cypher where
-    show (Cypher vars (GraphPattern patterns1 patterns2) conds sets (GraphPattern creates1 creates2) deletes) = 
+    show (Cypher vars (GraphPattern patterns1 patterns2) conds sets (GraphPattern creates1 creates2) deletes) =
         let patterns = patterns1 ++ patterns2
             creates = creates1 ++ creates2 in
             unwords (filter (not . null) [
@@ -282,7 +281,7 @@ instance Show Cypher where
                     [] -> ""
                     _ -> "DELETE " ++ intercalate "," (map show deletes),
                 case vars of
-                    [] -> case (sets, creates, deletes) of 
+                    [] -> case (sets, creates, deletes) of
                             ([], [], []) -> "RETURN 1"
                             _ -> ""
                     _ -> "RETURN " ++ intercalate "," (map show vars)])
@@ -1132,21 +1131,16 @@ instance DBConnection conn CypherQuery Cypher => ConnectionDB DBAdapterMonad con
             (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
 instance Translate CypherTrans MapResultRow CypherQuery Cypher where
-    translateQuery trans query =
-        let (CypherTrans builtin _ predtablemap) = trans in
-            runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, mempty))
     translateQueryWithParams trans query@(Query vars _) env =
         let (CypherTrans builtin _ predtablemap) = trans
             sql = runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, mapResultRowToSubstitution env)) in
-            (sql, vars)
-    translateInsert trans query =
-        let (CypherTrans builtin _ predtablemap) = trans in
-            runNew (evalStateT (translateInsertToCypher query) (builtin, predtablemap, empty, mempty))
+            (sql, keys env)
     translateInsertWithParams trans query env =
-        let (CypherTrans builtin _ predtablemap) = trans in
-            runNew (evalStateT (translateInsertToCypher query) (builtin, predtablemap, empty, mapResultRowToSubstitution env))
+        let (CypherTrans builtin _ predtablemap) = trans
+            sql = runNew (evalStateT (translateInsertToCypher query) (builtin, predtablemap, empty, mapResultRowToSubstitution env)) in
+            (sql, keys env)
     translateable _ (Exists _ _) = False
-    translateable trans (Not formula) = 
+    translateable trans (Not formula) =
         let (CypherTrans builtin positiverequired predtablemap) = trans in
             not (lookForPositiveRequiredSubformula positiverequired formula) where
                 lookForPositiveRequiredSubformula pr (Atomic (Atom (Pred p _) _)) = p `elem` pr
@@ -1154,9 +1148,10 @@ instance Translate CypherTrans MapResultRow CypherQuery Cypher where
                 lookForPositiveRequiredSubformula pr (Disjunction s) = any (lookForPositiveRequiredSubformula pr) s
                 lookForPositiveRequiredSubformula pr p@(Not _) = False
                 lookForPositiveRequiredSubformula pr p@(Exists _ _) = error "exists"
-    translateable _ (Conjunction formula) = True 
+    translateable _ (Conjunction formula) = True
     translateable _ (Disjunction formula) = True
     translateable _ (Atomic formula) = True
+    translateableInsert trans formula _ = translateable trans formula
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

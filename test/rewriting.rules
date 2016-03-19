@@ -1,0 +1,38 @@
+predicate CLIENT_ID         object(key cid)
+rewrite CLIENT_ID(u)        USER_NAME(u, client_user_name) USER_ZONE_NAME(u, client_zone)
+
+predicate META              object(key oid, key mid, property a, property v, property u)
+rewrite META(x, m, a, v, u) OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)
+
+predicate META_ATTR_ACCESS_OBJ object(key a, key oid, key uid, key acc)
+rewrite META_ATTR_ACCESS_OBJ(oid, uid, acc) OBJT_ACCESS_OBJ(oid, uid, acc)
+
+rewrite DATA_NAME_2(x, y)   exists u. exists a. DATA_NAME(x, y) CLIENT_ID(u) OBJT_ACCESS_OBJ(x, u, a) eq(a, 1200)
+rewrite DATA_NAME_2(x, y)   insert DATA_NAME(x, y)
+rewrite DATA_NAME_2(x, y)   delete DATA_NAME(x, y)
+
+rewrite META_AVU (a,v,u)    ~(exists m. META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)) nextid(m) insert
+                            META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)
+rewrite META_MAP_1(x, a, v, u)  exists m. META(x, m, a, v, u)
+rewrite META_MAP_1(x, a, v, u)  META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) insert
+                                OBJT_METAMAP_OBJ(x, m)
+rewrite META_MAP_1(x, a, v, u)  OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) delete
+                                OBJT_METAMAP_OBJ(x, m)
+
+rewrite META_MAP_2(x, a, v, u)  exists m. META(x, m, a, v, u) exists user. exists a. CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc, 1200)
+rewrite META_MAP_2(x, a, v, u)  CLIENT_ID(user) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) META_ATTR_ACCESS_OBJ(a, user, acc) eq(acc, 1200) insert
+                                OBJT_METAMAP_OBJ(x, m) META_ACCESS_OBJ(m, x, user, 1200)
+rewrite META_MAP_2(x, a, v, u)  CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc,1200) META_ACCESS_OBJ(m, x, user2, acc2) OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) delete
+                                META_ACCESS_OBJ(m, x, user2, acc2) OBJT_METAMAP_OBJ(x, m)
+
+rewrite META_1(x, a, v, u)  exists m. META(x, m, a, v, u)
+rewrite META_1(x, a, v, u)  nextid(m) insert
+                            OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)
+rewrite META_1(x, a, v, u)  OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) delete
+                            OBJT_METAMAP_OBJ(x, m)
+
+rewrite META_2(x, a, v, u)  exists m. META(x, m, a, v, u) exists user. exists a. CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc, 1200)
+rewrite META_2(x, a, v, u)  nextid(m) CLIENT_ID(user) META_ATTR_ACCESS_OBJ(x, user, acc) eq(acc,1200) insert
+                            OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) META_ACCESS_OBJ(m, x, user, 1200)
+rewrite META_2(x, a, v, u)  CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc, 1200) META_ACCESS_OBJ(m, x, user2, acc2) OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) delete
+                            META_ACCESS_OBJ(m, x, user2, acc2) OBJT_METAMAP_OBJ(x, m)

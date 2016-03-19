@@ -14,9 +14,9 @@ import Control.Monad.Trans.Class (lift, MonadTrans)
 import Data.Monoid
 import FO.Data
 
-class Monoid row => ResultRow row where
+class (Monoid row, Show row) => ResultRow row where
     transform :: [Var] -> [Var] -> row -> row
-    
+
 -- result stream see Takusen
 type Iteratee row seed m = row -> seed -> m (Either seed seed)
 
@@ -37,7 +37,7 @@ depleteResultStream :: (Monad m) => ResultStream m row -> m ()
 depleteResultStream rs =
     fromEither <$> runResultStream rs (\ _ seed -> return (Right seed)) ()
 
-getAllResultsInStream :: (Monad m) => ResultStream m row -> m [row]
+getAllResultsInStream :: (Monad m, Show row) => ResultStream m row -> m [row]
 getAllResultsInStream stream =
     fromEither <$> runResultStream stream (\row seed  -> return (Right (seed ++ [row]))) []
 
@@ -53,7 +53,7 @@ takeResultStream n stream = ResultStream(\iteratee seed -> do
         ) (n, seed)
     return ((+++) snd snd seedeither))
 
-resultStreamTake :: (Monad m) => Int -> ResultStream m row -> m [row]
+resultStreamTake :: (Monad m, Show row) => Int -> ResultStream m row -> m [row]
 resultStreamTake n =
     getAllResultsInStream . takeResultStream n
 
@@ -65,8 +65,8 @@ isResultStreamEmpty :: (Monad m) => ResultStream m a -> m Bool
 isResultStreamEmpty (ResultStream rs) = do
     emp <- rs (\_ seed -> return (Left (not seed))) True
     return (fromEither emp)
-                                                         
-eos :: (Monad m) => ResultStream m a -> ResultStream m Bool
+
+eos :: (Monad m, Show a) => ResultStream m a -> ResultStream m Bool
 eos stream = lift (null <$> resultStreamTake 1 stream)
 
 instance MonadTrans ResultStream where
@@ -83,11 +83,11 @@ instance Functor (ResultStream m) where
 instance (Functor m, Monad m) => Applicative (ResultStream m) where
     pure a = ResultStream (\iteratee seed -> iteratee a seed)
     (<*>) = ap
-    
+
 instance (Functor m, Monad m) => Monad (ResultStream m) where
     (ResultStream enumerator) >>= f = ResultStream (\iteratee seed ->
         enumerator (\row seed2 -> runResultStream (f row) iteratee seed2) seed)
-        
+
 instance (Functor m, Monad m) => Alternative (ResultStream m) where
     empty = emptyResultStream
     (ResultStream enumerator1) <|> (ResultStream enumerator2) = ResultStream (\iteratee seed -> do
@@ -95,12 +95,12 @@ instance (Functor m, Monad m) => Alternative (ResultStream m) where
         case mseed of
              Left _ -> return mseed
              Right seed' -> enumerator2 iteratee seed')
-             
+
 transformResultStream :: (Monad m, ResultRow row) => [Var] -> [Var] -> ResultStream m row -> ResultStream m row
 transformResultStream vars1 vars2 rs = do
     row <- rs
     return (transform vars1 vars2 row)
-    
+
 filterResultStream :: (Monad m, ResultRow row) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
 filterResultStream rs p = do
     row <- rs
@@ -108,8 +108,6 @@ filterResultStream rs p = do
     guard pass
     return row
 
-instance MonadIO (ResultStream IO) where
-    liftIO = lift
 
 instance (Functor m, MonadIO m) => MonadIO (ResultStream m) where
     liftIO = lift . liftIO

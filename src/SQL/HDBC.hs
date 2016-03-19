@@ -3,7 +3,7 @@ module SQL.HDBC where
 
 import DBQuery
 import SQL.SQL
-import FO
+import QueryPlan
 import ResultStream
 import FO.Data
 
@@ -13,7 +13,7 @@ import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert)
 
 data HDBCQueryStatement = HDBCQueryStatement [Var] Statement
-data HDBCInsertStatement = HDBCInsertStatement [Statement]
+data HDBCInsertStatement = HDBCInsertStatement Statement
 
 convertExprToSQL :: Expr -> SqlValue
 convertExprToSQL (IntExpr i) = toSql i
@@ -44,29 +44,21 @@ instance PreparedStatement_ HDBCQueryStatement where
         closePreparedStatement _ = return ()
 
 instance PreparedStatement_ HDBCInsertStatement where
-        execWithParams (HDBCInsertStatement stmts) args = do
+        execWithParams (HDBCInsertStatement stmt) args = do
             let exprs = map convertExprToSQL args
-            totals <- liftIO $ mapM (\stmt -> do
+            total <- liftIO $ do
                 res <- execute stmt exprs
-                return (fromIntegral res)) stmts
-            intResultStream (sum totals)
+                return (fromIntegral res)
+            return empty
         closePreparedStatement _ = return ()
 
 prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLQuery -> IO HDBCQueryStatement
 prepareHDBCQueryStatement conn sqlquery@(vars, query) = HDBCQueryStatement vars <$> prepare conn (showSQLQuery conn sqlquery)
 
-prepareHDBCInsertStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLInserts -> IO HDBCInsertStatement
-prepareHDBCInsertStatement conn query = HDBCInsertStatement <$> mapM (prepare conn) (map (showSQLInsert conn) query)
+prepareHDBCInsertStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLInsert -> IO HDBCInsertStatement
+prepareHDBCInsertStatement conn query = HDBCInsertStatement <$> prepare conn ( showSQLInsert conn query)
 
-instance (HDBCConnection conn, IConnection conn) => DBConnection conn SQLQuery SQLInserts where
-        execQueryStatement conn query = do
-                stmt <- liftIO $ prepareHDBCQueryStatement conn query
-                execWithParams stmt []
-        execInsertStatement conn query = do
-                stmt <- liftIO $ prepareHDBCInsertStatement conn query
-                rs <- execWithParams stmt []
-                return rs
-
+instance (HDBCConnection conn, IConnection conn) => DBConnection conn SQLQuery SQLInsert where
         prepareQueryStatement conn query = PreparedStatement <$> prepareHDBCQueryStatement conn query
         prepareInsertStatement conn query = PreparedStatement <$> prepareHDBCInsertStatement conn query
         connBegin _ = return ()

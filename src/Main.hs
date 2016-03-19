@@ -33,27 +33,31 @@ module Main where
 --        print a
 import FO
 import QueryPlan
+import ResultStream
 import FO.Data
 import Parser
 import DBQuery
 import ICAT
 -- import Plugins
--- import SQL.HDBC.PostgreSQL
-import Cypher.Neo4j
+import SQL.HDBC.PostgreSQL
+-- import Cypher.Neo4j
 import FO.E
 import FO.Data
-import FO.Config
+import Config
+import Utils
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (empty, lookup)
+import Data.Map.Strict (empty, lookup, fromList, singleton, keys)
 import Text.Parsec (runParser)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.State.Strict
 import Control.Monad.Trans.Class (lift)
 import System.Environment
+import Data.Tree
 import Data.List (intercalate, transpose)
 import Data.Aeson
 import Control.Applicative ((<$>))
+import qualified Control.Applicative as Appl
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as B8
 import FO.Parser
@@ -89,7 +93,7 @@ main = do
                 Right (Q atoms, _) ->
                     evalStateT (dbWithSession [ Database db, Database db2] $ do
                         results <- getAllResults  atoms
-                        liftIO $ print results) (DBAdapterState empty)
+                        liftIO $ print results) (DBAdapterState empty Nothing)
             print "test2"
             let query = "elem(x, y) (elem(y, z) | elem(w, y)) \
             \(exists u.elem(y, u)) ~(exists u. exists v.elem(v,u) elem(u,y)) \
@@ -102,20 +106,13 @@ main = do
                         rs <- getAllResults qu
                         liftIO $ print rs
                         report <- getReportFromDBSession
-                        liftIO $ print report) (DBAdapterState empty)
+                        liftIO $ print report) (DBAdapterState empty Nothing)
 
             --let query3 = "DATA_NAME(a, b) COLL(a, c) COLL_NAME(c, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000) return a b"
             --run2 query3
         else do
-            d <- eitherDecode <$> B.readFile (if length args2 <= 2 then "/etc/irods/database_config.json" else args2 !! 2)
-            case d of
-                Left err -> putStrLn err
-                Right ps -> do 
-                    d <- eitherDecode <$> B.readFile (if length args2 <= 1 then "test/verifier.json" else args2 !! 1)
-                    case d of
-                        Left err -> putStrLn err
-                        Right ps1 -> do 
-                            run2 (head args2) ps ps1
+            ps <- getConfig (args2 !! 1)
+            run2 (head args2) ps
 
 maximumd :: Int -> [Int] -> Int
 maximumd d [] = d
@@ -138,50 +135,48 @@ pprint vars rows = join  (map unVar vars) ++ "\n" ++ intercalate "\n" rowstrs ++
         | otherwise     = s
 
 
-insert  db3 a verifier rules  qu@(Insert lits cond) = do
-    liftIO $ print (a qu)
-    case db3 of
-        Database db -> lift $ lift $ do
-            let formulas = map (\(_,_,a) -> a) rules
-            liftIO $ print "calling verifier"
-            case validate qu of
-                Just ce -> error ("Deleting a literal not implied by condition " ++ show ce)
-                Nothing -> do
-                    vres <- liftIO $ validateInsert verifier formulas qu
-                    case vres of
-                        Just True -> do
-                            let vres2 = validate qu
-                            case vres2 of
-                                Nothing -> do
-                                    res <- doInsert db qu :: DBAdapterMonad [Int]
-                                    let row = map show res
-                                    liftIO $ print row
-                                    return ()
-                                _ -> error "cannot verify insert statement is correct 2"
-                        _ -> error "cannot verify insert statement is correct"
 
-run2 :: String -> ICATDBConnInfo -> VerificationInfo -> IO ()
-run2 query ps ps1 = do
-            (db3, printFunc, a) <- getDB ps
-            let predmap = constructPredMap [db3]
-            verifier <- getVerifier ps1
-            d0 <- B8.unpack <$> B.readFile (rule_file_path ps1)
-            let rules = parseTPTP predmap d0
-            evalStateT (dbWithSession [db3] $ do
-                        case runParser progp predmap "" query of
-                            Left err -> liftIO $ print err
-                            Right (Q qu@(Query vars f), _) -> do
-                                liftIO $ print (show (execPlan [db3] f))
-                                liftIO $ print (printFunc qu)
-                                rows <- getAllResults qu
-                                report <- getReportFromDBSession
-                                liftIO $ print report
-                                liftIO $ putStr (pprint vars rows)
+defaultInsertMap :: Database m row -> InsertMap
+defaultInsertMap (Database db) =
+    let preds = getPreds db in
+        fromList (zip preds (replicate (length preds) ([0],[0])))
+
+run2 :: String -> TranslationInfo -> IO ()
+run2 query ps = do
+    tdb@(TransDB _ dbs  _ rules preds (qr, ir, dr) insmap) <- transDB "tdb" ps
+    mapM_ print qr
+    mapM_ print ir
+    mapM_ print dr
+    let predmap = foldMap (\p@(Pred n _) -> singleton n p) preds
+    let params = fromList [(Var "client_user_name",StringValue "rods"), (Var "client_zone", StringValue "tempZone")]
+    (vars, rows) <- evalStateT (dbWithSession [Database tdb] $ do
+                case runParser progp predmap "" query of
+                            Left err -> error (show err)
+                            Right (Q qu, _) -> do
+                                liftIO $ putStrLn ("original query: " ++ show qu)
+                                let qu'@(Query vars f') = rewriteQuery qr qu
+                                liftIO $ putStrLn ("rewritten query: " ++ show qu')
+                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (queryPlan dbs f')))
+                                -- liftIO $ print (printFunc qu)
+                                -- liftIO $ print (keys params)
+                                rows <- lift $ lift $ getAllResultsInStream ( doQuery tdb qu (keys params) (pure params))
+                                return (vars, rows)
+
                             Right (D atoms cond, _) -> do
                                 let qu = transformDeletion [] atoms cond
-                                res <- insert  db3 a verifier rules qu
-                                liftIO $ print res
-                            Right (I qu, _) -> do
-                                res <- insert  db3 a verifier rules qu
-                                liftIO $ print res) (DBAdapterState empty)
+                                liftIO $ putStrLn ("original query: " ++ show qu)
+                                let qu' = rewriteInsert qr ir dr qu
+                                liftIO $ putStrLn ("rewritten query: " ++ show qu')
+                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (insertPlan dbs insmap qu')))
+                                rows <- lift $ lift $ getAllResultsInStream (doInsert tdb qu (keys params) (pure params))
+                                return ([], rows)
 
+                            Right (I qu, _) -> do
+                                liftIO $ putStrLn ("original query: " ++ show qu)
+                                let qu' = rewriteInsert qr ir dr qu
+                                liftIO $ putStrLn ("rewritten query: " ++ show qu')
+                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (insertPlan dbs insmap qu')))
+                                rows <- lift $ lift $ getAllResultsInStream (doInsert tdb qu (keys params) (pure params))
+                                return ([], rows)) (DBAdapterState empty Nothing)
+
+    putStr (pprint vars rows)

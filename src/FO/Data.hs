@@ -3,12 +3,10 @@
 
 module FO.Data where
 
-import Data.Monoid
 import Prelude hiding (lookup)
 import Data.Map.Strict (Map, (!), empty, member, insert, singleton, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, delete)
 import Data.List ((\\), intercalate, union)
 import Control.Monad.Trans.State.Strict (evalState,get, put, State)
-import Control.Applicative ((<$>))
 import Control.Monad (foldM)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -387,11 +385,11 @@ a ||| b = disj (getDisjuncts a ++ getDisjuncts b)
 
 -- get the top level conjucts
 getConjuncts :: Formula -> [Formula]
-getConjuncts (Conjunction conjuncts) = conjuncts
+getConjuncts (Conjunction conjuncts) = concatMap getConjuncts conjuncts
 getConjuncts a = [a]
 
 getDisjuncts :: Formula -> [Formula]
-getDisjuncts (Disjunction disjuncts) = disjuncts
+getDisjuncts (Disjunction disjuncts) = concatMap getDisjuncts disjuncts
 getDisjuncts a = [a]
 
 conj :: [Formula] -> Formula

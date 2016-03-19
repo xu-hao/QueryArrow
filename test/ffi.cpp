@@ -5,13 +5,25 @@
 
 typedef void db_handle_t;
 typedef int state_t;
-typedef int succ_func_t(state_t *, int, char **);
-typedef void err_func_t(state_t *, char **);
+struct handler_t {
+    std::function<int(int *, int, char **)> succ_func;
+    std::function<void(int *, char **)> err_func;
+};
+typedef int succ_func_t(handler_t *, state_t *, int, char **);
+typedef void err_func_t(handler_t *, state_t *, char **);
 int start(std::string ps, std::string verifier_info, db_handle_t *&db_handle);
-void exec_query(db_handle_t *db_handle, std::string query, state_t &state, int n, succ_func_t *succ, err_func_t *err);
+void exec_query(db_handle_t *db_handle, std::string query, handler_t &handler, state_t &state, int n, succ_func_t *succ, err_func_t *err);
 void stop(db_handle_t *&);
 
-void error_func(state_t *state, char **res) {
+void err_handler(handler_t *handler, int *state, char **res) {
+    handler -> err_func(state, res);
+}
+
+int succ_handler(handler_t *handler, int *state, int n, char **res) {
+    handler->succ_func(state, n, res);
+}
+
+void err_func(int *state, char **res) {
 
 	while (*res!=NULL) {
 		printf("Error:: %s\n", *res);
@@ -19,12 +31,12 @@ void error_func(state_t *state, char **res) {
 	}
 
 }
-int succ_func(state_t *state, int n, char **res)
+int succ_func(int *state, int n, char **res)
 
  {
 	printf("batch begin\n");
 	while (*res!=NULL) {
-			for(int i= 0;i<*state;i++) {
+			for(int i= 0;i<n;i++) {
 				printf("%s ", *res);
 				res++;
 			}
@@ -36,9 +48,9 @@ int succ_func(state_t *state, int n, char **res)
 
 }
 
-void exec_query(db_handle_t *db_handle, std::string query, state_t &state, int n, succ_func_t *succ, err_func_t 	*err) {
+void exec_query(handler_t &handler, db_handle_t *db_handle, std::string query, state_t &state, int n) {
 	char *qua = const_cast<char*>(query.c_str());
-	run3(db_handle, qua, &state, n, reinterpret_cast<HsFunPtr>(succ), reinterpret_cast<HsFunPtr>(err));
+	run3(db_handle, qua, &handler, &state, n, reinterpret_cast<HsFunPtr>(succ_func), reinterpret_cast<HsFunPtr>(err_func));
 
 }
 
@@ -86,9 +98,11 @@ int main(int argc, char **argv) {
 	if(start(ps, verifier_info, db_handle) == 0) {
 		std::string query(argv[3]);
 		state_t state = atoi(argv[4]);
-
+                
+        handler_t handler = {succ_handler, err_handler};
+        
 	for(int i=0;i<(argc > 6?atoi(argv[6]):1);i++) {
-			exec_query(db_handle, query, state, argc > 5 ? atoi(argv[5]) : 1000, &succ_func, &error_func);
+                exec_query(db_handle, query, handler, state, argc > 5 ? atoi(argv[5]) : 1000);
 	}
 	stop(db_handle);
 }

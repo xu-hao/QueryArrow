@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 
-import FO hiding (validateInsert)
+import FO hiding (validateInsert, validate)
 import qualified FO
 import QueryPlan
 import ResultStream
@@ -23,15 +23,19 @@ import Control.Applicative ((<$>), (<*>))
 import Control.Monad (replicateM)
 import Text.Parsec (runParser)
 import Data.Functor.Identity (runIdentity, Identity)
-import Data.Map.Strict ((!), Map, empty, insert, fromList)
+import Data.Map.Strict ((!), Map, empty, insert, fromList, singleton)
 import Control.Monad.Trans.State.Strict (evalState, runState, evalStateT, runStateT)
 import Debug.Trace (trace)
 import Test.Hspec
 import Data.Monoid
 import Data.Convertible
+import Control.Monad.Trans.Except
 
 validateInsert :: TheoremProver_ p => p -> [Formula] -> Insert -> IO (Maybe Bool)
 validateInsert = FO.validateInsert . TheoremProver
+
+validate :: TheoremProver_ p => p -> Insert -> IO (Maybe Lit)
+validate = FO.validate . TheoremProver
 
 newtype Char2 = Char2 {unChar2 :: Char}
 
@@ -188,6 +192,8 @@ loadStandardICATRule s = parseTPTP standardPredMap s
 verifier = CVC4 "external/CVC4/cvc4-1.4-x86_64-linux-opt" 1000 1000 32
 verifier2 = E "external/E/PROVER/eprover" 1 32
 
+translateQuery trans qu = fst (translateQueryWithParams trans qu mempty)
+translateInsert trans qu = fst (translateInsertWithParams trans qu mempty)
 main :: IO ()
 main = hspec $ do
     describe "tests" $ do
@@ -218,73 +224,73 @@ main = hspec $ do
         it "test translate sql query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
             let sql = translateQuery sqlStandardTrans qu
-            sql `shouldBe` ([Var "x", Var "y"], SQL [(SQLVar "r_data_main", "data_id"), (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] strue)
+            sql `shouldBe` (([Var "x", Var "y"], SQL [(SQLVar "r_data_main", "data_id"), (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] strue))
+        it "test translate sql query with param" $ do
+            let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
+            let sql = translateQueryWithParams sqlStandardTrans qu (singleton (Var "w") (IntValue 0))
+            (fst sql) `shouldBe` (([Var "x", Var "y"], SQL [(SQLVar "r_data_main", "data_id"), (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] strue))
+            (snd sql) `shouldBe` []
+        it "test translate sql query with param 2" $ do
+            let qu = parseStandardQuery "DATA_NAME(x, y) return x"
+            let sql = translateQueryWithParams sqlStandardTrans qu (singleton (Var "y") (StringValue ""))
+            (fst (fst sql)) `shouldBe` [Var "x"]
+            show (snd (fst sql)) `shouldBe` "SELECT r_data_main.data_id FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
+            (snd sql) `shouldBe` [Var "y"]
         it "test translate sql insert 0" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
         it "test translate sql insert 1" $ do
             let qu = parseStandardInsert "insert DATA_OBJ(1) DATA_NAME(1, \"foo\") DATA_SIZE(1, 1000)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) VALUES (1,'foo',1000)"
+            show (sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) VALUES (1,'foo',1000)"
         it "test translate sql insert 2" $ do
             let qu = parseStandardInsert "COLL_NAME(a,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main"
+            show (sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main"
         it "test translate sql insert 3" $ do
             let qu = parseStandardInsert "COLL_NAME(2,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main WHERE r_coll_main.coll_id = 2"
+            show (sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main WHERE r_coll_main.coll_id = 2"
         it "test translate sql insert 4" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL"
         it "test translate sql insert 5" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c) DATA_NAME(1, \"foo\")"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
         it "test translate sql insert 6" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, c) DATA_NAME(x, \"foo\")"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
         it "test translate sql insert 7" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_NAME(x, \"foo\")"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
         it "test translate sql insert 7.1" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\")"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 7.2" $ do
-            let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_SIZE(x, 1000)"
-            let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 2
-            show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
-            show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
+            let (Insert lits formula) = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_SIZE(x, 1000)"
+            let sql = translateableInsert sqlStandardTrans formula lits
+            sql `shouldBe` False
+            -- length sql `shouldBe` 2
+            -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
+            -- show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 8" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"bar\") insert DATA_NAME(x, \"foo\")"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo' WHERE data_name = 'bar'"
+            show (sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo' WHERE data_name = 'bar'"
         it "test translate sql insert 9" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(1)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "DELETE FROM r_data_main WHERE data_id = 1"
+            show (sql) `shouldBe` "DELETE FROM r_data_main WHERE data_id = 1"
         it "test tranlate sql insert 10" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
             let sql = translateInsert sqlStandardTrans qu
-            length sql `shouldBe` 1
-            show (head sql) `shouldBe` "DELETE FROM r_data_main"
+            show (sql) `shouldBe` "DELETE FROM r_data_main"
         it "test translate cypher query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
             let (_, sql) = translateQuery cypherTrans qu
@@ -318,9 +324,9 @@ main = hspec $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, c) DATA_NAME(x, \"foo\")"
             let sql = translateInsert cypherTrans qu
             show sql `shouldBe` "MATCH (var:DataObject) SET var.data_name = 'foo'"
-        it "test translate cypher insert 7" $ do
+        it "test translate cypher insert 7 E" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_NAME(x, \"foo\")"
-            let val = validate qu
+            val <- validate verifier2 qu
             val `shouldNotBe` Nothing
             -- let sql = translateInsert cypherTrans qu
             -- show sql `shouldBe` "MATCH (var:DataObject) SET var.data_name = 'foo'"
@@ -328,9 +334,9 @@ main = hspec $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\")"
             let sql = translateInsert cypherTrans qu
             show sql `shouldBe` "MATCH (var:DataObject{data_name:'foo1'}) SET var.data_name = NULL"
-        it "test translate cypher insert 7.2" $ do
+        it "test translate cypher insert 7.2 E" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_SIZE(x, 1000)"
-            let val = validate qu
+            val <- validate verifier2 qu
             val `shouldNotBe` Nothing
             -- let sql = translateInsert cypherTrans qu
             -- show sql `shouldBe` "MATCH (var:DataObject) SET var.data_size = 1000 WITH (var:DataObject{data_name:'foo1'}) SET var.data_name = NULL"
@@ -480,22 +486,22 @@ main = hspec $ do
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldNotBe` Just True
 
-        it "test validate insert 0" $ do
+        it "test validate insert 0 E" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_NAME(x, \"foo\")"
-            let val = validate qu
+            val <- validate verifier2 qu
             val `shouldNotBe` Nothing
         -- it "test validate insert 1" $ do
         --    let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
         --    let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert ~DATA_OBJ(x)"
         --    let val = validate rule qu
         --    val `shouldBe` Nothing
-        it "test validate insert 2" $ do
+        it "test validate insert 2 E" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
-            let val = validate qu
+            val <- validate verifier2 qu
             val `shouldBe` Nothing
-        it "test validate insert 3" $ do
+        it "test validate insert 3 E" $ do
             let qu = parseStandardInsert "DATA_NAME(y, \"foo\") insert ~DATA_SIZE(x, 1000)"
-            let val = validate qu
+            val <- validate verifier2 qu
             val `shouldBe` Nothing
         let at p args = Atom (Pred p (PredType ObjectPred (map (const (Key "String")) args))) args
         let atom p args = Atomic (at p args)
@@ -530,7 +536,7 @@ main = hspec $ do
             m `shouldBe` insert at1 (1 :: Int) empty
 
 
-        it "sat solver" $ do
+        {- it "sat solver" $ do
             let rule = (a1 --> a2) & a3
             let goal = a4
             let x = valid (rule --> goal)
@@ -553,8 +559,79 @@ main = hspec $ do
             let goal = Not a2
             let x = valid (rule --> goal)
             case x of Just ce -> print ce; _ -> return ()
-            x `shouldNotBe` Nothing
+            x `shouldNotBe` Nothing -}
         it "standard rules" $ do
             let formulas = loadStandardICATRule "fof(test, axiom, ('DATA_NAME'(X, Y) => 'DATA_OBJ'(X)))."
             let f = ("test", "axiom", (standardPredMap ! "DATA_NAME") @@ [v "X", v "Y"] --> ((standardPredMap ! "DATA_OBJ") @@ [v "X"]))
             formulas `shouldBe` [f]
+            
+            
+            
+        it "queryplan1" $ do
+            let db = MapDB "mapdb" "p" [(StringValue "a", StringValue "b")]
+            let db2 = MapDB "mapdb2" "p" [(StringValue "c", StringValue "c")]
+            let query2 = "p(x,y) return x y"
+            let results = to1 [Var "x",Var "y"] (runQuery [Database db, Database db2] query2)
+            results `shouldBe`  [ [StringValue "a" , StringValue "b"], [StringValue "c", StringValue "c"]]
+
+        it "queryplan2" $ do
+            let db = MapDB "mapdb" "p" [(StringValue "a", StringValue "b")]
+            let db2 = EqDB "eqdb" 
+            let db3 = EqDB "eqdb2"
+            let query2 = "p(x,y) eq(x,\"a\") return x y"
+            let results = to1 [Var "x",Var "y"] (runQuery [Database db, Database db2, Database db3] query2)
+            results `shouldBe`  [ [StringValue "a" , StringValue "b"]]
+
+        it "queryplan3" $ do
+            let db = MapDB "mapdb" "p" [(StringValue "a", StringValue "b")]
+            let db2 = (EqDB "eqdb"  :: EqDB Identity)
+            let db3 = EqDB "eqdb2"
+            let query2 = "p(x,y) p(y,z) eq(x,\"a\") return x y"
+            let dbs = [Database db, Database db2, Database db3]
+            case runParser progp (constructPredMap dbs) "" query2 of
+                 Left _ -> error ("cannot parse query: " ++ show query2)
+                 Right (Q (Query _ form), _) -> do
+                    let qp = queryPlan dbs form
+                    show qp `shouldBe` "(exec p(x,y) at [0] filter by (exec p(y,z) at [0] filter by exec eq(x,\"a\") at [1,2]))"
+        it "queryplan insert eq" $ do
+            let db = MapDB "mapdb" "p" [(StringValue "a", StringValue "b")]
+            let db2 = (EqDB "eqdb"  :: EqDB Identity)
+            let dbs = [Database db, Database db2]
+            let query2 = "insert eq(1,1)"
+            let [eqp] = getPreds db2
+            let insmap = singleton eqp ([1], [1])
+            case runParser progp (constructPredMap dbs) "" query2 of
+                 Left _ -> error ("cannot parse query: " ++ show query2)
+                 Right (I ins, _) -> do
+                    let qp = insertPlan dbs insmap ins 
+                    show qp `shouldBe` "exec [insert [eq(1,1)] where () at []]"
+                    let qp2 = runIdentity (runExceptT (checkQueryPlan' dbs qp))
+                    show qp2 `shouldBe` "Left (eq(1,1),fromList [])"
+        it "queryplan insert map" $ do
+            let db = StateMapDB "mapdb" "p" :: StateMapDB Identity
+            let db2 = (EqDB "eqdb")
+            let dbs = [Database db, Database db2]
+            let query2 = "insert p(1,1)"
+            let [eqp] = getPreds db
+            let insmap = singleton eqp ([0], [0])
+            case runParser progp (constructPredMap dbs) "" query2 of
+                 Left _ -> error ("cannot parse query: " ++ show query2)
+                 Right (I ins, _) -> do
+                    let qp = insertPlan dbs insmap ins 
+                    show qp `shouldBe` "exec [insert [p(1,1)] where () at [0]]"
+                    let qp2 = runIdentity (evalStateT (runExceptT (checkQueryPlan' dbs qp)) [(StringValue "a", StringValue "b")])
+                    show qp2 `shouldBe` "Right (fromList [])"
+        it "queryplan insert insmap" $ do
+            let db = MapDB "mapdb" "p" [(StringValue "a", StringValue "b")]:: MapDB Identity
+            let db2 = (EqDB "eqdb"  :: EqDB Identity)
+            let dbs = [Database db, Database db2]
+            let query2 = "insert p(1,1)"
+            let [eqp] = getPreds db
+            let insmap = singleton eqp ([1], [1])
+            case runParser progp (constructPredMap dbs) "" query2 of
+                 Left _ -> error ("cannot parse query: " ++ show query2)
+                 Right (I ins, _) -> do
+                    let qp = insertPlan dbs insmap ins 
+                    show qp `shouldBe` "exec [insert [p(1,1)] where () at []]"
+                    let qp2 = runIdentity (runExceptT (checkQueryPlan' dbs qp))
+                    show qp2 `shouldBe` "Left (p(1,1),fromList [])"

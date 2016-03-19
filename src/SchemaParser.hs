@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "#\'",
     T.opLetter = oneOf "",
-    T.reservedNames = ["create", "table", "not", "null", "varchar", "DEFAULT","int", "INTEGER", "INT64TYPE"],
+    T.reservedNames = ["create", "table", "sequence", "not", "null", "varchar", "DEFAULT","int", "INTEGER", "INT64TYPE"],
     T.reservedOpNames = [],
     T.caseSensitive = True
 }
@@ -77,8 +77,24 @@ stmts = many (pre *> stmt <* pre) where
 
 stmt :: Parser Stmt2
 stmt =
-      create_stmt
+      create_stmt -- <|> create_sequence
 
+{- create_sequence :: Parser Stmt2
+create_sequence = do
+      try $ do
+          reserved "create"
+          reserved "sequence"
+      id <- identifier
+      let coldefs = [ColDef "nextval()" Number []]
+      identifier
+      identifier
+      integer
+      identifier
+      identifier
+      integer
+      semi
+      return (Stmt id coldefs)
+-}
 create_stmt :: Parser Stmt2
 create_stmt = do
       try $ do
