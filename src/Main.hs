@@ -157,7 +157,7 @@ run2 query ps = do
                                 liftIO $ putStrLn ("original query: " ++ show qu)
                                 let qu'@(Query vars f') = rewriteQuery qr qu
                                 liftIO $ putStrLn ("rewritten query: " ++ show qu')
-                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (queryPlan dbs f')))
+                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (calculateVars (keys params) vars (queryPlan dbs f'))))
                                 -- liftIO $ print (printFunc qu)
                                 -- liftIO $ print (keys params)
                                 rows <- lift $ lift $ getAllResultsInStream ( doQuery tdb qu (keys params) (pure params))
@@ -168,7 +168,7 @@ run2 query ps = do
                                 liftIO $ putStrLn ("original query: " ++ show qu)
                                 let qu' = rewriteInsert qr ir dr qu
                                 liftIO $ putStrLn ("rewritten query: " ++ show qu')
-                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (insertPlan dbs insmap qu')))
+                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (calculateVars (keys params) [] (insertPlan dbs insmap qu'))))
                                 rows <- lift $ lift $ getAllResultsInStream (doInsert tdb qu (keys params) (pure params))
                                 return ([], rows)
 
@@ -176,7 +176,7 @@ run2 query ps = do
                                 liftIO $ putStrLn ("original query: " ++ show qu)
                                 let qu' = rewriteInsert qr ir dr qu
                                 liftIO $ putStrLn ("rewritten query: " ++ show qu')
-                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (insertPlan dbs insmap qu')))
+                                liftIO $ putStrLn ("query plan: " ++ drawTree (toTree (calculateVars (keys params) [] (insertPlan dbs insmap qu'))))
                                 rows <- lift $ lift $ getAllResultsInStream (doInsert tdb qu (keys params) (pure params))
                                 return ([], rows)) (DBAdapterState empty Nothing)
 

@@ -55,5 +55,8 @@ library
                    semigroups,
                    semigroupoids,
                    HDBC-postgresql,
-                   HDBC
+                   HDBC,
+                   conduit-combinators,
+                   conduit,
+                   resourcet
   ghc-options:     -Wall -fPIC -shared -dynamic

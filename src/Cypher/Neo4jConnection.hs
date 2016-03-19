@@ -45,7 +45,7 @@ instance Convertible ([Var], [A.Value]) MapResultRow where
 
 instance PreparedStatement_ Neo4jQueryStatement where
         execWithParams (Neo4jQueryStatement (host, port) (vars, stmt)) args = resultStream2 (do
-                resp <- liftIO $ withConnection (pack host) port $ do
+                resp <- withConnection (pack host) port $ do
                     C.cypher (T.pack (show stmt)) M.empty
                 case resp of
                     Left t -> error (T.unpack t)
@@ -56,7 +56,7 @@ instance PreparedStatement_ Neo4jQueryStatement where
 
 instance PreparedStatement_ Neo4jInsertStatement where
         execWithParams (Neo4jInsertStatement (host, port) stmt) args = resultStream2 (do
-                  resp <- liftIO $ withConnection (pack host) port $ do
+                  resp <- withConnection (pack host) port $ do
                       C.cypher (T.pack (show stmt)) M.empty
                   case resp of
                       Left t -> error (T.unpack t)

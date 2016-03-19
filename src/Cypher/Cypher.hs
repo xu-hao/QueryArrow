@@ -1118,7 +1118,7 @@ instance Convertible ResultValue CypherExpr where
     safeConvert (IntValue i) = Right (CypherIntConstExpr i)
     safeConvert (StringValue i) = Right (CypherStringConstExpr i)
 
-instance DBConnection conn CypherQuery Cypher => ConnectionDB DBAdapterMonad conn CypherTrans where
+instance DBConnection conn CypherQuery Cypher => ExtractDomainSize DBAdapterMonad conn CypherTrans where
     extractDomainSize conn trans varDomainSize thesign (Atom (Pred name _) args) =
         return (if isBuiltIn
             then maxArgDomainSize

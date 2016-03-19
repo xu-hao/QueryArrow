@@ -415,15 +415,15 @@ translateInsertToSQL :: Insert -> TransMonad SQLInsert
 translateInsertToSQL (Insert lits conj) = do
     (SQL _ tablelist cond) <- translateFormulaToSQL conj
     let keymap = sortByKey lits
-    if size keymap > 1 then
-        error "translateInsertToSQL: more than one key"
-    else do
-        insertparts <- sortParts <$> (concat <$> mapM combineLitsSQL (elems keymap))
-        if length insertparts > 1 then
-            error "translateInsertToSQL: more than one actions"
-        else
-            let [insertpart] = insertparts in
-            return (toInsert tablelist cond insertpart)
+    if size keymap > 1
+        then error "translateInsertToSQL: more than one key"
+        else do
+            insertparts <- sortParts <$> (concat <$> mapM combineLitsSQL (elems keymap))
+            if length insertparts > 1
+                then error "translateInsertToSQL: more than one actions"
+                else
+                    let [insertpart] = insertparts in
+                        return (toInsert tablelist cond insertpart)
 
 sortParts :: [SQLInsert] -> [SQLInsert]
 sortParts [] = []
@@ -582,12 +582,12 @@ data SQLTrans = SQLTrans Schema BuiltIn PredTableMap
 instance Translate SQLTrans MapResultRow SQLQuery SQLInsert where
     translateQueryWithParams trans query env =
         let (SQLTrans schema builtin predtablemap) = trans
-            env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env
+            env2 = foldl (\map2 key  -> insert key SQLParamExpr map2) empty env
             (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {schema = schema, builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, params = []})) in
             (sql, params ts')
     translateInsertWithParams trans query env =
         let (SQLTrans schema builtin predtablemap) = trans
-            env2 = foldlWithKey (\map2 key _  -> insert key SQLParamExpr map2) empty env
+            env2 = foldl (\map2 key  -> insert key SQLParamExpr map2) empty env
             (sql, ts') = runNew (runStateT (translateInsertToSQL query) (TransState {schema = schema, builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, params = []})) in
             (sql, params ts')
     translateable _ _ = True
@@ -608,7 +608,7 @@ instance Translate SQLTrans MapResultRow SQLQuery SQLInsert where
                     countDelete _ = 1 in
                     combineLits lits countUpdate countInsert countDelete == 1
 
-instance DBConnection conn SQLQuery SQLInsert => ConnectionDB DBAdapterMonad conn SQLTrans where
+instance DBConnection conn SQLQuery SQLInsert => ExtractDomainSize DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize thesign (Atom (Pred name _) args) =
         if isBuiltIn
             then return maxArgDomainSize -- assume that builtins don't restrict domain size
