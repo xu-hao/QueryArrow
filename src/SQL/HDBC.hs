@@ -35,12 +35,10 @@ class HDBCConnection conn where
         showSQLInsert :: conn -> SQLInsert -> String
 
 instance PreparedStatement_ HDBCQueryStatement where
-        execWithParams (HDBCQueryStatement vars stmt) args = ResultStream (\iteratee seed -> do
-                liftIO $ execute stmt (map convertExprToSQL args)
-                rows <- liftIO $ fetchAllRows stmt
-                foldlM2 iteratee (liftIO $ finish stmt) seed (map (convertSQLToResult vars) rows)
-                )
-                    -- keep this type signature, otherwise it won't compile
+        execWithParams (HDBCQueryStatement vars stmt) args = resultStream2 (do
+                execute stmt (map convertExprToSQL args)
+                rows <- fetchAllRows stmt
+                return (map (convertSQLToResult vars) rows)) (finish stmt)
         closePreparedStatement _ = return ()
 
 instance PreparedStatement_ HDBCInsertStatement where

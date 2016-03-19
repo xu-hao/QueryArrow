@@ -14,6 +14,7 @@ import Data.Map.Strict (Map, foldl, empty, (!), singleton, lookup)
 import Data.Convertible
 import qualified Data.Text as T
 import Data.Bifunctor
+import Control.Monad.Trans.Resource
 
 data DBConnInfo = DBConnInfo {
     dbHost :: String,
@@ -30,7 +31,7 @@ data DBAdapterState = DBAdapterState {
     nextidCache :: Maybe Int
     }
 
-type DBAdapterMonad = StateT DBAdapterState IO
+type DBAdapterMonad = StateT DBAdapterState (ResourceT IO)
 
 class PreparedStatement_ stmt where
     execWithParams :: stmt -> [Expr] -> ResultStream DBAdapterMonad MapResultRow
@@ -92,12 +93,12 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow where
         row <- stream
         let (sqlquery, params) = translateQueryWithParams trans query row
         (PreparedStatement stmt) <- liftIO $ prepareQueryStatement conn sqlquery
-        execWithParams stmt (map (\param -> convert (row ! param)) params)
+        bracketPStream (return stmt) (closePreparedStatement) (\stmt -> execWithParams stmt (map (\param -> convert (row ! param)) params))
     doInsert (GenericDB conn _ _ trans) insert _ stream = do
         row <- stream
         let (sqlupdate, params) = translateInsertWithParams trans insert (row :: MapResultRow)
         (PreparedStatement stmt) <- liftIO $ prepareInsertStatement conn sqlupdate
-        _ <- lift (depleteResultStream (execWithParams stmt (map (\param -> convert (row ! param)) params)))
+        _ <- lift (depleteResultStream (bracketPStream (return stmt) closePreparedStatement (\stmt -> execWithParams stmt (map (\param -> convert (row ! param)) params))))
         return row
     supported (GenericDB _ _ _ trans) formula = translateable trans formula
     supportedInsert (GenericDB _ _ _ trans) formula lits = translateableInsert trans  formula lits

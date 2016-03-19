@@ -1,9 +1,9 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
    RankNTypes, FlexibleContexts, GADTs #-}
-module ResultStream (eos, ResultStream(..), Iteratee, listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream,
-    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, ResultRow(..), foldlM2) where
+module ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream,
+    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, ResultRow(..), resultStream2, bracketPStream) where
 
-import Prelude  hiding (lookup)
+import Prelude  hiding (lookup, take, map, null)
 import Control.Applicative ((<$>), empty, (<|>), Alternative)
 import Control.Arrow ((+++))
 import Data.Either.Utils
@@ -13,45 +13,28 @@ import Control.Monad.Trans.State.Strict (StateT, evalStateT, get, put)
 import Control.Monad.Trans.Class (lift, MonadTrans)
 import Data.Monoid
 import FO.Data
+import Data.Conduit
+import Data.Conduit.Combinators
+import Control.Monad.Trans.Resource
 
 class (Monoid row, Show row) => ResultRow row where
     transform :: [Var] -> [Var] -> row -> row
 
--- result stream see Takusen
-type Iteratee row seed m = row -> seed -> m (Either seed seed)
-
-newtype ResultStream m row where
-    ResultStream :: {runResultStream :: (forall seed. Iteratee row seed m -> seed -> m (Either seed seed))} -> ResultStream m row
+newtype ResultStream m row = ResultStream (Producer m row)
 
 listResultStream :: (Monad m) => [a] -> ResultStream m a
-listResultStream results  = ResultStream (\iteratee seed->
-    foldEitherM (flip iteratee) seed results) where
-        foldEitherM _ a [] = return (Right a)
-        foldEitherM g a (b : bs) = do
-            c <- g a b
-            case c of
-                Left d -> return c
-                Right d -> foldEitherM g d bs
+listResultStream results  = ResultStream (yieldMany results)
 
 depleteResultStream :: (Monad m) => ResultStream m row -> m ()
-depleteResultStream rs =
-    fromEither <$> runResultStream rs (\ _ seed -> return (Right seed)) ()
+depleteResultStream (ResultStream rs) =
+    (runConduit (rs =$ sinkNull))
 
 getAllResultsInStream :: (Monad m, Show row) => ResultStream m row -> m [row]
-getAllResultsInStream stream =
-    fromEither <$> runResultStream stream (\row seed  -> return (Right (seed ++ [row]))) []
+getAllResultsInStream (ResultStream stream) =
+    (runConduit (stream =$ sinkList))
 
 takeResultStream :: (Monad m) => Int -> ResultStream m row -> ResultStream m row
-takeResultStream n stream = ResultStream(\iteratee seed -> do
-    seedeither <- runResultStream stream (\row (n, seed') ->
-        if n == 0
-            then return (Left (n, seed'))
-            else do
-                seedeither <- iteratee row seed'
-                let f x = (n-1,x)
-                return ((+++) f f seedeither)
-        ) (n, seed)
-    return ((+++) snd snd seedeither))
+takeResultStream n (ResultStream stream) = ResultStream (stream =$= take n)
 
 resultStreamTake :: (Monad m, Show row) => Int -> ResultStream m row -> m [row]
 resultStreamTake n =
@@ -62,64 +45,44 @@ emptyResultStream :: (Monad m) => ResultStream m a
 emptyResultStream = listResultStream []
 
 isResultStreamEmpty :: (Monad m) => ResultStream m a -> m Bool
-isResultStreamEmpty (ResultStream rs) = do
-    emp <- rs (\_ seed -> return (Left (not seed))) True
-    return (fromEither emp)
+isResultStreamEmpty (ResultStream rs) = (runConduit (rs =$ null))
 
 eos :: (Monad m, Show a) => ResultStream m a -> ResultStream m Bool
-eos stream = lift (null <$> resultStreamTake 1 stream)
+eos stream = ResultStream (replicateM 1 ((isResultStreamEmpty stream)))
 
 instance MonadTrans ResultStream where
-    lift f = ResultStream (\iteratee seed -> do
-        a <- f
-        iteratee a seed)
+    lift f = ResultStream (replicateM 1 f)
 
--- instance Applicative m => Applicative (ResultStream m seed) where
+instance (Monad m) => Functor (ResultStream m) where
+    fmap f (ResultStream rs) = ResultStream (rs =$= map f)
 
-instance Functor (ResultStream m) where
-    fmap f (ResultStream enumerator) = ResultStream (\iteratee seed ->
-        enumerator (iteratee . f) seed)
-
-instance (Functor m, Monad m) => Applicative (ResultStream m) where
-    pure a = ResultStream (\iteratee seed -> iteratee a seed)
+instance (Monad m) => Applicative (ResultStream m) where
+    pure a = ResultStream (yield a)
     (<*>) = ap
 
-instance (Functor m, Monad m) => Monad (ResultStream m) where
-    (ResultStream enumerator) >>= f = ResultStream (\iteratee seed ->
-        enumerator (\row seed2 -> runResultStream (f row) iteratee seed2) seed)
+instance (Monad m) => Monad (ResultStream m) where
+    ResultStream rs >>= f = ResultStream (rs =$= awaitForever (\r -> case f r of (ResultStream rs') -> rs'))
 
-instance (Functor m, Monad m) => Alternative (ResultStream m) where
+instance (Monad m) => Alternative (ResultStream m) where
     empty = emptyResultStream
-    (ResultStream enumerator1) <|> (ResultStream enumerator2) = ResultStream (\iteratee seed -> do
-        mseed <- enumerator1 iteratee seed
-        case mseed of
-             Left _ -> return mseed
-             Right seed' -> enumerator2 iteratee seed')
+    ResultStream rs1 <|> ResultStream rs2 = ResultStream (do
+        rs1
+        rs2)
 
 transformResultStream :: (Monad m, ResultRow row) => [Var] -> [Var] -> ResultStream m row -> ResultStream m row
-transformResultStream vars1 vars2 rs = do
-    row <- rs
-    return (transform vars1 vars2 row)
+transformResultStream vars1 vars2 (ResultStream rs) = ResultStream (rs =$= map (transform vars1 vars2))
 
 filterResultStream :: (Monad m, ResultRow row) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
-filterResultStream rs p = do
-    row <- rs
-    pass <- lift (p row)
-    guard pass
-    return row
+filterResultStream (ResultStream rs) p = ResultStream (rs =$= filterM p)
 
 
-instance (Functor m, MonadIO m) => MonadIO (ResultStream m) where
+instance (MonadIO m) => MonadIO (ResultStream m) where
     liftIO = lift . liftIO
 
-foldlM2 :: (MonadIO m) => Iteratee row seed m -> m () -> seed -> [row] -> m (Either seed seed)
-foldlM2 iteratee finish seed rows = case rows of
-    [] -> return (Right seed)
-    (row : rest) -> do
-        seednew <- iteratee row seed
-        case seednew of
-            Left _ -> do
-                finish
-                return seednew
-            Right seednew2 ->
-                foldlM2 iteratee finish seednew2 rest
+resultStream2 :: (MonadResource m) => IO [row] -> IO () -> ResultStream m row
+resultStream2 mrow finish = bracketPStream (return ()) (\_ -> finish) (\_ -> do
+    rows <- liftIO mrow
+    listResultStream rows)
+
+bracketPStream :: (MonadResource m) => IO a -> (a -> IO ()) -> (a -> ResultStream m row) -> ResultStream m row
+bracketPStream acq rel act = ResultStream (bracketP acq rel (\a -> case act a of ResultStream rs -> rs))

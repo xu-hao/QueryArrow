@@ -51,6 +51,7 @@ import Data.Map.Strict (empty, lookup, fromList, singleton, keys)
 import Text.Parsec (runParser)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Class (lift)
 import System.Environment
 import Data.Tree
@@ -91,7 +92,7 @@ main = do
             case runParser progp empty "" query0 of
                 Left err -> print err
                 Right (Q atoms, _) ->
-                    evalStateT (dbWithSession [ Database db, Database db2] $ do
+                    runResourceT $ evalStateT (dbWithSession [ Database db, Database db2] $ do
                         results <- getAllResults  atoms
                         liftIO $ print results) (DBAdapterState empty Nothing)
             print "test2"
@@ -102,7 +103,7 @@ main = do
             case runParser progp (constructPredMap [Database db, Database db2]) "" query of
                 Left err -> print err
                 Right (Q qu, _) -> do
-                    evalStateT (dbWithSession [Database db, Database db2] $ do
+                    runResourceT $ evalStateT (dbWithSession [Database db, Database db2] $ do
                         rs <- getAllResults qu
                         liftIO $ print rs
                         report <- getReportFromDBSession
@@ -149,7 +150,7 @@ run2 query ps = do
     mapM_ print dr
     let predmap = foldMap (\p@(Pred n _) -> singleton n p) preds
     let params = fromList [(Var "client_user_name",StringValue "rods"), (Var "client_zone", StringValue "tempZone")]
-    (vars, rows) <- evalStateT (dbWithSession [Database tdb] $ do
+    (vars, rows) <- runResourceT $ evalStateT (dbWithSession [Database tdb] $ do
                 case runParser progp predmap "" query of
                             Left err -> error (show err)
                             Right (Q qu, _) -> do

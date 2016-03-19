@@ -44,25 +44,25 @@ instance Convertible ([Var], [A.Value]) MapResultRow where
                         _ -> error ("unsupported json value: " ++ show value)) row) empty (zip vars values) )
 
 instance PreparedStatement_ Neo4jQueryStatement where
-        execWithParams (Neo4jQueryStatement (host, port) (vars, stmt)) args = ResultStream (\iteratee seed -> do
+        execWithParams (Neo4jQueryStatement (host, port) (vars, stmt)) args = resultStream2 (do
                 resp <- liftIO $ withConnection (pack host) port $ do
                     C.cypher (T.pack (show stmt)) M.empty
                 case resp of
                     Left t -> error (T.unpack t)
                     Right (C.Response cols rows) ->
-                        foldlM2 iteratee (return ()) seed (map (\row -> convert (vars, row)) rows)
-                )
+                        return (map (\row -> convert (vars, row)) rows)
+                ) (return ())
         closePreparedStatement _ = return ()
 
 instance PreparedStatement_ Neo4jInsertStatement where
-        execWithParams (Neo4jInsertStatement (host, port) stmt) args = ResultStream (\iteratee seed -> do
+        execWithParams (Neo4jInsertStatement (host, port) stmt) args = resultStream2 (do
                   resp <- liftIO $ withConnection (pack host) port $ do
                       C.cypher (T.pack (show stmt)) M.empty
                   case resp of
                       Left t -> error (T.unpack t)
                       Right (C.Response cols rows) ->
-                          foldlM2 iteratee (return ()) seed (map (\row -> convert ([Var "i"], row)) rows)
-                  )
+                          return (map (\row -> convert ([Var "i"], row)) rows)
+                  ) (return ())
         closePreparedStatement _ = return ()
 
 instance DBConnection Neo4jConnection CypherQuery Cypher where

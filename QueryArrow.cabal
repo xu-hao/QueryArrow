@@ -39,6 +39,8 @@ executable QueryArrow
                    distributive,
                    pretty-tree,
                    conduit-combinators,
+                   conduit,
+                   resourcet,
                    template-haskell
   ghc-options:     -Wall -fPIC
   other-modules:
