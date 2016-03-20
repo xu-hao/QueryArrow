@@ -9,7 +9,7 @@ import QueryPlan
 
 import Prelude hiding (lookup)
 import Control.Monad.IO.Class (liftIO)
-import Data.Map.Strict (insert, empty)
+import Data.Map.Strict (insert, empty, Map, foldlWithKey)
 import Data.Convertible.Base
 import qualified Database.Neo4j.Cypher as C
 import Database.Neo4j (withConnection)
@@ -43,10 +43,13 @@ instance Convertible ([Var], [A.Value]) MapResultRow where
                         A.Null -> StringValue "<null>"
                         _ -> error ("unsupported json value: " ++ show value)) row) empty (zip vars values) )
 
+toCypherParams :: Map Var Expr -> M.HashMap T.Text C.ParamValue
+toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert v) m) M.empty
+
 instance PreparedStatement_ Neo4jQueryStatement where
         execWithParams (Neo4jQueryStatement (host, port) (vars, stmt)) args = resultStream2 (do
                 resp <- withConnection (pack host) port $ do
-                    C.cypher (T.pack (show stmt)) M.empty
+                    C.cypher (T.pack (show stmt)) (toCypherParams args)
                 case resp of
                     Left t -> error (T.unpack t)
                     Right (C.Response cols rows) ->
@@ -57,7 +60,7 @@ instance PreparedStatement_ Neo4jQueryStatement where
 instance PreparedStatement_ Neo4jInsertStatement where
         execWithParams (Neo4jInsertStatement (host, port) stmt) args = resultStream2 (do
                   resp <- withConnection (pack host) port $ do
-                      C.cypher (T.pack (show stmt)) M.empty
+                      C.cypher (T.pack (show stmt)) (toCypherParams args)
                   case resp of
                       Left t -> error (T.unpack t)
                       Right (C.Response cols rows) ->

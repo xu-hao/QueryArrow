@@ -63,54 +63,13 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as B8
 import FO.Parser
 
-db :: MapDB DBAdapterMonad
-db = MapDB "Container" "elem" [(StringValue "ObjA", StringValue "ObjB"),
-    (StringValue "ObjB", StringValue "ObjC"), (StringValue "ObjB", StringValue "ObjD"),
-    (StringValue "ObjD", StringValue "ObjA"), (StringValue "ObjD", StringValue "ObjP"),
-    (StringValue "ObjQ", StringValue "ObjR"), (StringValue "ObjR", StringValue "ObjS")]
-
-db2 :: EqDB DBAdapterMonad
-db2 = EqDB "Eq"
 
 main::IO()
 main = do
     args2 <- getArgs
     if null args2
         then do
-            let prog = "predicate gt(Num, Num)\n\
-            \predicate File(Path)\n\
-            \predicate Meta(Path, String)\n\
-            \gt(x, y)\n\
-            \File(z)\n\
-            \Meta(z,m)\
-            \return x y z m"
-            case runParser progp empty "" prog of
-                Left err -> print err
-                Right res -> print res
-            let query0 = "predicate elem(String, String) predicate eq(String, String)\n\
-            \elem(x, y) elem(y, z) ~elem(y, \"ObjC\") eq(b,\"test\") eq(a,b) return x y z w b"
-            case runParser progp empty "" query0 of
-                Left err -> print err
-                Right (Q atoms, _) ->
-                    runResourceT $ evalStateT (dbWithSession [ Database db, Database db2] $ do
-                        results <- getAllResults  atoms
-                        liftIO $ print results) (DBAdapterState empty Nothing)
-            print "test2"
-            let query = "elem(x, y) (elem(y, z) | elem(w, y)) \
-            \(exists u.elem(y, u)) ~(exists u. exists v.elem(v,u) elem(u,y)) \
-            \~elem(y, \"ObjC\") ~eq(x, \"ObjB\") eq(b,\"test\") eq(a,b) return x y z w b"
-
-            case runParser progp (constructPredMap [Database db, Database db2]) "" query of
-                Left err -> print err
-                Right (Q qu, _) -> do
-                    runResourceT $ evalStateT (dbWithSession [Database db, Database db2] $ do
-                        rs <- getAllResults qu
-                        liftIO $ print rs
-                        report <- getReportFromDBSession
-                        liftIO $ print report) (DBAdapterState empty Nothing)
-
-            --let query3 = "DATA_NAME(a, b) COLL(a, c) COLL_NAME(c, \"/tempZone/home/rods/x\") DATA_SIZE(a, x) le(x,1000) return a b"
-            --run2 query3
+            print "no arguments"
         else do
             ps <- getConfig (args2 !! 1)
             run2 (head args2) ps

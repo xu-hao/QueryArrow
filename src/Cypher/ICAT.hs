@@ -14,7 +14,7 @@ import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, fold
 
 cypherExprFromArg2 (IntExpr i) = CypherIntConstExpr i
 cypherExprFromArg2 (StringExpr s) = CypherStringConstExpr s
-cypherExprFromArg2 (VarExpr _) = error "unbounded var"
+cypherExprFromArg2 (VarExpr (Var a)) = CypherParamExpr a
 
 cypherBuiltIn :: CypherBuiltIn
 cypherBuiltIn = CypherBuiltIn ( fromList [

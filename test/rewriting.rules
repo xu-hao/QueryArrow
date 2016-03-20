@@ -31,7 +31,7 @@ rewrite META_1(x, a, v, u)  nextid(m) insert
 rewrite META_1(x, a, v, u)  OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) delete
                             OBJT_METAMAP_OBJ(x, m)
 
-rewrite META_2(x, a, v, u)  exists m. META(x, m, a, v, u) exists user. exists a. CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc, 1200)
+rewrite META_2(x, a, v, u)  exists m. META(x, m, a, v, u) exists user. exists acc. CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc, 1200)
 rewrite META_2(x, a, v, u)  nextid(m) CLIENT_ID(user) META_ATTR_ACCESS_OBJ(x, user, acc) eq(acc,1200) insert
                             OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) META_ACCESS_OBJ(m, x, user, 1200)
 rewrite META_2(x, a, v, u)  CLIENT_ID(user) META_ACCESS_OBJ(m, x, user, acc) eq(acc, 1200) META_ACCESS_OBJ(m, x, user2, acc2) OBJT_METAMAP_OBJ(x, m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) delete

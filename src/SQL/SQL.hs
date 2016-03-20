@@ -151,7 +151,7 @@ showWhereCond cond = case cond of
     SQLAndCond [] -> ""
     _ -> " WHERE " ++ show cond
 
-instance Show SQLInsert where
+instance Show SQLInsert' where
     show (SQLInsert tname colsexprs tables cond) =
         let (cols, exprs) = unzip colsexprs in
             "INSERT INTO " ++ tname ++ " (" ++ intercalate "," cols ++ ")" ++
@@ -214,7 +214,8 @@ instance Subst SQLExpr where
 instance Subst SQLQualifiedCol where
     subst varmap (var, col) = (subst varmap var, col)
 
-type SQLQuery = ([Var], SQL)
+type SQLQuery = ([Var], SQL, [Var]) -- return vars, sql, param vars
+type SQLInsert = (SQLInsert', [Var])
 
 instance Monoid SQL where
     (SQL sselect1 sfrom1 swhere1) `mappend` (SQL sselect2 sfrom2 swhere2) =
@@ -332,7 +333,7 @@ translateQueryToSQL qu@(Query vars formula) = do
                             Just col -> col
                             _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
     let cols = map extractCol vars
-    return (vars, SQL cols tablelist cond1)
+    return (vars, SQL cols tablelist cond1, (params ts))
 
 sqlexists (SQL cols tablelist cond) = SQL [] tablelist (SQLExistsCond (SQL cols [] cond))
 sqlnotexists (SQL cols tablelist cond) = SQL [] tablelist (SQLNotExistsCond (SQL cols [] cond))
@@ -350,7 +351,7 @@ translateFormulaToSQL (Atomic a) = translateAtomToSQL Pos a
 
 -- assume that all atoms in conj involves var
 translateFormulaToSQL (Exists var conj) = do
-    (_, sql) <- translateQueryToSQL (Query [var] conj)
+    (_, sql, _) <- translateQueryToSQL (Query [var] conj)
     return (sqlexists sql)
 
 translateFormulaToSQL (Not (Atomic a)) =
@@ -358,7 +359,7 @@ translateFormulaToSQL (Not (Atomic a)) =
 
 -- assume that all atoms in conj involves var
 translateFormulaToSQL (Not (Exists var conj)) = do
-    (_, sql) <- translateQueryToSQL (Query [var] conj)
+    (_, sql, _) <- translateQueryToSQL (Query [var] conj)
     return (sqlnotexists sql)
 
 translateForumlaToSQL (Not _) = error "not not pushed"
@@ -407,7 +408,7 @@ translateAtomToSQL thesign (Atom (Pred name _) args) = do
             Nothing -> error (name ++ " is not defined")
 
 
-data SQLInsert = SQLInsert TableName [(Col,SQLExpr)] [Table] SQLCond
+data SQLInsert' = SQLInsert TableName [(Col,SQLExpr)] [Table] SQLCond
                | SQLUpdate TableName [(Col,SQLExpr)] SQLCond
                | SQLDelete TableName SQLCond
 
@@ -421,11 +422,12 @@ translateInsertToSQL (Insert lits conj) = do
             insertparts <- sortParts <$> (concat <$> mapM combineLitsSQL (elems keymap))
             if length insertparts > 1
                 then error "translateInsertToSQL: more than one actions"
-                else
-                    let [insertpart] = insertparts in
-                        return (toInsert tablelist cond insertpart)
+                else do
+                    ts <- get
+                    let [insertpart] = insertparts
+                    return (toInsert tablelist cond insertpart, params ts)
 
-sortParts :: [SQLInsert] -> [SQLInsert]
+sortParts :: [SQLInsert'] -> [SQLInsert']
 sortParts [] = []
 sortParts (p : ps) = b++[a] where
     (a, b) = foldl (\(active, done) part ->
@@ -436,26 +438,26 @@ sortParts (p : ps) = b++[a] where
             _ -> (part, active : done)) (p,[]) ps where
             compatible colexpr = all (\(col, expr) -> all (\(col2, expr2) ->col2 /= col || expr2 == expr) colexpr)
 
-toInsert :: [Table] -> SQLCond -> SQLInsert -> SQLInsert
+toInsert :: [Table] -> SQLCond -> SQLInsert' -> SQLInsert'
 toInsert tablelist cond (SQLInsert tname colexprs tablelist2 cond2) = SQLInsert tname colexprs (tablelist ++ tablelist2) (cond .&&. cond2)
 toInsert tablelist cond (SQLDelete tname cond2) = SQLDelete tname (cond .&&. cond2)
 toInsert tablelist cond (SQLUpdate tname colexprs cond2) = SQLUpdate tname colexprs (cond .&&. cond2)
 
 
-combineLitsSQL :: [Lit] -> TransMonad [SQLInsert]
+combineLitsSQL :: [Lit] -> TransMonad [SQLInsert']
 combineLitsSQL lits = combineLits lits generateUpdateSQL generateInsertSQL generateDeleteSQL
 
-generateDeleteSQL :: Atom -> TransMonad [SQLInsert]
+generateDeleteSQL :: Atom -> TransMonad [SQLInsert']
 generateDeleteSQL atom = do
     sql <- translateDeleteAtomToSQL atom
     return [sql]
 
-generateInsertSQL :: [Atom] -> TransMonad [SQLInsert]
+generateInsertSQL :: [Atom] -> TransMonad [SQLInsert']
 generateInsertSQL atoms = do
     let map1 = sortAtomByPred atoms
     mapM generateInsertSQLForPred (toList map1)
 
-generateUpdateSQL :: [Atom] -> [Atom] -> TransMonad [SQLInsert]
+generateUpdateSQL :: [Atom] -> [Atom] -> TransMonad [SQLInsert']
 generateUpdateSQL pospropatoms negpropatoms = do
     let posprednamemap = sortAtomByPred pospropatoms
     let negprednamemap = sortAtomByPred negpropatoms
@@ -464,16 +466,16 @@ generateUpdateSQL pospropatoms negpropatoms = do
     let neglist = [l | key <- allkeys, let l = case lookup key negprednamemap of Nothing -> []; Just l -> l]
     mapM generateUpdateSQLForPred (zip3 allkeys poslist neglist)
 
-generateInsertSQLForPred :: (String, [Atom]) -> TransMonad SQLInsert
+generateInsertSQLForPred :: (String, [Atom]) -> TransMonad SQLInsert'
 generateInsertSQLForPred (pred, [posatom]) = translatePosInsertAtomToSQL posatom -- set property
 generateInsertSQLForPred (pred, _) = error "unsupported number of pos and neg literals" -- set property
 
-generateUpdateSQLForPred :: (String, [Atom], [Atom]) -> TransMonad SQLInsert
+generateUpdateSQLForPred :: (String, [Atom], [Atom]) -> TransMonad SQLInsert'
 generateUpdateSQLForPred (pred, [posatom], _) = translatePosUpdateAtomToSQL posatom -- set property
 generateUpdateSQLForPred (pred, [], [negatom]) = translateNegUpdateAtomToSQL negatom -- set property
 generateUpdateSQLForPred (pred, _, _) = error "unsupported number of pos and neg literals" -- set property
 
-translateDeleteAtomToSQL :: Atom -> TransMonad SQLInsert
+translateDeleteAtomToSQL :: Atom -> TransMonad SQLInsert'
 translateDeleteAtomToSQL (Atom (Pred pred predtype) args) = do
     ts <- get
     case lookup pred (predtablemap ts) of
@@ -484,7 +486,7 @@ translateDeleteAtomToSQL (Atom (Pred pred predtype) args) = do
         Just _ -> error "joined table not supported for insert"
         Nothing -> error "not an updatable predicate"
 
-translatePosInsertAtomToSQL :: Atom -> TransMonad SQLInsert
+translatePosInsertAtomToSQL :: Atom -> TransMonad SQLInsert'
 translatePosInsertAtomToSQL (Atom (Pred pred predtype) args) = do
     ts <- get
     case lookup pred (predtablemap ts) of
@@ -496,7 +498,7 @@ translatePosInsertAtomToSQL (Atom (Pred pred predtype) args) = do
         Nothing -> error "not an updatable predicate"
 
 
-translatePosUpdateAtomToSQL :: Atom -> TransMonad SQLInsert
+translatePosUpdateAtomToSQL :: Atom -> TransMonad SQLInsert'
 translatePosUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
     ts <- get
     case lookup pred (predtablemap ts) of
@@ -511,7 +513,7 @@ translatePosUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
         Nothing -> error "not an updatable predicate"
 
 
-translateNegUpdateAtomToSQL :: Atom -> TransMonad SQLInsert
+translateNegUpdateAtomToSQL :: Atom -> TransMonad SQLInsert'
 translateNegUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
     ts <- get
     case lookup pred (predtablemap ts) of

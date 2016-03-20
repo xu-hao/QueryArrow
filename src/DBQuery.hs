@@ -13,6 +13,7 @@ import Control.Monad.Trans.State.Strict (StateT, get, put, modify)
 import Data.Map.Strict (Map, foldl, empty, (!), singleton, lookup)
 import Data.Convertible
 import qualified Data.Text as T
+import qualified Data.Map as M
 import Data.Bifunctor
 import Control.Monad.Trans.Resource
 
@@ -34,15 +35,18 @@ data DBAdapterState = DBAdapterState {
 type DBAdapterMonad = StateT DBAdapterState (ResourceT IO)
 
 class PreparedStatement_ stmt where
-    execWithParams :: stmt -> [Expr] -> ResultStream DBAdapterMonad MapResultRow
+    execWithParams :: stmt -> Map Var Expr -> ResultStream DBAdapterMonad MapResultRow
     closePreparedStatement :: stmt -> IO ()
 
 data PreparedStatement = forall stmt. PreparedStatement_ stmt => PreparedStatement {
     unPreparedStatement :: stmt
 }
 
-instance DBStatement DBAdapterMonad (PreparedStatement, [Var]) where
+instance DBStatement DBAdapterMonad MapResultRow (PreparedStatement, [Var])  where
     dbStmtClose (stmt, _) = case stmt of PreparedStatement s -> liftIO $ closePreparedStatement s
+    dbStmtExec (PreparedStatement stmt, params) vars stream = do
+        row <- stream
+        bracketPStream (return stmt) (closePreparedStatement) (\stmt -> execWithParams stmt (M.map convert row))
 
 class DBConnection conn query insert | conn -> query insert where
     prepareQueryStatement :: conn -> query -> IO PreparedStatement
@@ -74,8 +78,8 @@ closeAllCachedPreparedStatements = do
 data GenericDB conn trans where
     GenericDB :: (ExtractDomainSize DBAdapterMonad conn trans, DBConnection conn query insert, Translate trans MapResultRow query insert) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
 
-data SequenceDB conn where
-    SequenceDB :: (DBConnection conn query insert, TranslateSequence trans query) => conn -> String -> String -> trans -> SequenceDB conn
+data SequenceDB conn trans where
+    SequenceDB :: (DBConnection conn query insert, TranslateSequence trans query) => conn -> String -> String -> trans -> SequenceDB conn trans
 
 instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedStatement, [Var]) where
     dbBegin (GenericDB conn _ _ _) = do
@@ -100,9 +104,6 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedS
         let (sqlupdate, params) = translateInsertWithParams trans insert vars
         stmt <- liftIO $ prepareInsertStatement conn sqlupdate
         return (stmt, params)
-    exec _ (PreparedStatement stmt, params) vars stream = do
-        row <- stream
-        bracketPStream (return stmt) (closePreparedStatement) (\stmt -> execWithParams stmt (map (\param -> convert (row ! param)) params))
 
 
     supported (GenericDB _ _ _ trans) formula = translateable trans formula
@@ -110,10 +111,38 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedS
     translateQuery (GenericDB _ _ _ trans) qu vars  = first show (translateQueryWithParams trans qu vars)
     translateInsert (GenericDB _ _ _ trans) qu vars  =  first show (translateInsertWithParams trans qu vars)
 
-data PreparedSequenceStatement = PreparedSequenceStatement [Var] Var
-instance DBStatement DBAdapterMonad PreparedSequenceStatement where
+data PreparedSequenceStatement conn trans where
+    PreparedSequenceStatement :: (DBConnection conn query insert, TranslateSequence trans query) =>  conn -> trans -> [Var] -> Var -> PreparedSequenceStatement conn trans
 
-instance Database_ (SequenceDB conn) DBAdapterMonad MapResultRow PreparedSequenceStatement where
+instance DBStatement DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where
+    dbStmtClose _ = return ()
+    dbStmtExec (PreparedSequenceStatement conn trans vars v) vars2 stream = do
+        row <- stream
+        s <- lift $ get
+        nextid <- case (nextidCache s) of
+            Nothing -> do
+                let (sqlquery, var) = translateSequenceQuery trans
+                (PreparedStatement stmt) <- liftIO $ prepareQueryStatement conn sqlquery
+                nextidrow : _ <- lift $ getAllResultsInStream (execWithParams stmt mempty)
+                let (IntValue nextid) = nextidrow ! var
+                lift $ put (s {nextidCache = Just nextid})
+                return nextid
+            Just nextid ->
+                return nextid
+        case lookup v row of
+            Nothing -> case vars of
+                [] -> return mempty
+                [v2] | v == v2 -> return (mappend row (singleton v (IntValue nextid)))
+                _ -> error ("SequenceDB:doQuery: unsupported variables " ++ show vars)
+            Just (IntValue i) ->
+                if i == nextid then
+                    return mempty
+                else
+                    emptyResultStream
+            Just _ ->
+                emptyResultStream
+
+instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans) where
         dbBegin (SequenceDB _ _ _ _) = do
             s <- get
             put s{nextidCache = Nothing}
@@ -134,34 +163,9 @@ instance Database_ (SequenceDB conn) DBAdapterMonad MapResultRow PreparedSequenc
         domainSize (SequenceDB _ _ _ _)= \dsmap sign (Atom _ [VarExpr v]) -> return (singleton v (Bounded 1))
         prepareQuery (SequenceDB conn _ _ trans) (Query vars (Atomic (Atom _ [VarExpr v]))) _ =
             -- only consider the case of var for now
-            return (PreparedSequenceStatement vars v)
+            return (PreparedSequenceStatement conn trans vars v)
         prepareQuery _ _ _ = error "not supported"
         prepareInsert _ _ _ = error "not supported"
-        exec (SequenceDB conn _ _ trans) (PreparedSequenceStatement vars v) vars2 stream = do
-            row <- stream
-            s <- lift $ get
-            nextid <- case (nextidCache s) of
-                Nothing -> do
-                    let (sqlquery, var) = translateSequenceQuery trans
-                    (PreparedStatement stmt) <- liftIO $ prepareQueryStatement conn sqlquery
-                    nextidrow : _ <- lift $ getAllResultsInStream (execWithParams stmt mempty)
-                    let (IntValue nextid) = nextidrow ! var
-                    lift $ put (s {nextidCache = Just nextid})
-                    return nextid
-                Just nextid ->
-                    return nextid
-            case lookup v row of
-                Nothing -> case vars of
-                    [] -> return mempty
-                    [v2] | v == v2 -> return (mappend row (singleton v (IntValue nextid)))
-                    _ -> error ("SequenceDB:doQuery: unsupported variables " ++ show vars)
-                Just (IntValue i) ->
-                    if i == nextid then
-                        return mempty
-                    else
-                        emptyResultStream
-                Just _ ->
-                    emptyResultStream
 
         supported (SequenceDB _ predname _ _) (Atomic (Atom (Pred predname2 _) _)) = predname == predname2
         supported _ _ = False

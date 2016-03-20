@@ -12,8 +12,8 @@ import SQL.ICAT
 import Database.HDBC.Sqlite3
 
 instance HDBCConnection Connection where
-        showSQLQuery _ (vars, query) = show query
-        showSQLInsert _ = show
+        showSQLQuery _ (vars, query, params) = show query
+        showSQLInsert _ (query, params)= show query
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do

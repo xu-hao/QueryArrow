@@ -619,12 +619,8 @@ type CypherVarMap = Map Var CypherExpr
 type CypherPredTableMap = Map String CypherMapping
 -- builtin predicate -> op, neg op
 newtype CypherBuiltIn = CypherBuiltIn (Map String (Sign -> [Expr] -> TransMonad Cypher))
-type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap, DependencyGraph, Substitution) NewEnv a
+type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap, DependencyGraph, CypherVarMap) NewEnv a
 
-mapResultRowToSubstitution :: MapResultRow -> Substitution
-mapResultRowToSubstitution = foldlWithKey (\map1 key rv -> case rv of
-                                                                Null -> map1
-                                                                _ -> insert key (convert rv) map1) empty
 addDependencies :: DependencyGraph -> TransMonad ()
 addDependencies m = do
     (a, b, dg, params) <- get
@@ -877,10 +873,10 @@ mergeAllPatternInMatch2 (GraphPattern as as2) = mappend (GraphPattern as []) (Gr
 
 translateQueryToCypher :: Query -> TransMonad CypherQuery
 translateQueryToCypher (Query vars conj) = do
-    (_,_,_,params) <- get
     cypher <- translateFormulaToCypher conj
-    (cypher', fovarcypherexprmap) <- simplifyDependencies cypher
-    let exprsMaybe = map (`lookup` fovarcypherexprmap) (vars \\ Map.keys params)
+    cypher' <- simplifyDependencies cypher
+    (_,_,_,fovarcypherexprmap) <- get
+    let exprsMaybe = map (`lookup` fovarcypherexprmap) vars
     let exprs = map (\(v, em) -> fromMaybe (error ("unbounded var " ++ show v ++ " in " ++ show conj)) em) (zip vars exprsMaybe)
     return (vars, postprocess (cypher'  <>  creturn exprs ))
 
@@ -970,14 +966,14 @@ equalize :: [CypherExpr] -> CypherCond
 equalize (e:es) = conj (liftA2 (.=.) [e] es )
 
 -- if two variables a, b depends on the same set of nodes, then they represents the same value
-simplifyDependencies :: Cypher -> TransMonad (Cypher, CypherVarMap)
-simplifyDependencies cypher = do
-    (_, _, dependencyGraph, _) <- get
-    return (simplifyDependencies' cypher dependencyGraph Map.empty)
+simplifyDependencies :: Cypher -> TransMonad (Cypher)
+simplifyDependencies cypher =
+    (simplifyDependencies' cypher)
 
-simplifyDependencies' :: Cypher -> DependencyGraph -> CypherVarMap -> (Cypher, CypherVarMap )
-simplifyDependencies' cypher dependencyGraph fovarcypherexprmap =
-        case getEqualRelation dependencyGraph of
+simplifyDependencies' :: Cypher -> TransMonad (Cypher )
+simplifyDependencies' cypher = do
+    (a, b, dependencyGraph, fovarcypherexprmap) <- get
+    case getEqualRelation dependencyGraph of
             Just (src@(CypherExprNode ve@(CypherVarExpr v1)), n2) -> (case n2 of -- n1 is always a cypher var node
                 CypherExprNode expr -> -- subst src to expr
                     recurseWith expr
@@ -990,28 +986,32 @@ simplifyDependencies' cypher dependencyGraph fovarcypherexprmap =
                         Just expr ->
                             recurseWith expr
                         Nothing ->
-                            let fovarcypherexprmap' = Map.insert v ve fovarcypherexprmap in
-                                simplifyDependencies' cypher dependencyGraph' fovarcypherexprmap') where
+                            do
+                                let fovarcypherexprmap' = Map.insert v ve fovarcypherexprmap
+                                put (a, b, dependencyGraph', fovarcypherexprmap')
+                                simplifyDependencies' cypher) where
                 dependencyGraph' = Map.delete src dependencyGraph
-                recurseWith expr =
+                recurseWith expr = do
                     let varmap = cypherVarExprMap v1 expr
-                        dependencyGraph'' = Map.map (subst varmap) dependencyGraph'
-                        cypher' = subst varmap cypher in
-                        simplifyDependencies' cypher' dependencyGraph'' fovarcypherexprmap
+                    let dependencyGraph'' = Map.map (subst varmap) dependencyGraph'
+                    let cypher' = subst varmap cypher
+                    put (a, b, dependencyGraph'', fovarcypherexprmap)
+                    simplifyDependencies' cypher'
             Nothing -> case getFunctionalRelation dependencyGraph of
-                Nothing -> (cypher, fovarcypherexprmap)
-                Just (srcs, _) -> -- unify all srcs
+                Nothing -> return cypher
+                Just (srcs, _) -> do -- unify all srcs
                     let (cond, varmap) = unifysCond (map unCypherExprNode srcs)
                         dependencyGraph' = foldr Map.delete dependencyGraph srcs
                         dependencyGraph'' = Map.map (subst varmap) dependencyGraph'
-                        cypher' = subst varmap cypher in
-                        simplifyDependencies' cypher' dependencyGraph'' fovarcypherexprmap
+                        cypher' = subst varmap cypher
+                    put (a, b, dependencyGraph'', fovarcypherexprmap)
+                    simplifyDependencies' cypher'
 
 -- translate atom to cypher in a query
 translateQueryAtomToCypher :: Sign -> Atom -> TransMonad Cypher
 translateQueryAtomToCypher thesign atom = do
     (CypherBuiltIn builtin, predtablemap, _, params) <- get
-    let (Atom (Pred name _) args) = FO.subst params atom
+    let (Atom (Pred name _) args) = atom
     --try builtin first
     trace (show atom) $ case lookup name builtin of
         Just builtinpred ->
@@ -1027,7 +1027,7 @@ translateQueryAtomToCypher thesign atom = do
 translateDeleteAtomToCypher :: Atom -> TransMonad Cypher
 translateDeleteAtomToCypher atom = do
     (CypherBuiltIn builtin, predtablemap, _, params) <- get
-    let (Atom (Pred pred predtype) args) = FO.subst params atom
+    let (Atom (Pred pred predtype) args) = atom
     case lookup pred predtablemap of
         Just (vars, matchpattern, pattern, dependencies) -> do
             (matchpattern, pattern) <- instantiate vars matchpattern pattern dependencies args
@@ -1077,7 +1077,7 @@ translateInsertToCypher (Insert lits conj) = do
     cypherspos <- mapM translateInsertAtomToCypher pos
     cyphersneg <- mapM translateDeleteAtomToCypher neg
     let bigcypher = c <> mconcat cypherspos <> mconcat cyphersneg
-    (cypher, _) <- simplifyDependencies bigcypher
+    cypher <- simplifyDependencies bigcypher
     trace ("translateInsertToCypher: " ++ show bigcypher) $ return (postprocess cypher) where
 
 
@@ -1133,12 +1133,14 @@ instance DBConnection conn CypherQuery Cypher => ExtractDomainSize DBAdapterMona
 instance Translate CypherTrans MapResultRow CypherQuery Cypher where
     translateQueryWithParams trans query@(Query vars _) env =
         let (CypherTrans builtin _ predtablemap) = trans
-            sql = runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, mapResultRowToSubstitution env)) in
-            (sql, keys env)
+            fovarcypherexprmap = foldMap (\v@(Var a) -> Map.singleton v (CypherParamExpr a)) env
+            sql = runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, fovarcypherexprmap)) in
+            (sql,  env)
     translateInsertWithParams trans query env =
         let (CypherTrans builtin _ predtablemap) = trans
-            sql = runNew (evalStateT (translateInsertToCypher query) (builtin, predtablemap, empty, mapResultRowToSubstitution env)) in
-            (sql, keys env)
+            fovarcypherexprmap = foldMap (\v@(Var a) -> Map.singleton v (CypherParamExpr a)) env
+            sql = runNew (evalStateT (translateInsertToCypher query) (builtin, predtablemap, empty, fovarcypherexprmap)) in
+            (sql,  env)
     translateable _ (Exists _ _) = False
     translateable trans (Not formula) =
         let (CypherTrans builtin positiverequired predtablemap) = trans in

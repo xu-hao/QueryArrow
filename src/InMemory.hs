@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
    RankNTypes, FlexibleContexts, GADTs, DeriveGeneric #-}
-module FO where
+module InMemory where
 
 import ResultStream
 import FO.Data

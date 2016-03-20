@@ -52,10 +52,11 @@ instance Show Query where
 instance Show Insert where
     show (Insert atoms disjs) = show disjs ++ " insert " ++ intercalate " " (map show atoms)
 
-class DBStatement m stmt where
+class DBStatement m row stmt where
+    dbStmtExec :: stmt -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
     dbStmtClose :: stmt -> m ()
 -- database
-class (Monad m, DBStatement m stmt) => Database_ db m row stmt | db -> m row stmt where
+class (Monad m, DBStatement m row stmt) => Database_ db m row stmt | db -> m row stmt where
     dbBegin :: db -> m ()
     dbCommit :: db -> m ()
     dbRollback :: db -> m ()
@@ -69,7 +70,6 @@ class (Monad m, DBStatement m stmt) => Database_ db m row stmt | db -> m row stm
     -- filter takes a result stream, a list of input vars, a query, and generate a result stream
     prepareQuery :: db -> Query -> [Var] -> m stmt
     prepareInsert :: db -> Insert -> [Var] -> m stmt
-    exec :: db -> stmt -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
     supported :: db -> Formula -> Bool
     supportedInsert :: db -> Formula -> [Lit] -> Bool
     translateQuery :: db -> Query -> [Var] -> (String, [Var])
@@ -77,11 +77,11 @@ class (Monad m, DBStatement m stmt) => Database_ db m row stmt | db -> m row stm
     doQuery :: db -> Query -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
     doQuery db qu vars rs = do
         stmt <- lift $ prepareQuery db qu vars
-        exec db stmt vars rs
+        dbStmtExec stmt vars rs
     doInsert :: db -> Insert -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
     doInsert db qu vars rs = do
         stmt <- lift $ prepareInsert db qu vars
-        exec db stmt vars rs
+        dbStmtExec stmt vars rs
 
 
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
@@ -97,29 +97,33 @@ data QueryPlan = Exec Formula [Int]
                 | QPTrue
                 | QPFalse
 
-data QueryPlanData = QueryPlanData {
+data AbstractDBStatement m row = forall stmt. (DBStatement m row stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
+
+data QueryPlanData m row = QueryPlanData {
     inScope :: [Var],
     fvs :: [Var],
-    availablevs :: [Var]
+    availablevs :: [Var],
+    stmts :: Maybe [(AbstractDBStatement m row, String)] -- stmt, show
 }
-data QueryPlanNode2 = Exec2 Formula [Int]
+
+data QueryPlanNode2 m row = Exec2 Formula [Int]
                 | ExecInsert2  [InsertPlan]
-                | QPAnd2 (QueryPlan2) (QueryPlan2)
-                | QPOr2 (QueryPlan2) (QueryPlan2 )
-                | QPNot2 (QueryPlan2)
-                | QPExists2 Var (QueryPlan2)
+                | QPAnd2 (QueryPlan2 m row) (QueryPlan2 m row)
+                | QPOr2 (QueryPlan2 m row) (QueryPlan2 m row)
+                | QPNot2 (QueryPlan2 m row)
+                | QPExists2 Var (QueryPlan2 m row)
                 | QPTrue2
                 | QPFalse2
 
-type QueryPlan2 =  (QueryPlanData, QueryPlanNode2)
+type QueryPlan2 m row =  (QueryPlanData m row, QueryPlanNode2 m row)
 
 class ToTree a where
     toTree :: a -> Tree String
-instance Show QueryPlanData where
-    show (QueryPlanData inscope fvs avs) = "[" ++ show avs ++ "|" ++ show fvs ++ "|" ++ show inscope ++ "]"
+instance Show (QueryPlanData m row) where
+    show (QueryPlanData inscope fvs avs stmt) = "[" ++ show avs ++ "|" ++ show fvs ++ "|" ++ show inscope ++ "]"
 instance ToTree InsertPlan where
     toTree (InsertPlan lits formula dbs) = Node ("insert " ++ show lits ++ " where " ++ show formula ++ " at " ++ show dbs) []
-instance ToTree QueryPlan2 where
+instance ToTree (QueryPlan2 m row) where
     toTree (qpd, Exec2 f  dbs) = Node (show qpd ++ "exec " ++ show f ++ " at " ++ show dbs) []
     toTree (qpd, ExecInsert2 ips) = Node (show qpd ++ "exec") (map toTree ips)
     toTree (qpd, QPAnd2 qp1 qp2) = Node (show qpd ++ "and") [toTree qp1, toTree qp2]
@@ -361,37 +365,37 @@ checkQueryPlan dbs map1 (QPNot qp1) = do
 instance FreeVars InsertPlan where
     freeVars (InsertPlan lits form _) = freeVars form `union` freeVars lits
 
-calculateVars :: [Var] -> [Var] -> QueryPlan -> QueryPlan2
+calculateVars :: [Var] -> [Var] -> QueryPlan -> QueryPlan2 m row
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
 
-calculateVars1 :: [Var] -> QueryPlan -> QueryPlan2
+calculateVars1 :: [Var] -> QueryPlan -> QueryPlan2 m row
 calculateVars1  rvars (Exec formula dbxs) =
     let fvs = freeVars formula in
-        ( QueryPlanData{availablevs = [], fvs = fvs, inScope = rvars}, (Exec2  formula dbxs))
+        ( QueryPlanData{availablevs = [], fvs = fvs, inScope = rvars, stmts = Nothing}, (Exec2  formula dbxs))
 
 calculateVars1 rvars  (ExecInsert ips) =
     let fvs =  unions (map freeVars ips) in
-        ( QueryPlanData{availablevs = [], fvs = fvs, inScope = rvars} ,(ExecInsert2  ips))
+        ( QueryPlanData{availablevs = [], fvs = fvs, inScope = rvars, stmts = Nothing} ,(ExecInsert2  ips))
 
 calculateVars1 rvars  (QPOr qp1 qp2) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1
         qp2'@(qpd2, _) = calculateVars1 rvars qp2 in
-        ( QueryPlanData{availablevs = [], fvs = fvs qpd1 `intersect` fvs qpd2, inScope = rvars} , (QPOr2  qp1' qp2'))
+        ( QueryPlanData{availablevs = [], fvs = fvs qpd1 `intersect` fvs qpd2, inScope = rvars, stmts = Nothing} , (QPOr2  qp1' qp2'))
 
 calculateVars1  rvars (QPAnd qp1 qp2) =
     let qp2'@(qpd2, _) = calculateVars1 rvars qp2
         qp1'@(qpd1, _) = calculateVars1 (fvs qpd2 `union` rvars) qp1 in
-        ( QueryPlanData{availablevs = [], fvs = fvs qpd1 `union` fvs qpd2, inScope = rvars} , (QPAnd2  qp1' qp2'))
+        ( QueryPlanData{availablevs = [], fvs = fvs qpd1 `union` fvs qpd2, inScope = rvars, stmts = Nothing} , (QPAnd2  qp1' qp2'))
 
 calculateVars1 rvars  (QPExists v qp1) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
-        ( QueryPlanData{availablevs = [], fvs = fvs qpd1 \\ [v], inScope = rvars} , (QPExists2 v qp1'))
+        ( QueryPlanData{availablevs = [], fvs = fvs qpd1 \\ [v], inScope = rvars, stmts = Nothing} , (QPExists2 v qp1'))
 
 calculateVars1 rvars  (QPNot qp1) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
-        ( QueryPlanData{availablevs = [], fvs = fvs qpd1, inScope = rvars} , (QPNot2  qp1'))
+        ( QueryPlanData{availablevs = [], fvs = fvs qpd1, inScope = rvars, stmts = Nothing} , (QPNot2  qp1'))
 
-calculateVars2 :: [Var] -> QueryPlan2 -> QueryPlan2
+calculateVars2 :: [Var] -> QueryPlan2 m row -> QueryPlan2 m row
 calculateVars2  lvars (qpd, Exec2 formula dbxs) =
             ( qpd{availablevs = lvars}, (Exec2  formula dbxs))
 
@@ -416,51 +420,92 @@ calculateVars2 lvars  (qpd, QPNot2 qp1) =
             let qp1'@(qpd1, _) = calculateVars2 lvars qp1 in
                 ( qpd{availablevs = lvars} , (QPNot2  qp1'))
 
-execQueryPlan :: (Monad m, ResultRow row) => [Database m row] -> ([Var], ResultStream m row) -> QueryPlan2 -> ([Var], ResultStream m row     )
-execQueryPlan dbs (vars, rs) (qpd, Exec2  formula  (x : _)) =
+prepareQueryPlan :: (Monad m, ResultRow row) => [Database m row] -> QueryPlan2 m row -> m (QueryPlan2 m row)
+prepareQueryPlan dbs (qpd, e@(Exec2  formula  (x : _))) =
     if x >= length dbs || x < 0 then
         error "index out of range"
     else case dbs !! x of
-        Database db -> let vars2 = (fvs qpd) `intersect` (inScope qpd)
-                           vars' = (inScope qpd) in
-                           (vars', do
-                               row <- rs
-                               let qu = (Query vars2 formula)
-                               trace ("exec at " ++ show x ++ " " ++ show (translateQuery db qu vars )) $ return ()
-                               row2 <- doQuery db qu vars (pure row)
-                               return (row <> row2)
-                               )
-execQueryPlan dbs (vars, rs) (qpd, ExecInsert2 ips) =
-        (vars, do
+        Database db -> do
+            let vars = (fvs qpd) `intersect` (availablevs qpd)
+                vars2 = (fvs qpd) `intersect` (inScope qpd)
+                vars' = (inScope qpd)
+                qu = (Query vars2 formula)
+                stmtshow = "at " ++ show x ++ " " ++ show (translateQuery db qu vars )
+            trace ("prepare " ++ stmtshow) $ return ()
+            stmt <- prepareQuery db qu vars
+            return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
+prepareQueryPlan dbs  (qpd, e@(ExecInsert2 ips)) = do
+    stmts <- concat <$> mapM (\(InsertPlan lits formula xs) ->
+        mapM (\x ->
+            if x >= length dbs || x < 0 then
+                error "index out of range"
+            else
+                (case dbs !! x of
+                    Database db -> do
+                        let qu = (Insert lits formula)
+                            fvs = freeVars formula `union` freeVars lits
+                            vars = fvs `intersect` availablevs qpd
+                            stmtshow = "at " ++ show x ++ " " ++ show (translateInsert db qu vars )
+                        trace ("prepare " ++ stmtshow) $ return ()
+                        stmt <- (prepareInsert db qu vars)
+                        return (AbstractDBStatement stmt, stmtshow) )) xs) ips
+    return (qpd {stmts = Just  stmts}, e)
+prepareQueryPlan dbs  (qpd, QPOr2 qp1 qp2) = do
+    qp1' <- prepareQueryPlan dbs  qp1
+    qp2' <- prepareQueryPlan dbs  qp2
+    return (qpd, QPOr2 qp1' qp2')
+prepareQueryPlan dbs  (qpd, QPAnd2 qp1 qp2) = do
+    qp1' <- prepareQueryPlan dbs  qp1
+    qp2' <- prepareQueryPlan dbs  qp2
+    return (qpd, QPAnd2 qp1' qp2')
+prepareQueryPlan dbs  (qpd, QPNot2 qp1) = do
+    qp1' <- prepareQueryPlan dbs  qp1
+    return (qpd, QPNot2 qp1')
+prepareQueryPlan dbs  (qpd, QPExists2 v qp1) = do
+    qp1' <- prepareQueryPlan dbs  qp1
+    return (qpd, QPExists2 v qp1')
+
+prepareQueryPlan dbs  qp@(qpd, QPTrue2) = return qp
+prepareQueryPlan dbs  qp@(qpd, QPFalse2) = return qp
+
+returns qpd = availablevs qpd `union` fvs qpd `intersect` inScope qpd
+
+execQueryPlan :: (Monad m, ResultRow row) => ([Var], ResultStream m row) -> QueryPlan2 m row -> ([Var], ResultStream m row     )
+execQueryPlan (vars, rs) (qpd, Exec2  formula  (x : _)) =
+        (returns qpd, do
             row <- rs
-            mapM_ (\(InsertPlan lits formula xs) ->
-                mapM_ (\x ->
-                    if x >= length dbs || x < 0 then
-                        error "index out of range"
-                    else
-                        (case dbs !! x of
-                            Database db -> do
-                                let qu = (Insert lits formula)
-                                trace ("exec at " ++ show x ++ " " ++ show (translateInsert db qu vars )) $ return ()
-                                doInsert db qu vars (pure row))) xs) ips
-            return row)
-execQueryPlan dbs r (qpd, QPOr2 qp1 qp2) =
-    let (vars1, rs1) = execQueryPlan dbs r qp1
-        (vars2, rs2) = execQueryPlan dbs r qp2
+            let [(stmt, stmtshow)] = fromJust (stmts qpd)
+            case stmt of
+                AbstractDBStatement stmt -> do
+                    trace ("exec " ++ stmtshow) $ return ()
+                    row2 <- dbStmtExec stmt vars (pure row)
+                    return (transform vars (returns qpd) (row <> row2)))
+execQueryPlan  (vars, rs) (qpd, ExecInsert2 ips) =
+        (returns qpd, do
+            row <- rs
+            mapM_ (\(stmt, stmtshow) ->
+                case stmt of
+                    AbstractDBStatement stmt -> do
+                        trace ("exec " ++ stmtshow) $ return ()
+                        dbStmtExec stmt vars (pure row)) (fromJust (stmts qpd))
+            return (transform vars (returns qpd) row))
+execQueryPlan  r (qpd, QPOr2 qp1 qp2) =
+    let (vars1, rs1) = execQueryPlan  r qp1
+        (vars2, rs2) = execQueryPlan  r qp2
         vars = vars1 `union` vars2 in
         (vars, transformResultStream vars1 vars rs1 <|> transformResultStream vars2 vars rs2)
-execQueryPlan dbs r (qpd, QPAnd2 qp1 qp2) =
-    let r1 = execQueryPlan dbs r qp1 in
-        execQueryPlan dbs r1 qp2
-execQueryPlan dbs (vars, rs) (qpd, QPNot2 qp) = -- assume no unbounded vars under not
+execQueryPlan  r (qpd, QPAnd2 qp1 qp2) =
+    let r1 = execQueryPlan  r qp1 in
+        execQueryPlan  r1 qp2
+execQueryPlan  (vars, rs) (qpd, QPNot2 qp) = -- assume no unbounded vars under not
             (vars, filterResultStream rs (\row -> do
-                let (_, rs2) = execQueryPlan dbs (vars, (pure row)) qp
+                let (_, rs2) = execQueryPlan  (vars, (pure row)) qp
                 isResultStreamEmpty rs2))
-execQueryPlan dbs (vars, rs) (qpd, QPExists2 v qp) = -- assume no unbounded vars under exists except v
+execQueryPlan  (vars, rs) (qpd, QPExists2 v qp) = -- assume no unbounded vars under exists except v
             (vars, filterResultStream rs (\row -> do
-                let (_, rs2) = execQueryPlan dbs  (vars, (pure row)) qp
+                let (_, rs2) = execQueryPlan   (vars, (pure row)) qp
                 emp <- isResultStreamEmpty rs2
                 return (not emp)))
 
-execQueryPlan dbs r (qpd, QPTrue2) = ([], pure mempty)
-execQueryPlan dbs r (qpd, QPFalse2) = ([], Appl.empty)
+execQueryPlan  r (qpd, QPTrue2) = ([], pure mempty)
+execQueryPlan  r (qpd, QPFalse2) = ([], Appl.empty)

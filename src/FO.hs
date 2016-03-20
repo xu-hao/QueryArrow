@@ -76,7 +76,7 @@ getAllResults :: (Monad m, ResultRow row) => Query -> DBSession m row [row]
 getAllResults query = do
     dbs <- getDBsFromDBSession
     qp <- lift $ lift $ prepareQuery' dbs query []
-    let (_, stream) = execQueryPlan dbs ([], pure mempty) qp
+    let (_, stream) = execQueryPlan ([], pure mempty) qp
     lift $ lift $ getAllResultsInStream stream
 
 queryPlan :: (ResultRow row, Monad m) => [Database m row] -> Formula -> QueryPlan
@@ -98,14 +98,14 @@ execQuery qu = do
     dbs <- getDBsFromDBSession
     return (execQuery' dbs qu [])
 -}
-prepareQuery' :: (ResultRow row, Monad m) => [Database m row] -> Query -> [Var] -> m QueryPlan2
+prepareQuery' :: (ResultRow row, Monad m) => [Database m row] -> Query -> [Var] -> m (QueryPlan2 m row)
 prepareQuery' dbs (Query vars formula) rsvars = do
     let qp3 = queryPlan dbs formula
     effective <- (runExceptT (checkQueryPlan' dbs qp3))
     case effective of
         Left formula -> error ("can't find effective literals, try reordering the literals: " ++ show formula)
         Right _ ->
-            return (calculateVars rsvars vars qp3)
+            prepareQueryPlan dbs (calculateVars rsvars vars qp3)
 {-
 
     (do
@@ -145,7 +145,7 @@ execInsert  verifier rules insmap qu = do
     dbs <- getDBsFromDBSession
     return (execInsert' dbs verifier rules insmap qu [])
 -}
-prepareInsert' :: (ResultRow row, Monad m, MonadIO m) => [Database m row] -> TheoremProver -> [Input] -> InsertMap -> Insert -> [Var] -> m QueryPlan2
+prepareInsert' :: (ResultRow row, Monad m, MonadIO m) => [Database m row] -> TheoremProver -> [Input] -> InsertMap -> Insert -> [Var] -> m (QueryPlan2 m row)
 prepareInsert' dbs verifier rules insmap qu vars = do
     let formulas = map (\(_,_,a) -> a) rules
     let insp = insertPlan dbs insmap qu
@@ -153,7 +153,7 @@ prepareInsert' dbs verifier rules insmap qu vars = do
     case effective of
         Left formula -> error ("can't find effective literals, try reordering the literals: " ++ show qu)
         Right _ ->
-            return (calculateVars vars [] insp)
+            prepareQueryPlan dbs (calculateVars vars [] insp)
 {-    liftIO $ print "calling verifier"
     vres0 <- liftIO $    validate verifier qu
     case vres0 of
@@ -186,10 +186,11 @@ rewriteInsert qr ir dr (Insert lits form) = (Insert lits2 (Conjunction (form : f
                                         Nothing -> ([lit], [])
                                         Just (atoms, h) -> (map (Lit s) atoms, [rewrites defaultRewritingLimit h qr]) ) lits
 
-instance (Monad m ) => DBStatement m QueryPlan2 where
+instance (Monad m, ResultRow row) => DBStatement m row (QueryPlan2 m row) where
     dbStmtClose qp = return ()
+    dbStmtExec qp vars rs = snd (execQueryPlan  (vars, rs) qp)
 
-instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row QueryPlan2 where
+instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPlan2 m row) where
     dbBegin (TransDB _ dbs _ _ _ _ _) = mapM_ (\(Database db) -> dbBegin db) dbs
     dbCommit (TransDB _ dbs _ _ _ _ _) =     mapM_ (\(Database db) -> dbCommit db) dbs
     dbRollback (TransDB _ dbs _ _ _ _ _) =    mapM_ (\(Database db) -> dbRollback db) dbs
@@ -209,7 +210,7 @@ instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row QueryPlan
         prepareQuery' dbs (rewriteQuery qr qu)
     prepareInsert (TransDB _ dbs verifier rules _ (qr, ir, dr) insmap) qu =
         prepareInsert' dbs verifier rules insmap (rewriteInsert qr ir dr qu)
-    exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
+    -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
     supported _ _ = True
     supportedInsert _ _ _ = True
 
