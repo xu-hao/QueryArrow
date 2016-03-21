@@ -4,16 +4,16 @@ module Rewriting where
 
 import FO.Data
 
-import Control.Lens.Setter
-import Data.Map.Strict (empty, singleton, union)
+import Data.Map.Strict (empty, singleton, union, fromList)
 import Control.Monad
-import Debug.Trace
+import Data.List ((\\))
+-- import Debug.Trace
 
 
 type Pattern = Atom
 
-data QueryRewritingRule = QueryRewritingRule Pattern Formula deriving Show
-data InsertRewritingRule = InsertRewritingRule Pattern [Atom] Formula deriving Show
+data QueryRewritingRule = QueryRewritingRule Pattern PureFormula deriving Show
+data InsertRewritingRule = InsertRewritingRule Pattern Formula deriving Show
 
 class Match a b where
     match :: a -> b -> Maybe Substitution
@@ -34,39 +34,89 @@ instance Match Atom Atom where
                                                             return (union sub sub2)) empty (zip args args2)
                                         | otherwise = Nothing
 
--- doesn't satisfy lens laws
-atoms :: ASetter Formula Formula Atom Formula
-atoms = sets (\subform form0 -> case form0 of
-                (Atomic a2) ->
-                    subform a2
-                (Disjunction disjs) ->
-                    (Disjunction (over (mapped . atoms) (subform) disjs))
-                (Conjunction conjs) ->
-                    (Conjunction (over (mapped . atoms) ( subform) conjs))
-                (Exists v form) ->
-                    (Exists v (over (atoms) ( subform) form))
-                (Not form) ->
-                    (Not (over (atoms) (subform) form))
-                (Forall v form) ->
-                    (Forall v (over (atoms) ( subform) form)))
 
-matches :: Pattern -> ASetter Atom Formula Substitution Formula
-matches p  = sets (\subform a -> case match p a of
-                        Nothing -> Atomic a
-                        Just sub -> subform sub)
 
-rewrite :: Formula -> QueryRewritingRule -> Formula
-rewrite form2 (QueryRewritingRule p form)  =
-    over (atoms . matches p) (\sub -> subst sub form) form2
 
-rewrites    :: Int -> Formula -> [QueryRewritingRule] -> Formula
-rewrites n form rules   | n < 0     = error "maximum number of rewrites reached"
-                        | otherwise = let form' = foldl rewrite form rules in
-                                        if form == form' then form else rewrites (n - 1) form' rules
+rewriteAtomic1' :: [Var] -> Atom -> [QueryRewritingRule] -> NewEnv (Maybe PureFormula)
+rewriteAtomic1' _ _ [] = return Nothing
+rewriteAtomic1' ext a2 ((QueryRewritingRule p form) : rs) =
+    case match p a2 of
+        Nothing -> rewriteAtomic1' ext a2 rs
+        Just sub -> do
+            let fvp = freeVars p
+                fvform = freeVars form
+                fvold = (fvform \\ fvp) \\ ext
+            fvnew <- new fvold
+            let sub2 = fromList (zip fvold (map VarExpr fvnew))
+            return (Just (subst (sub `union` sub2) form))
 
-rewrites1 :: Atom -> [InsertRewritingRule] -> Maybe ([Atom], Formula)
-rewrites1 _ [] = Nothing
-rewrites1 a (InsertRewritingRule p as form : rs) =
-    case match p a of
-        Nothing -> rewrites1 a rs
-        Just sub -> Just (subst sub as, subst sub form)
+rewriteAtomic1 :: [Var] -> Atom -> [InsertRewritingRule] -> NewEnv (Maybe Formula)
+rewriteAtomic1 _ _ [] = return Nothing
+rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
+    case match p a2 of
+        Nothing -> rewriteAtomic1 ext a2 rs
+        Just sub -> do
+            let fvp = freeVars p
+                fvform = freeVars form
+                fvold = (fvform \\ fvp) \\ ext
+            fvnew <- new fvold
+            let sub2 = fromList (zip fvold (map VarExpr fvnew))
+            return (Just (subst (sub `union` sub2) form))
+
+rewrite1 :: [Var] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrite1 ext  qr qr2 ir dr form0 =
+    case form0 of
+        (FAtomic a2) -> do
+            res <- rewriteAtomic1 ext a2 qr2
+            return (case res of
+                Nothing -> form0
+                Just form -> form)
+        (FChoice disj1 disj2) ->
+            (FChoice <$> rewrite1 ext qr qr2 ir dr disj1 <*> rewrite1 ext qr qr2 ir dr disj2)
+        (FSequencing conj1 conj2) ->
+            (FSequencing <$> rewrite1 ext qr qr2 ir dr conj1 <*> rewrite1 ext qr qr2 ir dr conj2)
+        (FOne) ->
+            return FOne
+        (FZero) ->
+            return FZero
+        (FInsert lit@(Lit s a)) -> do
+            res <- rewriteAtomic1 ext a (case s of
+                            Pos -> ir
+                            Neg -> dr)
+            return (case res of
+                        Nothing -> FInsert lit
+                        Just form -> form)
+
+        (FClassical form) ->
+            (FClassical <$> rewrite1' ext  qr  form)
+        (FTransaction form) ->
+            FTransaction <$> rewrite1 ext qr qr2 ir dr form
+
+rewrite1' :: [Var] -> [QueryRewritingRule] -> PureFormula -> NewEnv PureFormula
+rewrite1' ext  qr form0 =
+    case form0 of
+        (Atomic a2) -> do
+            res <- rewriteAtomic1' ext a2 qr
+            return (case res of
+                Nothing -> form0
+                Just form -> form)
+        (Disjunction disj1 disj2) ->
+            (Disjunction <$> rewrite1' ext qr disj1 <*> rewrite1' ext qr disj2)
+        (Conjunction conj1 conj2) ->
+            (Conjunction <$> rewrite1' ext qr conj1 <*> rewrite1' ext qr conj2)
+        CTrue -> return CTrue
+        CFalse -> return CFalse
+        (Exists v form) ->
+            (Exists v <$> rewrite1' ext  qr form)
+        (Not form) ->
+            (Not <$> rewrite1' ext  qr form)
+        (Forall v form) ->
+            (Forall v <$> rewrite1' ext  qr form)
+
+rewrites    :: Int -> [Var] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrites n ext  rules rules2 ir dr form | n < 0     = error "maximum number of rewrites reached"
+                        | otherwise = do
+                            form' <-  rewrite1 ext rules rules2 ir dr form
+                            if form == form'
+                                then return form
+                                else rewrites (n - 1) ext rules rules2 ir dr form'

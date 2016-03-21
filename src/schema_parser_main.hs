@@ -8,7 +8,7 @@ import System.Environment
 import Language.Haskell.TH
 import SQL.SQL hiding (schema)
 import FO.Data
-import FO.Parser
+import Prover.Parser
 
 import SchemaParser
 

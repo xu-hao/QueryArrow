@@ -9,12 +9,18 @@ import ICAT
 import SQL.ICAT
 import Config
 import SQL.SQL
+import Database.HDBC
+import Control.Monad.IO.Class
 
 import Database.HDBC.PostgreSQL
 
 instance HDBCConnection Connection where
         showSQLQuery _ (vars, query, params) = show query
-        showSQLInsert _ (query, params)= show query
+        hdbcCommit conn = do
+            liftIO $ commit conn
+            return True
+        hdbcPrepare conn = return True
+        hdbcRollback conn = liftIO $ rollback conn
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
@@ -28,4 +34,4 @@ data NextidTrans = NextidTrans
 instance TranslateSequence NextidTrans SQLQuery where
     translateSequenceQuery trans =
         let v = Var "nextid" in
-            (([v], SQL {sqlSelect = [SQLFuncExpr "nextval" [SQLStringConstExpr "R_ObjectId"]], sqlFrom = [], sqlWhere = strue}, []), v)
+            (([v], SQLQ (SQL0 {sqlSelect = [SQLFuncExpr "nextval" [SQLStringConstExpr "R_ObjectId"]], sqlFrom = [], sqlWhere = SQLTrueCond}), []), v)

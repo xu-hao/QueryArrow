@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, UndecidableInstances #-}
 module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
-    CypherMapping, translateQueryToCypher, translateInsertToCypher, simplifyDependencies', unifyAll, unifysCond, unifyOne, normalizeGraphPatternCond,
+    CypherMapping, translateQueryToCypher, simplifyDependencies', unifyAll, unifysCond, unifyOne, normalizeGraphPatternCond,
     CypherCond(..), CypherQuery, GraphPattern(..), NodePattern(..), PropertyKey(..), Cypher(..), cypherVarExprMap, CypherVarExprMap(..),
     CypherBuiltIn(..), CypherPredTableMap, OneGraphPattern(..),CypherTrans(..), (.=.), (.<>.), (.&&.), (.||.),
-    nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, var, cnull, ctrue, dot, app, match,
+    nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, var, cnull, dot, app, match,
     create, set, delete, cnot, cwhere, creturn, cor, cfalse) where
 
 import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, conj, disj, Unify,unify)
@@ -54,8 +54,10 @@ data CypherValue = CypherIntValue Int
                  | CypherNullValue
 
 data CypherCond = CypherCompCond CypherOper CypherExpr CypherExpr
-                | CypherAndCond [CypherCond]
-                | CypherOrCond [CypherCond]
+                | CypherAndCond CypherCond CypherCond
+                | CypherOrCond CypherCond CypherCond
+                | CypherTrueCond
+                | CypherFalseCond
                 | CypherNotCond CypherCond
                 | CypherExistsCond CypherCond
                 | CypherNotExistsCond CypherCond
@@ -64,29 +66,32 @@ data CypherCond = CypherCompCond CypherOper CypherExpr CypherExpr
 
 
 getConjuncts :: CypherCond -> [CypherCond]
-getConjuncts (CypherAndCond cs) = cs
+getConjuncts (CypherAndCond c1 c2) = getConjuncts c1 ++ getConjuncts c2
 getConjuncts c = [c]
 
 getDisjuncts :: CypherCond -> [CypherCond]
-getDisjuncts (CypherOrCond cs) = cs
+getDisjuncts (CypherOrCond c1 c2) = getDisjuncts c1 ++ getDisjuncts c2
 getDisjuncts c = [c]
 
 conj :: [CypherCond] -> CypherCond
-conj [c] = c
-conj cs = CypherAndCond cs
+conj = foldl (.&&.) CypherTrueCond
 
 disj :: [CypherCond] -> CypherCond
-disj [c] = c
-disj cs = CypherOrCond cs
-
-ctrue = conj []
-cfalse = disj []
+disj = foldl (.||.) CypherFalseCond
 
 (.&&.) :: CypherCond -> CypherCond -> CypherCond
-a .&&. b = conj (getConjuncts a ++ getConjuncts b)
+CypherTrueCond .&&. b = b
+CypherFalseCond .&&. b = CypherFalseCond
+a .&&. CypherTrueCond = a
+a .&&. CypherFalseCond = CypherFalseCond
+a .&&. b = CypherAndCond a b
 
 (.||.) :: CypherCond -> CypherCond -> CypherCond
-a .||. b = disj (getDisjuncts a ++ getDisjuncts b)
+CypherFalseCond .||. b = b
+CypherTrueCond .||. b = CypherTrueCond
+a .||. CypherFalseCond = a
+a .||. CypherTrueCond = CypherTrueCond
+a .||. b = CypherOrCond a b
 
 (.=.) :: CypherExpr -> CypherExpr -> CypherCond
 a .=. b = CypherCompCond "=" a b
@@ -98,7 +103,7 @@ data Cypher = Cypher {cypherReturn :: [ CypherExpr ], cypherMatch :: GraphPatter
 
 instance Monoid Cypher where
     mappend (Cypher r1 m1 w1 s1 c1 d1) (Cypher r2 m2 w2 s2 c2 d2) = Cypher (r1 ++ r2) (m1 <> m2) (w1 .&&. w2) (s1 ++ s2) (c1 <> c2) (d1 ++ d2)
-    mempty = Cypher [] mempty ctrue [] mempty []
+    mempty = Cypher [] mempty CypherTrueCond [] mempty []
 
 -- graph patterns
 
@@ -244,13 +249,23 @@ cypherStringEscape = concatMap f where
     f '\\' = "\\\\"
     f a = [a]
 
+showN _ 0 = "..."
+showN (CypherCompCond op lhs rhs) n = show lhs ++ " " ++ op ++ " " ++ show rhs
+showN (CypherTrueCond) _ = "@True"
+showN (CypherFalseCond) _ = "@False"
+showN (CypherPatternCond (GraphPattern [] [])) _ = "@Graph"
+showN (CypherAndCond a b) n = "(" ++ showN a (n-1) ++ " AND " ++ showN b (n-1) ++ ")"
+showN (CypherOrCond a b) n = "(" ++ showN a (n-1) ++ " OR " ++ showN b (n-1) ++ ")"
+showN (CypherPatternCond (GraphPattern as as2)) n = "(" ++ intercalate " AND " (map show (as ++ as2)) ++ ")"
+showN (CypherNotCond a) n = "NOT (" ++ showN a (n-1) ++ ")"
+showN (CypherExistsCond cypher) n = "(EXISTS (" ++ showN cypher (n-1) ++ "))"
 instance Show CypherCond where
     show (CypherCompCond op lhs rhs) = show lhs ++ " " ++ op ++ " " ++ show rhs
-    show (CypherAndCond []) = "@True"
-    show (CypherOrCond []) = "@False"
+    show (CypherTrueCond) = "@True"
+    show (CypherFalseCond) = "@False"
     show (CypherPatternCond (GraphPattern [] [])) = "@Graph"
-    show (CypherAndCond as) = "(" ++ intercalate " AND " (map show as) ++ ")"
-    show (CypherOrCond as) = "(" ++ intercalate " OR " (map show as) ++ ")"
+    show (CypherAndCond a b) = "(" ++ show a ++ " AND " ++ show b ++ ")"
+    show (CypherOrCond a b) = "(" ++ show a ++ " OR " ++ show b ++ ")"
     show (CypherPatternCond (GraphPattern as as2)) = "(" ++ intercalate " AND " (map show (as ++ as2)) ++ ")"
     show (CypherNotCond a) = "NOT (" ++ show a ++ ")"
     show (CypherExistsCond cypher) = "(EXISTS (" ++ show cypher ++ "))"
@@ -269,7 +284,7 @@ instance Show Cypher where
                     []-> ""
                     _ -> "MATCH " ++ intercalate "," (map show patterns),
                 case conds of
-                    CypherAndCond [] -> ""
+                    CypherTrueCond -> ""
                     _ -> "WHERE " ++ show conds,
                 case sets of
                     [] -> ""
@@ -316,7 +331,7 @@ cor :: Cypher -> Cypher -> Cypher
 cor (Cypher r1 m1 w1 s1 c1 d1) (Cypher r2 m2 w2 s2 c2 d2) = Cypher (r1 ++ r2) (m1 <> m2) (w1 .||. w2) (s1 ++ s2) (c1 <> c2) (d1 ++ d2)
 
 false :: Cypher
-false = Cypher [] mempty cfalse [] mempty []
+false = Cypher [] mempty CypherFalseCond [] mempty []
 
 matchToWhere :: GraphPattern -> CypherCond
 matchToWhere = CypherPatternCond
@@ -330,16 +345,16 @@ cwhere :: CypherCond -> Cypher
 cwhere c = Cypher [] mempty c [] mempty []
 
 creturn :: [CypherExpr] -> Cypher
-creturn rs = Cypher rs mempty ctrue [] mempty []
+creturn rs = Cypher rs mempty CypherTrueCond [] mempty []
 
 set :: [(CypherExpr, CypherExpr)] -> Cypher
-set ss = Cypher [] mempty ctrue ss mempty []
+set ss = Cypher [] mempty CypherTrueCond ss mempty []
 
 create :: [OneGraphPattern] -> Cypher
-create cs = Cypher [] mempty ctrue [] (GraphPattern cs []) mempty
+create cs = Cypher [] mempty CypherTrueCond [] (GraphPattern cs []) mempty
 
 delete :: [CypherVar] -> Cypher
-delete ds = Cypher [] mempty ctrue [] mempty ds
+delete ds = Cypher [] mempty CypherTrueCond [] mempty ds
 
 -- fv
 
@@ -365,8 +380,10 @@ instance FV NodePattern where
 
 instance FV CypherCond where
     fv (CypherCompCond op a b) = fv a `union` fv b
-    fv (CypherAndCond as) = unions (map fv as)
-    fv (CypherOrCond as) = unions (map fv as)
+    fv (CypherAndCond a b) = (fv a) `union` (fv b)
+    fv (CypherOrCond a b) = (fv a) `union` (fv b)
+    fv (CypherTrueCond) = []
+    fv (CypherFalseCond) = []
     fv (CypherNotCond a) = fv a
     fv (CypherPatternCond a) = fv a
     fv (CypherExistsCond a) = fv a
@@ -428,8 +445,10 @@ instance Subst GraphPattern where
 
 instance Subst CypherCond where
     subst varmap (CypherCompCond op a b) = CypherCompCond op (subst varmap a) (subst varmap b)
-    subst varmap (CypherAndCond as) = CypherAndCond (map (subst varmap) as)
-    subst varmap (CypherOrCond as) = CypherOrCond (map (subst varmap) as)
+    subst varmap (CypherAndCond a b) = CypherAndCond (subst varmap a) (subst varmap b)
+    subst varmap (CypherOrCond a b) = CypherOrCond (subst varmap a) (subst varmap b)
+    subst _ CypherTrueCond = CypherTrueCond
+    subst _ CypherFalseCond = CypherFalseCond
     subst varmap (CypherNotCond a) = CypherNotCond (subst varmap a)
     subst varmap (CypherPatternCond a) = CypherPatternCond (subst varmap a)
     subst varmap (CypherExistsCond a) = CypherExistsCond (subst varmap a)
@@ -501,10 +520,14 @@ instance Unify CypherExpr where
     unify _ _ = Nothing
 
 instance Unify CypherCond where
-    unify (CypherAndCond as) (CypherAndCond as2) = do
-        unify as as2
-    unify (CypherOrCond as) (CypherOrCond as2) = do
-        unify as as2
+    unify (CypherAndCond a b) (CypherAndCond a2 b2) = do
+        unify [a, b] [a2, b2]
+    unify (CypherOrCond a b) (CypherOrCond a2 b2) = do
+        unify [a, b] [a2, b2]
+    unify (CypherTrueCond ) (CypherTrueCond) = do
+        return mempty
+    unify (CypherFalseCond) (CypherFalseCond) = do
+        return mempty
     unify (CypherNotCond a) (CypherNotCond a2) =
         unify a a2
     unify (CypherExistsCond a) (CypherExistsCond a2) = do
@@ -662,8 +685,10 @@ mergeCreateAndWhere2 cres sets  =
       (GraphPattern (elems map1') [], sets')
 
 doMergeCreateAndWhere2 :: CypherCond -> State (Map CypherVar OneGraphPattern) CypherCond
-doMergeCreateAndWhere2 (CypherAndCond as) = conj <$> mapM doMergeCreateAndWhere2 as
-doMergeCreateAndWhere2 (CypherOrCond as) = disj <$> mapM doMergeCreateAndWhere2 as
+doMergeCreateAndWhere2 (CypherAndCond a b) = (.&&.) <$> doMergeCreateAndWhere2 a <*>  doMergeCreateAndWhere2 b
+doMergeCreateAndWhere2 (CypherOrCond a b) = (.||.) <$> doMergeCreateAndWhere2 a <*>  doMergeCreateAndWhere2 b
+doMergeCreateAndWhere2 (CypherTrueCond) = return CypherTrueCond
+doMergeCreateAndWhere2 (CypherFalseCond) = return CypherFalseCond
 doMergeCreateAndWhere2 cond@(CypherNotCond a) = return cond -- CypherNotCond <$> doMergeCreateAndWhere2 a
 doMergeCreateAndWhere2 cond@(CypherExistsCond _) = return cond
 -- only merge mergable patterns
@@ -674,8 +699,8 @@ doMergeCreateAndWhere2 c@(CypherPatternCond (GraphPattern [GraphNodePattern (Nod
         Just (GraphNodePattern (NodePattern _ _ ps2)) ->
             let ps' = ps \\ ps2 in
                 case ps' of
-                    [] -> ctrue
-                    _ -> cfalse
+                    [] -> CypherTrueCond
+                    _ -> CypherFalseCond
         _ -> c)
 doMergeCreateAndWhere2 c@(CypherPatternCond (GraphPattern [GraphEdgePattern ns (NodePattern (Just v) l ps) nt] [])) =  do
     map1 <- get
@@ -684,8 +709,8 @@ doMergeCreateAndWhere2 c@(CypherPatternCond (GraphPattern [GraphEdgePattern ns (
         Just (GraphEdgePattern _ (NodePattern _ _ ps2) _) ->
             let ps' = ps \\ ps2 in
                 case ps' of
-                    [] -> ctrue
-                    _ -> cfalse
+                    [] -> CypherTrueCond
+                    _ -> CypherFalseCond
         _ -> c)
 doMergeCreateAndWhere2 c = return c -- for now ignore other patterns
 
@@ -714,7 +739,12 @@ separateMatchFromWhere (Cypher r m w s c d) =
         trace ("separateMatchFromWhere: " ++ show (Cypher r m w s c d)) $ Cypher r (m <> m') w' s c d
 
 separateMatchFromWhere2 :: CypherCond -> (GraphPattern, CypherCond)
-separateMatchFromWhere2 (CypherAndCond as) = (mconcat *** conj) (unzip (map separateMatchFromWhere2 as))
+separateMatchFromWhere2 (CypherAndCond a b) =
+    let (gp1, c1) = separateMatchFromWhere2 a
+        (gp2, c2) = separateMatchFromWhere2 b in
+        (mappend gp1 gp2, c1 .&&. c2)
+separateMatchFromWhere2 (CypherTrueCond) =
+        (mempty, CypherTrueCond)
 separateMatchFromWhere2 (CypherPatternCond (GraphPattern [GraphNodePattern (NodePattern (Just v) l ps)] [])) =
     (GraphPattern [GraphNodePattern (NodePattern (Just v) l psconst)] [], cond) where
         (psconst, psnonconst) = partition (\(p,e)->isCypherConstExpr e) ps
@@ -736,18 +766,20 @@ separateMatchFromWhere2 a = (GraphPattern [] [], a)
 eliminateUnboundedVars :: Cypher -> Cypher
 eliminateUnboundedVars (Cypher r m w s c d) =
     let fvm = (fv m)
-        (w', (varmap, cond)) = runState (eliminateUnboundedVars2 fvm w) (mempty, ctrue) in
+        (w', (varmap, cond)) = runState (eliminateUnboundedVars2 fvm w) (mempty, CypherTrueCond) in
         trace ("eliminateUnboundedVars: " ++ show (Cypher r m w s c d)) $ subst varmap (Cypher r m (w' .&&. cond) s c d)
 
 eliminateUnboundedVars2 :: [CypherVar] -> CypherCond -> State (CypherVarExprMap, CypherCond) CypherCond
-eliminateUnboundedVars2 vars (CypherAndCond as) = conj <$> mapM (eliminateUnboundedVars2 vars) as
-eliminateUnboundedVars2 vars (CypherOrCond as) = disj <$> mapM (eliminateUnboundedVars2 vars) as
+eliminateUnboundedVars2 vars (CypherAndCond a b) = (.&&.) <$> eliminateUnboundedVars2 vars a <*> eliminateUnboundedVars2 vars b
+eliminateUnboundedVars2 vars (CypherOrCond a b) = (.||.) <$> eliminateUnboundedVars2 vars a <*> eliminateUnboundedVars2 vars b
+eliminateUnboundedVars2 vars (CypherTrueCond) = return CypherTrueCond
+eliminateUnboundedVars2 vars (CypherFalseCond) = return CypherFalseCond
 eliminateUnboundedVars2 vars (CypherNotCond a) = CypherNotCond <$> eliminateUnboundedVars2 vars a
 eliminateUnboundedVars2 vars cond@(CypherExistsCond c) = CypherExistsCond <$> eliminateUnboundedVars2 vars c
 eliminateUnboundedVars2 vars (CypherPatternCond p) = do
     p' <- eliminateUnboundedVars3 vars p
     return (case p' of
-        Nothing -> ctrue
+        Nothing -> CypherTrueCond
         Just p' -> CypherPatternCond p')
 eliminateUnboundedVars2 vars c@(CypherCompCond op e1 e2) =
     (if null (fv e1 \\ vars)
@@ -755,10 +787,12 @@ eliminateUnboundedVars2 vars c@(CypherCompCond op e1 e2) =
             then return c
             else do
                 addToVarMap (extractVarFromExpr e2) e1
-                return ctrue
+                trace ("add " ++ show e2 ++ " :=: " ++ show e1) $ return ()
+                return CypherTrueCond
         else do
             addToVarMap (extractVarFromExpr e1) e2
-            return ctrue)
+            trace ("add " ++ show e1 ++ " :=: " ++ show e2) $ return ()
+            return CypherTrueCond)
 
 addToVarMap :: CypherVar -> CypherExpr -> State (CypherVarExprMap, CypherCond) ()
 addToVarMap var expr = do
@@ -827,14 +861,17 @@ normalizeGraphPattern :: Cypher -> Cypher
 normalizeGraphPattern (Cypher r m w s c d) = trace ("normalizeGraphPattern: " ++ show (Cypher r m w s c d)) $ Cypher r m (normalizeGraphPatternCond w) s c d
 
 normalizeGraphPatternCond :: CypherCond -> CypherCond
-normalizeGraphPatternCond (CypherAndCond as) =
-    let (graphpatterns, nongraphpatterns) = partition (\c -> case c of CypherPatternCond _ -> True ; _ -> False) (fmap normalizeGraphPatternCond as) in
+normalizeGraphPatternCond a@(CypherAndCond _ _) =
+    let as = getConjuncts a
+        (graphpatterns, nongraphpatterns) = partition (\c -> case c of CypherPatternCond _ -> True ; _ -> False) as in
         normalizeGraphPatternCond (CypherPatternCond (mconcat (map (\(CypherPatternCond p)->p) graphpatterns))) .&&. conj nongraphpatterns
 normalizeGraphPatternCond (CypherNotCond a) = CypherNotCond (normalizeGraphPatternCond a)
-normalizeGraphPatternCond (CypherOrCond as) = disj (map normalizeGraphPatternCond as)
+normalizeGraphPatternCond (CypherOrCond a b) =  ( normalizeGraphPatternCond a) .||. ( normalizeGraphPatternCond b)
+normalizeGraphPatternCond CypherTrueCond = CypherTrueCond
+normalizeGraphPatternCond CypherFalseCond = CypherFalseCond
 normalizeGraphPatternCond (CypherPatternCond p) =
-        let onegraphs = splitGraphPattern p in
-            conj (map (CypherPatternCond) (splitGraphPattern (mconcat onegraphs)))
+        let onegraphs = splitGraphPattern (mconcat (splitGraphPattern p)) in
+            conj (map (CypherPatternCond) onegraphs)
 normalizeGraphPatternCond (CypherExistsCond c) = CypherExistsCond (normalizeGraphPatternCond c)
 normalizeGraphPatternCond c = c
 
@@ -843,10 +880,12 @@ normalizeCond (Cypher r m w s c d) =
     trace ("normalizeCond: " ++ show (Cypher r m w s c d)) $ Cypher r m (normalizeCond2 w) s c d
 
 normalizeCond2 :: CypherCond -> CypherCond
-normalizeCond2 (CypherAndCond as) =
-    foldl (.&&.) ctrue (map normalizeCond2 as)
-normalizeCond2 (CypherOrCond as) =
-    foldl (.||.) cfalse (map normalizeCond2 as)
+normalizeCond2 CypherTrueCond = CypherTrueCond
+normalizeCond2 CypherFalseCond = CypherFalseCond
+normalizeCond2 (CypherAndCond a b) =
+    normalizeCond2 a .&&. normalizeCond2 b
+normalizeCond2 (CypherOrCond a b) =
+    normalizeCond2 a .||. normalizeCond2 b
 normalizeCond2 (CypherNotCond a) =
     CypherNotCond (normalizeCond2 a)
 normalizeCond2 (CypherExistsCond c) = CypherExistsCond (normalizeCond2 c)
@@ -856,11 +895,14 @@ mergeAllPatternInWhere :: Cypher -> Cypher
 mergeAllPatternInWhere (Cypher r m w s c d) = trace ("mergeAllPatternInWhere: " ++ show (Cypher r m w s c d)) $ Cypher r m (mergeAllPatternInWhere2 w) s c d
 
 mergeAllPatternInWhere2 :: CypherCond -> CypherCond
-mergeAllPatternInWhere2 (CypherAndCond as) =
-    let (graphpatterns, nongraphpatterns) = partition (\c -> case c of CypherPatternCond _ -> True ; _ -> False) (fmap mergeAllPatternInWhere2 as) in
-        mergeAllPatternInWhere2 (CypherPatternCond (mconcat (map (\(CypherPatternCond (GraphPattern ps ps2))->GraphPattern (ps ++ ps2) []) graphpatterns))) .&&. conj nongraphpatterns
+mergeAllPatternInWhere2 CypherTrueCond = CypherTrueCond
+mergeAllPatternInWhere2 CypherFalseCond = CypherFalseCond
+mergeAllPatternInWhere2 a@(CypherAndCond _ _) =
+    let as = getDisjuncts a
+        (graphpatterns, nongraphpatterns) = partition (\c -> case c of CypherPatternCond _ -> True ; _ -> False) as in
+        CypherPatternCond (mconcat (concatMap (\(CypherPatternCond (GraphPattern ps ps2))->[GraphPattern ps [], GraphPattern ps2 []]) graphpatterns)) .&&. conj nongraphpatterns
 mergeAllPatternInWhere2 (CypherNotCond a) = CypherNotCond (mergeAllPatternInWhere2 a)
-mergeAllPatternInWhere2 (CypherOrCond as) = disj (map mergeAllPatternInWhere2 as)
+mergeAllPatternInWhere2 (CypherOrCond a b) = mergeAllPatternInWhere2 a .||. mergeAllPatternInWhere2 b
 mergeAllPatternInWhere2 c@(CypherPatternCond p) = c
 mergeAllPatternInWhere2 (CypherExistsCond c) = CypherExistsCond (mergeAllPatternInWhere2 c)
 mergeAllPatternInWhere2 c = c
@@ -874,41 +916,61 @@ mergeAllPatternInMatch2 (GraphPattern as as2) = mappend (GraphPattern as []) (Gr
 translateQueryToCypher :: Query -> TransMonad CypherQuery
 translateQueryToCypher (Query vars conj) = do
     cypher <- translateFormulaToCypher conj
-    cypher' <- simplifyDependencies cypher
+    cypher'0 <- simplifyDependencies (cypher)
     (_,_,_,fovarcypherexprmap) <- get
     let exprsMaybe = map (`lookup` fovarcypherexprmap) vars
     let exprs = map (\(v, em) -> fromMaybe (error ("unbounded var " ++ show v ++ " in " ++ show conj)) em) (zip vars exprsMaybe)
-    return (vars, postprocess (cypher'  <>  creturn exprs ))
+    let cypher' = postprocess (cypher'0 <> creturn exprs)
+    return (vars,  cypher')
+
+cfalse = Cypher [] mempty CypherFalseCond [] mempty []
 
 translateFormulaToCypher :: Formula -> TransMonad Cypher
-translateFormulaToCypher (Conjunction formulas) =
-    mconcat <$> mapM translateFormulaToCypher formulas
+translateFormulaToCypher (FSequencing form1 form2) = do
+    mappend <$> translateFormulaToCypher form1 <*>  translateFormulaToCypher form2
 
-translateFormulaToCypher (Disjunction disjs) =
-    foldM (\c f -> do
-      f' <- translateFormulaToCypher f
-      return (c `cor` f')) (cwhere cfalse) disjs
+translateFormulaToCypher (FChoice disj1 disj2) =
+    cor <$> translateFormulaToCypher disj1 <*> translateFormulaToCypher disj2
+translateFormulaToCypher FOne = return mempty
+translateFormulaToCypher FZero = return cfalse
 
-translateFormulaToCypher (Atomic a) =
+translateFormulaToCypher (FAtomic a) = do
+    cypher <- translateQueryAtomToCypher Pos a
+    return (cypher)
+
+translateFormulaToCypher (FInsert lits@(Lit sign0 a)) = do
+    case sign0 of
+        Pos -> translateInsertAtomToCypher a
+        Neg -> translateDeleteAtomToCypher a
+
+translateFormulaToCypher' :: PureFormula -> TransMonad Cypher
+translateFormulaToCypher' (Conjunction form1 form2) =
+    mappend <$> translateFormulaToCypher' form1 <*>  translateFormulaToCypher' form2
+
+translateFormulaToCypher' (Disjunction disj1 disj2) =
+    cor <$> translateFormulaToCypher' disj1 <*> translateFormulaToCypher' disj2
+
+translateFormulaToCypher' CTrue = return mempty
+translateFormulaToCypher' CFalse = return cfalse
+translateFormulaToCypher' (Atomic a) =
     translateQueryAtomToCypher Pos a
 
-translateFormulaToCypher (Not (Atomic a)) =
+translateFormulaToCypher' (Not (Atomic a)) =
     translateQueryAtomToCypher Neg a
 
-translateFormulaToCypher (Exists var formula) = do
+translateFormulaToCypher' (Exists var formula) = do
 -- assume that all atoms in conj involves var
 -- should use subquery in from clause
-    (_ , Cypher r m w s c d) <- translateQueryToCypher (Query [var] formula)
+    (_ , Cypher r m w s c d) <- translateQueryToCypher (Query [var] (convert formula))
     return (cwhere (CypherExistsCond (matchToWhere m .&&. w)))
 
 
-translateFormulaToCypher (Not (Exists var formula)) = do
+translateFormulaToCypher' (Not (Exists var formula)) = do
 -- assume that all atoms in conj involves var
-    (_ , Cypher r m w s c d) <- translateQueryToCypher (Query [var] formula)
+    (_ , Cypher r m w s c d) <- translateQueryToCypher (Query [var] (convert formula))
     return (cwhere (CypherNotExistsCond (matchToWhere m .&&. w)))
 
-translateFormulaToCypher (Not _ ) = error "not not pushed"
-
+translateFormulaToCypher' (Not _ ) = error "not not pushed"
 
 
 -- instantiate a cypher mapping
@@ -933,7 +995,7 @@ unifysCond srcs =
         rep = head vars
         varmap = CypherVarExprMap (fromList (liftA2 (,) (map extractVarFromExpr (tail vars)) [rep])) in
             case nonvars of
-                [] -> (ctrue, varmap)
+                [] -> (CypherTrueCond, varmap)
                 es ->
                     let (cond, varmap') = unifyAll (extractVarFromExpr rep) (subst varmap es) [] in
                         (cond, varmap <> varmap')
@@ -995,16 +1057,20 @@ simplifyDependencies' cypher = do
                     let varmap = cypherVarExprMap v1 expr
                     let dependencyGraph'' = Map.map (subst varmap) dependencyGraph'
                     let cypher' = subst varmap cypher
-                    put (a, b, dependencyGraph'', fovarcypherexprmap)
+                    let fovarcypherexprmap' = Map.map (subst varmap) fovarcypherexprmap
+                    put (a, b, dependencyGraph'', fovarcypherexprmap')
+                    trace (show varmap ++ " = " ++ show fovarcypherexprmap) $ return ()
                     simplifyDependencies' cypher'
             Nothing -> case getFunctionalRelation dependencyGraph of
                 Nothing -> return cypher
                 Just (srcs, _) -> do -- unify all srcs
                     let (cond, varmap) = unifysCond (map unCypherExprNode srcs)
-                        dependencyGraph' = foldr Map.delete dependencyGraph srcs
-                        dependencyGraph'' = Map.map (subst varmap) dependencyGraph'
-                        cypher' = subst varmap cypher
-                    put (a, b, dependencyGraph'', fovarcypherexprmap)
+                    let dependencyGraph' = foldr Map.delete dependencyGraph srcs
+                    let dependencyGraph'' = Map.map (subst varmap) dependencyGraph'
+                    let cypher' = subst varmap cypher
+                    let fovarcypherexprmap' = Map.map (subst varmap) fovarcypherexprmap
+                    put (a, b, dependencyGraph'', fovarcypherexprmap')
+                    trace (show varmap ++ " = " ++ show fovarcypherexprmap) $ return ()
                     simplifyDependencies' cypher'
 
 -- translate atom to cypher in a query
@@ -1019,7 +1085,7 @@ translateQueryAtomToCypher thesign atom = do
         Nothing -> case lookup name predtablemap of
             Just (vars, matchpattern, pattern, dependencies) -> do
                 (matchpattern, pattern) <- instantiate vars matchpattern pattern dependencies args
-                case thesign of
+                trace (show matchpattern ++ " <-> " ++ show pattern)$ case thesign of
                     Pos -> return (cwhere (CypherPatternCond matchpattern .&&. CypherPatternCond pattern))
                     Neg -> return (cwhere (CypherPatternCond matchpattern .&&. CypherNotCond (CypherPatternCond pattern)))
             Nothing -> error (name ++ " is not defined")
@@ -1070,16 +1136,6 @@ postprocess =
   . mergeSetExprAndSetNull
   . normalizeGraphPattern
 
-translateInsertToCypher :: Insert -> TransMonad Cypher
-translateInsertToCypher (Insert lits conj) = do
-    c <- translateFormulaToCypher conj
-    let (pos, neg) = splitPosNegLits lits
-    cypherspos <- mapM translateInsertAtomToCypher pos
-    cyphersneg <- mapM translateDeleteAtomToCypher neg
-    let bigcypher = c <> mconcat cypherspos <> mconcat cyphersneg
-    cypher <- simplifyDependencies bigcypher
-    trace ("translateInsertToCypher: " ++ show bigcypher) $ return (postprocess cypher) where
-
 
 data CypherTrans = CypherTrans CypherBuiltIn [String] CypherPredTableMap
 
@@ -1105,7 +1161,7 @@ dot' v l = CypherDotExpr (CypherVarExpr v) l
 app l e = CypherAppExpr l [CypherVarExpr e]
 var v = CypherVarExpr (CypherVar v)
 cnull = CypherNullExpr
-match m = Cypher [] (GraphPattern m []) ctrue [] mempty []
+match m = Cypher [] (GraphPattern m []) CypherTrueCond [] mempty []
 
 type CypherEnv = Map CypherVar CypherExpr
 
@@ -1118,42 +1174,68 @@ instance Convertible ResultValue CypherExpr where
     safeConvert (IntValue i) = Right (CypherIntConstExpr i)
     safeConvert (StringValue i) = Right (CypherStringConstExpr i)
 
-instance DBConnection conn CypherQuery Cypher => ExtractDomainSize DBAdapterMonad conn CypherTrans where
-    extractDomainSize conn trans varDomainSize thesign (Atom (Pred name _) args) =
+data CypherState = CypherState {
+    csUpdate  :: Bool
+}
+
+translateableCypher :: CypherTrans -> Formula -> StateT CypherState Maybe ()
+translateableCypher trans (FSequencing form1 form2) = do
+    translateableCypher trans form1
+    translateableCypher trans form2
+translateableCypher trans (FChoice _ _) = lift $ Nothing
+translateableCypher _ (FAtomic _) = do
+    cs <- get
+    if csUpdate cs
+        then lift $ Nothing
+        else return ()
+translateableCypher _ (FInsert lit) = do
+    cs <- get
+    put cs{csUpdate = True}
+    return ()
+translateableCypher trans (FClassical formula) = do
+    cs <- get
+    if csUpdate cs
+        then lift $ Nothing
+        else translateableCypher' trans formula
+translateableCypher trans (FTransaction form) = translateableCypher trans form
+
+translateableCypher' :: CypherTrans -> PureFormula -> StateT CypherState Maybe ()
+translateableCypher' (CypherTrans builtin positiverequired predtablemap) (Not formula)  = lift $ Nothing
+        {- if lookForPositiveRequiredSubformula positiverequired formula
+            then lift $ Nothing
+            else return () where
+                lookForPositiveRequiredSubformula pr (Atomic (Atom (Pred p _) _)) = p `elem` pr
+                lookForPositiveRequiredSubformula pr (Conjunction s1 s2) = lookForPositiveRequiredSubformula pr s1 || lookForPositiveRequiredSubformula pr s2
+                lookForPositiveRequiredSubformula pr (Disjunction s1 s2) = lookForPositiveRequiredSubformula pr s1 || lookForPositiveRequiredSubformula pr s2
+                lookForPositiveRequiredSubformula pr p@(Not _) = True
+                lookForPositiveRequiredSubformula pr p@(Exists _ _) = True -}
+translateableCypher' _ (Exists _ _)  = lift $ Nothing
+translateableCypher' _ (Forall _ _)  = lift $ Nothing
+translateableCypher' trans (Conjunction form1 form2)  = do
+    translateableCypher' trans form1
+    translateableCypher' trans form2
+translateableCypher' trans (Disjunction form1 form2)  = lift $ Nothing
+translateableCypher' _ (Atomic _)  = return ()
+
+instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
+    extractDomainSize conn trans varDomainSize (Atom (Pred name _) args) =
         return (if isBuiltIn
             then maxArgDomainSize
-            else (case thesign of
-                Neg -> maxArgDomainSize
-                Pos -> if name `member` predtablemap then fromList [(fv, Bounded 1) | fv <- freeVars args] else empty)) where
+            else if name `member` predtablemap then fromList [(fv, Bounded 1) | fv <- freeVars args] else empty) where
             argsDomainSizeMaps = map (exprDomainSizeMap varDomainSize Unbounded) args
             maxArgDomainSize = mmaxs argsDomainSizeMaps
             isBuiltIn = name `member` builtin
             (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
-instance Translate CypherTrans MapResultRow CypherQuery Cypher where
+instance Translate CypherTrans MapResultRow CypherQuery where
     translateQueryWithParams trans query@(Query vars _) env =
         let (CypherTrans builtin _ predtablemap) = trans
             fovarcypherexprmap = foldMap (\v@(Var a) -> Map.singleton v (CypherParamExpr a)) env
             sql = runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, fovarcypherexprmap)) in
             (sql,  env)
-    translateInsertWithParams trans query env =
-        let (CypherTrans builtin _ predtablemap) = trans
-            fovarcypherexprmap = foldMap (\v@(Var a) -> Map.singleton v (CypherParamExpr a)) env
-            sql = runNew (evalStateT (translateInsertToCypher query) (builtin, predtablemap, empty, fovarcypherexprmap)) in
-            (sql,  env)
-    translateable _ (Exists _ _) = False
-    translateable trans (Not formula) =
-        let (CypherTrans builtin positiverequired predtablemap) = trans in
-            not (lookForPositiveRequiredSubformula positiverequired formula) where
-                lookForPositiveRequiredSubformula pr (Atomic (Atom (Pred p _) _)) = p `elem` pr
-                lookForPositiveRequiredSubformula pr (Conjunction s) = any (lookForPositiveRequiredSubformula pr) s
-                lookForPositiveRequiredSubformula pr (Disjunction s) = any (lookForPositiveRequiredSubformula pr) s
-                lookForPositiveRequiredSubformula pr p@(Not _) = False
-                lookForPositiveRequiredSubformula pr p@(Exists _ _) = error "exists"
-    translateable _ (Conjunction formula) = True
-    translateable _ (Disjunction formula) = True
-    translateable _ (Atomic formula) = True
-    translateableInsert trans formula _ = translateable trans formula
+    translateable trans form vars = isJust (evalStateT (translateableCypher trans form) (CypherState False))
+
+    translateable' trans form _ = isJust (evalStateT (translateableCypher' trans form) (CypherState False))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

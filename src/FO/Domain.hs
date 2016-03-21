@@ -2,7 +2,7 @@ module FO.Domain where
 
 import FO.Data
 
-import Data.Map.Strict (lookup, empty, delete, intersectionWith, unionWith, unionsWith, insert, Map)
+import Data.Map.Strict (Map, lookup, empty, intersectionWith, unionWith, unionsWith, insert, delete)
 import Prelude hiding (lookup)
 
 -- Int must be nonnegative
@@ -19,19 +19,21 @@ instance Num DomainSize where
     _ * Unbounded = Unbounded
     (Bounded a) * (Bounded b) = Bounded ( a * b)
     abs a = a
-    signum a = Bounded 1
+    signum _ = Bounded 1
+    negate _ = error "negate: DomainSize cannot be negated"
     fromInteger i = if i < 0 then error ("DomainSize::fromInteger:" ++ show i) else Bounded (fromInteger i)
-    
+
 instance Ord DomainSize where
     Unbounded <= Unbounded = True
     (Bounded _) <= Unbounded = True
     Unbounded <= (Bounded _) = False
     (Bounded a) <= (Bounded b) = a <= b
-    
+
 
 -- dmul :: DomainSize -> DomainSize -> DomainSize
 -- dmul (Infinite a) (Infinite b) = liftM2 (*)
 
+dmaxs :: [DomainSize] -> DomainSize
 dmaxs = maximum . (Bounded 0 : )
 
 exprDomainSizeMap :: DomainSizeMap -> DomainSize -> Expr -> DomainSizeMap
@@ -56,34 +58,42 @@ mmin = unionWith min
 mmaxs :: [DomainSizeMap] -> DomainSizeMap
 mmaxs = foldl1 (intersectionWith max) -- must have at least one
 
-type DomainSizeFunction m a = Sign -> a -> m DomainSizeMap
+type DomainSizeFunction m a = a -> m DomainSizeMap
 
 class DeterminedVars a where
-    determinedVars :: Monad m => DomainSizeFunction m Atom -> Sign -> a -> m DomainSizeMap
+    determinedVars :: Monad m => DomainSizeFunction m Atom -> a -> m DomainSizeMap
 
 instance DeterminedVars Atom where
     determinedVars dsp = dsp
 
 instance DeterminedVars Formula where
-    determinedVars dsp sign (Atomic atom) = determinedVars dsp sign atom
-    determinedVars dsp Pos (Conjunction formulas) = do
-        maps <- mapM (determinedVars dsp Pos) formulas
-        return (mmins maps)
-    determinedVars dsp Neg (Conjunction formulas) = do
-        maps <- mapM (determinedVars dsp Neg) formulas
-        return (mmaxs maps)
-    determinedVars dsp Pos (Disjunction formulas) = do
-        maps <- mapM (determinedVars dsp Pos) formulas
-        return (mmins maps)
-    determinedVars dsp Neg (Disjunction formulas) = do
-        maps <- mapM (determinedVars dsp Neg) formulas
-        return (mmaxs maps)
-    determinedVars dsp Pos (Not formula) =
-        determinedVars dsp Neg formula
-    determinedVars dsp Neg (Not formula) =
-        determinedVars dsp Pos formula
-    determinedVars dsp Pos (Exists var formula) = do
-        map1 <- determinedVars dsp Pos formula
-        return (delete var map1)
-    determinedVars dsp Neg (Exists var formula) = do
-        return empty -- this may be an underestimation, need look into this more
+    determinedVars dsp  (FAtomic atom0) = determinedVars dsp  atom0
+    determinedVars _  (FInsert _) = return empty
+    determinedVars _  (FClassical _) = return empty
+    determinedVars dsp  (FTransaction form) = determinedVars dsp  form
+    determinedVars dsp  (FSequencing form1 form2) = do
+        map1 <- determinedVars dsp form1
+        map2 <- determinedVars dsp form2
+        return (unionWith min map1 map2)
+    determinedVars dsp  (FChoice form1 form2) = do
+        map1 <- determinedVars dsp form1
+        map2 <- determinedVars dsp form2
+        return (intersectionWith max map1 map2)
+    determinedVars _ _ = return empty
+
+instance DeterminedVars PureFormula where
+    determinedVars dsp  (Atomic atom0) = determinedVars dsp  atom0
+    determinedVars _  (Not _) = return empty
+    determinedVars _  (Forall _ _) = return empty
+    determinedVars dsp  (Exists v form) = do
+        dsp' <- determinedVars dsp  form
+        return (delete v dsp')
+    determinedVars dsp  (Conjunction form1 form2) = do
+        map1 <- determinedVars dsp form1
+        map2 <- determinedVars dsp form2
+        return (unionWith min map1 map2)
+    determinedVars dsp  (Disjunction form1 form2) = do
+        map1 <- determinedVars dsp form1
+        map2 <- determinedVars dsp form2
+        return (intersectionWith max map1 map2)
+    determinedVars _ _ = return empty

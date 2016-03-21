@@ -1,17 +1,13 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
    RankNTypes, FlexibleContexts, GADTs #-}
-module ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream,
+module ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream, closeResultStream,
     resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, ResultRow(..), resultStream2, bracketPStream) where
 
 import Prelude  hiding (lookup, take, map, null)
-import Control.Applicative ((<$>), empty, (<|>), Alternative)
-import Control.Arrow ((+++))
-import Data.Either.Utils
-import Control.Monad (ap, guard)
+import Control.Applicative (empty, (<|>), Alternative)
+import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans.State.Strict (StateT, evalStateT, get, put)
 import Control.Monad.Trans.Class (lift, MonadTrans)
-import Data.Monoid
 import FO.Data
 import Data.Conduit
 import Data.Conduit.Combinators
@@ -28,6 +24,10 @@ listResultStream results  = ResultStream (yieldMany results)
 depleteResultStream :: (Monad m) => ResultStream m row -> m ()
 depleteResultStream (ResultStream rs) =
     (runConduit (rs =$ sinkNull))
+
+closeResultStream :: (Monad m) => ResultStream m row -> ResultStream m row
+closeResultStream (ResultStream rs) =
+    ResultStream (rs =$ sinkNull)
 
 getAllResultsInStream :: (Monad m, Show row) => ResultStream m row -> m [row]
 getAllResultsInStream (ResultStream stream) =

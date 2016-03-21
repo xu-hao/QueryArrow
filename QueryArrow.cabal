@@ -41,12 +41,18 @@ executable QueryArrow
                    conduit-combinators,
                    conduit,
                    resourcet,
+                   zeromq4-haskell,
+                   async,
+                   time,
+                   cereal,
+                   exceptions,
+                   utf8-string,
                    template-haskell
-  ghc-options:     -Wall -fPIC
+  ghc-options:     -Wall -fPIC -threaded
   other-modules:
 library
-  hs-source-dirs:  src
-  exposed-modules: Mpostgres
+  hs-source-dirs:  src gen
+  exposed-modules: SQL.HDBC.PostgreSQL
   build-depends:
                    base >= 4,
                    containers,
@@ -58,5 +64,78 @@ library
                    HDBC,
                    conduit-combinators,
                    conduit,
+                   utf8-string,
                    resourcet
   ghc-options:     -Wall -fPIC -shared -dynamic
+executable ZmqSend
+  hs-source-dirs:  src gen test
+  main-is:         ZmqSend.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   bytestring,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   MissingH,
+                   monadplus,
+                   array,
+                   temporary,
+                   process,
+                   zeromq4-haskell,
+                   async,
+                   time,
+                   cereal,
+                   exceptions,
+                   utf8-string
+  ghc-options:
+  other-modules:
+executable Test
+    hs-source-dirs:  src gen test
+    main-is:         Test.hs
+    build-depends:
+                     base >= 4,
+                     containers,
+                     mtl,
+                     transformers,
+                     semigroups,
+                     parsec,
+                     semigroupoids,
+                     QuickCheck,
+                     HDBC-sqlite3,
+                     HDBC-postgresql,
+                     HDBC,
+                     aeson,
+                     bytestring,
+                     plugins,
+                     hspec,
+                     haskell-neo4j-client,
+                     unordered-containers,
+                     convertible,
+                     text >= 1.2.1.1,
+                     scientific,
+                     MissingH,
+                     logict,
+                     monadplus,
+                     array,
+                     temporary,
+                     process,
+                     logic-TPTP,
+                     lens,
+                     distributive,
+                     pretty-tree,
+                     conduit-combinators,
+                     conduit,
+                     resourcet,
+                     zeromq4-haskell,
+                     async,
+                     time,
+                     cereal,
+                     exceptions,
+                     utf8-string,
+                     template-haskell
+    ghc-options:
+    other-modules:

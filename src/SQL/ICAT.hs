@@ -11,7 +11,7 @@ import SQL.ICATGen
 import Data.Map.Strict (empty, fromList, insert)
 import qualified Data.Text as T
 
-makeICATSQLDBAdapter :: DBConnection conn  SQLQuery SQLInsert  => conn -> GenericDB conn SQLTrans
+makeICATSQLDBAdapter :: DBConnection conn  SQLQuery   => conn -> GenericDB conn SQLTrans
 makeICATSQLDBAdapter conn = GenericDB conn "ICAT" standardPreds sqlStandardTrans
 
 sqlStandardTrans :: SQLTrans

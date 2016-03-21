@@ -24,7 +24,6 @@ import Data.Scientific
 
 
 data Neo4jQueryStatement = Neo4jQueryStatement Neo4jConnection CypherQuery
-data Neo4jInsertStatement = Neo4jInsertStatement Neo4jConnection Cypher
 type Neo4jConnInfo = (String, Int)
 type Neo4jConnection = Neo4jConnInfo
 
@@ -57,21 +56,10 @@ instance PreparedStatement_ Neo4jQueryStatement where
                 ) (return ())
         closePreparedStatement _ = return ()
 
-instance PreparedStatement_ Neo4jInsertStatement where
-        execWithParams (Neo4jInsertStatement (host, port) stmt) args = resultStream2 (do
-                  resp <- withConnection (pack host) port $ do
-                      C.cypher (T.pack (show stmt)) (toCypherParams args)
-                  case resp of
-                      Left t -> error (T.unpack t)
-                      Right (C.Response cols rows) ->
-                          return (map (\row -> convert ([Var "i"], row)) rows)
-                  ) (return ())
-        closePreparedStatement _ = return ()
-
-instance DBConnection Neo4jConnection CypherQuery Cypher where
+instance DBConnection Neo4jConnection CypherQuery where
         prepareQueryStatement conn query = return (PreparedStatement (Neo4jQueryStatement conn query))
-        prepareInsertStatement conn query = return (PreparedStatement (Neo4jInsertStatement conn query))
         connClose _ = return ()
-        connCommit _ = return ()
+        connCommit _ = return True
+        connPrepare _ = return True
         connRollback _ = return ()
         connBegin _ = return ()

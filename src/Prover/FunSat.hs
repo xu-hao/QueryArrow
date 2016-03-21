@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
-module FO.FunSat where
+module Prover.FunSat where
 
 import FO.Data
 
@@ -44,7 +44,7 @@ type CounterExample = Map Atom (Maybe Bool)
 type Example = CounterExample
 
 -- the funsat functions
-valid :: Formula -> Maybe CounterExample
+valid :: PureFormula -> Maybe CounterExample
 valid = \x -> Nothing -- do not call funsat for now
 -- falsifiable
 

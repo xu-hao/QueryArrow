@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
-module FO.Parser where
+module Prover.Parser where
 
 import FO.Data
 
@@ -15,18 +15,18 @@ import Codec.TPTP.Pretty
 import Codec.TPTP.Export
 
 type ConvEnv a = State PredMap a
-type Input = (String , String, Formula)
+type Input = (String , String, PureFormula)
 
 instance Convertible TPTP.TPTP_Input (ConvEnv Input) where
     safeConvert (TPTP.AFormula (TPTP.AtomicWord name) (TPTP.Role role) formula _) = Right ((\ x -> (name, role, x)) <$> convert formula)
 
-instance Convertible (TPTP.F Identity) (ConvEnv Formula) where
+instance Convertible (TPTP.F Identity) (ConvEnv PureFormula) where
     safeConvert f = safeConvert (runIdentity (TPTP.runF f))
 
 instance Convertible  (TPTP.T Identity) (ConvEnv Expr) where
     safeConvert t = safeConvert (runIdentity (TPTP.runT t))
 
-instance (Convertible t (ConvEnv Expr), Convertible f (ConvEnv Formula)) => Convertible (TPTPB.Formula0 t f) (ConvEnv Formula) where
+instance (Convertible t (ConvEnv Expr), Convertible f (ConvEnv PureFormula)) => Convertible (TPTPB.Formula0 t f) (ConvEnv PureFormula) where
     safeConvert (TPTP.BinOp f1 (TPTP.:<=>:) f2) =
         Right ((<-->) <$> convert f1 <*> convert f2)
     safeConvert (TPTP.BinOp f1 (TPTP.:=>:) f2) =
@@ -67,7 +67,7 @@ parseTPTP pm s = evalState (mapM convert (TPTP.parse s)) pm
 toTPTP3' :: [Input ]->String
 toTPTP3' = toTPTP' . (convert :: [Input] -> [TPTP.TPTP_Input])
 
-toTPTP3 :: [Formula ] -> Formula -> String
+toTPTP3 :: [PureFormula ] -> PureFormula -> String
 toTPTP3 rules formula =
     toTPTP3' (map (\(i, formula) ->
         ("rule" ++ show i, "axiom", formula)) (zip [1..length rules] rules) ++ [("goal", "conjecture", formula)])
@@ -80,21 +80,27 @@ instance Convertible Input TPTP.TPTP_Input where
     safeConvert (name, role, formula) =
         Right ( TPTP.AFormula (TPTP.AtomicWord name) (TPTP.Role role) (convert (foldr Forall formula (freeVars formula))) TPTP.NoAnnotations)
 
-instance Convertible Formula TPTP.Formula where
+instance Convertible PureFormula TPTP.Formula where
     safeConvert (Atomic a) = Right (convert a)
-    safeConvert (Disjunction [(Not a), b]) =
+    safeConvert (Disjunction (Not a) b) =
         Right (convert a TPTP..=>. convert b)
-    safeConvert (Conjunction [Disjunction [(Not a), b], Disjunction [(Not c), d]]) | a == d && b == c =
+    safeConvert (Conjunction (Disjunction (Not a) b) (Disjunction (Not c) d)) | a == d && b == c =
         Right (convert a TPTP..<=>. convert b)
-    safeConvert (Conjunction as) =
-        Right (case as of
-            [] -> TPTP.numberLitTerm 1 TPTP..=. TPTP.numberLitTerm 1
-            _ -> foldl1 (TPTP..&.) (map convert as))
-    safeConvert (Disjunction as) =
-        Right (case as of
-            [] -> TPTP.numberLitTerm 1 TPTP..!=. TPTP.numberLitTerm 1
-            _ -> foldl1 (TPTP..|.) (map convert as))
-    safeConvert (Not a) = Right ((TPTP..~.) (convert a))
+    safeConvert (Conjunction a b) = do
+        a' <- safeConvert a
+        b' <- safeConvert b
+        Right (a' TPTP..&. b')
+    safeConvert (CTrue) =
+        Right (TPTP.numberLitTerm 1 TPTP..=. TPTP.numberLitTerm 1)
+    safeConvert (Disjunction a b) = do
+        a' <- safeConvert a
+        b' <- safeConvert b
+        Right (a' TPTP..|. b')
+    safeConvert (CFalse) =
+        Right (TPTP.numberLitTerm 1 TPTP..!=. TPTP.numberLitTerm 1)
+    safeConvert (Not a) = do
+        a' <- safeConvert a
+        return ((TPTP..~.) (a'))
     safeConvert (Exists v a) = Right (TPTP.exists (map convert [ v]) (convert a))
     safeConvert (Forall v a) = Right (TPTP.for_all (map convert [ v]) (convert a))
 

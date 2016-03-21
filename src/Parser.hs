@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
-module Parser (progp, rulesp, QueryVariant(..), Completion, transformDeletion) where
+module Parser (progp, rulesp) where
 
 import FO.Data
 import QueryPlan
@@ -20,10 +20,10 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.nestedComments = False,
     T.identStart = letter <|> char '_',
     T.identLetter = alphaNum <|> char '_',
-    T.opStart = oneOf "~|",
-    T.opLetter = oneOf "~|",
-    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "essential", "rewrite", "predicate", "exists", "forall"],
-    T.reservedOpNames = ["~", "|"],
+    T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
+    T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
+    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "forall", "if", "then", "else", "classical", "linear", "true", "false", "one", "zero"],
+    T.reservedOpNames = ["~", "|", "⊗", "⊕", "∧", "∨", "∀", "∃", "¬", "⟶","𝟏","𝟎", "⊤", "⊥"],
     T.caseSensitive = True
 }
 
@@ -33,6 +33,12 @@ reservedOp = T.reservedOp lexer
 
 parens :: FOParser a -> FOParser a
 parens = T.parens lexer
+
+brackets :: FOParser a -> FOParser a
+brackets = T.brackets lexer
+
+braces :: FOParser a -> FOParser a
+braces = T.braces lexer
 
 integer = T.integer lexer
 stringp = T.stringLiteral lexer
@@ -64,33 +70,101 @@ atomp = do
     let thepred = fromMaybe (error ("atomp: undefined predicate " ++ predname ++ ", available " ++ show (keys predmap))) (lookup predname predmap)
     return (Atom thepred arglist)
 
+negp :: FOParser ()
+negp = reservedOp "~" <|> reservedOp "¬"
+
+andp :: FOParser ()
+andp = optional (reservedOp "∧")
+
+orp :: FOParser ()
+orp = reservedOp "|" <|> reservedOp "∨"
+
+truep :: FOParser ()
+truep = reserved "true" <|> reservedOp "⊤"
+
+falsep :: FOParser ()
+falsep = reserved "false" <|> reservedOp "⊥"
+
+forallp :: FOParser ()
+forallp = reserved "forall" <|> reservedOp "∀"
+
+existsp :: FOParser ()
+existsp = reserved "exists" <|> reservedOp "∃"
+
+timesp :: FOParser ()
+timesp = optional (reservedOp "⊗")
+
+plusp :: FOParser ()
+plusp = reservedOp "|" <|> reservedOp "⊕"
+
+onep :: FOParser ()
+onep = reserved "one" <|> reservedOp "𝟏"
+
+zerop :: FOParser ()
+zerop  = reserved "zero" <|> reservedOp "𝟎"
+
+rarrowp :: FOParser ()
+rarrowp = optional (reservedOp "⟶")
 
 litp :: FOParser Lit
-litp = Lit <$> (reservedOp "~" *> return Neg <|> return Pos) <*> atomp
+litp = Lit <$> (negp *> return Neg <|> return Pos) <*> atomp
 
 litsp :: FOParser [Lit]
 litsp = many1 litp
 
+neg :: Lit -> Lit
+neg (Lit Pos a) = Lit Neg a
+neg (Lit Neg a) = Lit Pos a
+
 formula1p :: FOParser Formula
 formula1p = try (parens formulap)
-       <|> (Not <$> (reservedOp "~" >> formula1p))
-       <|> (Exists <$> (reserved "exists" >> Var <$> identifier) <*> (dot >> formulap))
-       <|> (Forall <$> (reserved "forall" >> Var <$> identifier) <*> (dot >> formulap))
-       <|> (Atomic <$> try atomp)
+       <|> (FAtomic <$> try atomp)
+       <|> (FTransaction <$> try (braces formulap))
+       <|> (FClassical <$> try (brackets formulap'))
+       <|> onep *> pure FOne
+       <|> zerop *> pure FZero
+       <|> (fsequencing . map FInsert) <$> (reserved "insert" >> litsp)
+       <|> (fsequencing . map FInsert) <$> (reserved "delete" >> fmap (map neg) litsp)
 
-formulaConjp :: FOParser Formula
-formulaConjp = do
-    formula1s <- many formula1p
-    return (case formula1s of
-        [a] -> a
-        _ -> Conjunction formula1s)
+formula1p' :: FOParser PureFormula
+formula1p' = try (parens formulap')
+      <|> (Not <$> (negp >> formula1p'))
+      <|> (do
+          existsp
+          vars <- varsp
+          _ <- dot
+          form <- formulap'
+          return (foldr Exists form vars))
+      <|> (do
+          forallp
+          vars <- varsp
+          _ <- dot
+          form <- formulap'
+          return (foldr Forall form vars))
+      <|> (Atomic <$> try atomp)
+      <|> truep *> pure CTrue
+      <|> falsep *> pure CFalse
 
 formulap :: FOParser Formula
 formulap = do
-    formulaConjs <- sepBy formulaConjp (reservedOp "|")
-    return (case formulaConjs of
-        [a] -> a
-        _ -> Disjunction formulaConjs)
+  formula1s <- sepBy formulaSequencingp plusp
+  return (fchoice formula1s)
+
+formulaSequencingp :: FOParser Formula
+formulaSequencingp = do
+  formulaConjs <- sepBy formula1p timesp
+  return (fsequencing formulaConjs)
+
+formulaConjp :: FOParser PureFormula
+formulaConjp = do
+    formula1s <- sepBy formula1p' andp
+    return (conj formula1s)
+
+formulap' :: FOParser PureFormula
+formulap' = do
+    formulaConjs <- sepBy formulaConjp orp
+    return (disj formulaConjs)
+
 
 paramtypep :: FOParser ParamType
 paramtypep = ((reserved "key" >> return Key) <|> (reserved "property" >> return Property)) <*> identifier
@@ -107,72 +181,51 @@ predp = do
     let thepred = Pred name t
     updateState (insert name thepred)
 
-
 varp :: FOParser Var
 varp = Var <$> identifier
 
 varsp :: FOParser [Var]
 varsp = many1 varp
 
-data QueryVariant = Q Query | I Insert  | D [Atom] Formula deriving Show
-data RewritingVariant = QR QueryRewritingRule | IR InsertRewritingRule  | DR InsertRewritingRule deriving Show
-
-progp :: FOParser (QueryVariant, Map String Pred)
+progp :: FOParser (Query, Map String Pred)
 progp = do
     whiteSpace
     q <- formulap
-    qv <- reserved "return" *> (Q <$> (Query <$> varsp <*> return q))
-      <|> reserved "insert" *> (I <$> (Insert <$> litsp <*> return q))
-      <|> reserved "delete" *> (D <$> many atomp <*> return q)
+    qv <- reserved "return" *> (Query <$> varsp <*> return q)
+      <|> (Query [] <$> return q)
     eof
     predmap <- getState
     return (qv, predmap)
 
-rulep :: FOParser RewritingVariant
+
+rulep :: FOParser ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
 rulep = (do
     whiteSpace
-    many predp
+    _ <- many predp
     reserved "rewrite"
-    a <- atomp
-    form <- formulap
-    reserved "insert" *> (IR <$> irulep a form)
-      <|> reserved "delete" *> (DR <$> irulep a form)
-      <|> pure (QR (qrule a form))) where
-          qrule a form = QueryRewritingRule a form
-          irulep a form = InsertRewritingRule a <$> many atomp <*> pure form
+    reserved "insert" *> irulep
+      <|> reserved "delete" *> drulep
+      <|> reserved "classical" *> qrulep
+      <|> qrule2p) where
+          qrulep = do
+              r <- QueryRewritingRule <$> atomp <* rarrowp <*> formulap'
+              return ([r], [], [], [])
+          qrule2p = do
+              r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
+              return ([], [r], [], [])
+          irulep = do
+              r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
+              return ([], [], [r], [])
+          drulep = do
+              r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
+              return ([], [], [], [r])
 
-rulesp :: FOParser ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+rulesp :: FOParser (([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), Map String Pred)
 rulesp = do
     rules <- many rulep
     eof
-    return (foldMap (\r0 -> case r0 of
-        IR r -> ([], [r], [])
-        DR r -> ([], [], [r])
-        QR r -> ([r], [], [])) rules)
-
-type Completion = [(Atom, [Atom])]
-
-completion :: Completion -> [Atom] -> NewEnv [Atom]
-completion crs atoms =
-    unions <$> mapM (completionAtom crs) atoms
-
-completionAtom :: Completion -> Atom -> NewEnv [Atom]
-completionAtom crs atom = completion crs =<< completionAtom1 crs atom
-
-completionAtom1 :: Completion -> Atom -> NewEnv [Atom]
-completionAtom1 crs atom = unions <$> mapM (completionAtom11 atom) crs
-
-completionAtom11 :: Atom -> (Atom, [Atom]) -> NewEnv [Atom]
-completionAtom11 atom (head, tails) = do
-      let vars0 = freeVars head
-      vars <- new vars0
-      let s = fromList (zip vars0 vars)
-      return (case unify atom head of
-          Just s' ->
-              subst s' (subst s tails)
-          Nothing ->
-              [])
-
+    st <- getState
+    return (mconcat rules, st)
 
 samePredAndKey :: Atom -> Atom -> Bool
 samePredAndKey (Atom p1@(Pred _ pt1) args1) (Atom p2@(Pred _ pt2) args2) | p1 == p2 =
@@ -183,17 +236,3 @@ unionPred :: [Atom] -> [Atom] -> [Atom]
 unionPred as1 as2 =
     as1 ++ filter (not . samePredAndKeys as1) as2 where
         samePredAndKeys as1 atom = any (samePredAndKey atom) as1
-
-transformDeletion :: Completion -> [Atom] -> Formula -> Insert
-transformDeletion crs atoms q =
-    let atoms' = atoms `union` (runNew (do
-            registerVars (freeVars atoms `union` freeVars q)
-            completion crs atoms)) in
-        Insert (map (Lit Neg) atoms') (q & conj (map Atomic atoms))
-
-transformAddition :: Completion -> [Atom] -> Formula -> Insert
-transformAddition crs atoms q =
-    let atoms' = atoms `unionPred` (runNew (do
-            registerVars (freeVars atoms `union` freeVars q)
-            completion crs atoms)) in
-        Insert (map (Lit Pos) atoms') q

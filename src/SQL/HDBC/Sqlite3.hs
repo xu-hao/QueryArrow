@@ -6,14 +6,20 @@ import Config
 import QueryPlan
 import FO.Data
 import SQL.HDBC
+import Database.HDBC
 import ICAT
 import SQL.ICAT
+import Control.Monad.IO.Class
 
 import Database.HDBC.Sqlite3
 
 instance HDBCConnection Connection where
         showSQLQuery _ (vars, query, params) = show query
-        showSQLInsert _ (query, params)= show query
+        hdbcCommit conn = do
+            liftIO $ commit conn
+            return True
+        hdbcPrepare conn = return True
+        hdbcRollback conn = liftIO $ rollback conn
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do

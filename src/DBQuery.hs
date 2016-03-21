@@ -9,10 +9,9 @@ import FO.Domain
 import Prelude hiding (lookup, foldl)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.State.Strict (StateT, get, put, modify)
-import Data.Map.Strict (Map, foldl, empty, (!), singleton, lookup)
+import Control.Monad.Trans.State.Strict (StateT)
+import Data.Map.Strict (Map, (!), singleton, lookup)
 import Data.Convertible
-import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.Bifunctor
 import Control.Monad.Trans.Resource
@@ -25,11 +24,8 @@ data DBConnInfo = DBConnInfo {
     dbDB :: String
     }
 
--- the cache to prepared statements
-
 data DBAdapterState = DBAdapterState {
-    preparedStatementMap :: Map [Var] PreparedStatement,
-    nextidCache :: Maybe Int
+    uuid :: Maybe String
     }
 
 type DBAdapterMonad = StateT DBAdapterState (ResourceT IO)
@@ -42,92 +38,75 @@ data PreparedStatement = forall stmt. PreparedStatement_ stmt => PreparedStateme
     unPreparedStatement :: stmt
 }
 
-instance DBStatement DBAdapterMonad MapResultRow (PreparedStatement, [Var])  where
+instance DBStatementClose DBAdapterMonad (PreparedStatement, [Var])  where
     dbStmtClose (stmt, _) = case stmt of PreparedStatement s -> liftIO $ closePreparedStatement s
+
+instance DBStatementExec DBAdapterMonad MapResultRow (PreparedStatement, [Var])  where
     dbStmtExec (PreparedStatement stmt, params) vars stream = do
         row <- stream
-        bracketPStream (return stmt) (closePreparedStatement) (\stmt -> execWithParams stmt (M.map convert row))
+        bracketPStream (return stmt) closePreparedStatement (\stmt -> execWithParams stmt (M.map convert row))
 
-class DBConnection conn query insert | conn -> query insert where
-    prepareQueryStatement :: conn -> query -> IO PreparedStatement
-    prepareInsertStatement :: conn -> insert -> IO PreparedStatement
-    connBegin :: conn -> IO ()
-    connCommit :: conn -> IO ()
-    connRollback :: conn -> IO ()
-    connClose :: conn -> IO ()
+class DBConnection conn query  | conn -> query  where
+    prepareQueryStatement :: conn -> query -> DBAdapterMonad PreparedStatement
+    connBegin :: conn -> DBAdapterMonad ()
+    connPrepare :: conn -> DBAdapterMonad Bool
+    connCommit :: conn -> DBAdapterMonad Bool
+    connRollback :: conn -> DBAdapterMonad ()
+    connClose :: conn -> DBAdapterMonad ()
 
 class ExtractDomainSize m conn trans | conn -> m  where
-    extractDomainSize :: conn -> trans -> DomainSizeMap -> Sign -> Atom -> m DomainSizeMap
+    extractDomainSize :: conn -> trans -> DomainSizeMap -> Atom -> m DomainSizeMap
 
-class (Show query, Show insert) => Translate trans row query insert | trans -> row query insert where
+class (Show query) => Translate trans row query  | trans -> row query  where
     translateQueryWithParams :: trans -> Query -> [Var] -> (query, [Var])
-    translateInsertWithParams :: trans -> Insert -> [Var] ->  (insert, [Var])
-    translateable :: trans -> Formula -> Bool
-    translateableInsert :: trans -> Formula -> [Lit] -> Bool
+    translateable :: trans -> Formula -> [Var] -> Bool
+    translateable' :: trans -> PureFormula -> [Var] -> Bool
 
 class (Show query) => TranslateSequence trans query | trans -> query where
     translateSequenceQuery :: trans -> (query, Var)
 
--- call this to clear all dbs
-closeAllCachedPreparedStatements :: DBAdapterMonad ()
-closeAllCachedPreparedStatements = do
-    s <- get
-    let stmts = foldl (\stmts2 stmt -> stmts2 ++ [stmt]) [] (preparedStatementMap s)
-    liftIO $ mapM_ (\ ps -> case ps of PreparedStatement ps_ -> closePreparedStatement ps_) stmts
 
 data GenericDB conn trans where
-    GenericDB :: (ExtractDomainSize DBAdapterMonad conn trans, DBConnection conn query insert, Translate trans MapResultRow query insert) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
+    GenericDB :: (ExtractDomainSize DBAdapterMonad conn trans, DBConnection conn query , Translate trans MapResultRow query ) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
 
 data SequenceDB conn trans where
-    SequenceDB :: (DBConnection conn query insert, TranslateSequence trans query) => conn -> String -> String -> trans -> SequenceDB conn trans
+    SequenceDB :: (DBConnection conn query , TranslateSequence trans query) => conn -> String -> String -> trans -> SequenceDB conn trans
 
 instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedStatement, [Var]) where
     dbBegin (GenericDB conn _ _ _) = do
-        liftIO $ connBegin conn
-        modify (\s -> s{preparedStatementMap = empty})
+        connBegin conn
+    dbPrepare (GenericDB conn _ _ _) = do
+        connPrepare conn
     dbCommit (GenericDB conn _ _ _) = do
-        liftIO $ connCommit conn
-        closeAllCachedPreparedStatements
+        connCommit conn
     dbRollback (GenericDB conn _ _ _) = do
-        liftIO $ connRollback conn
-        closeAllCachedPreparedStatements
-    dbBeginCommand _ = return ()
-    dbEndCommand _ = return ()
+        connRollback conn
     getName (GenericDB _ name _ _)= name
     getPreds (GenericDB _ _ preds _)= preds
-    domainSize (GenericDB conn _  _ trans)= extractDomainSize conn trans
+    domainSize (GenericDB conn _  _ trans) = extractDomainSize conn trans
     prepareQuery (GenericDB conn _ _ trans) query vars  = do
         let (sqlquery, params) = translateQueryWithParams trans query vars
-        stmt <- liftIO $ prepareQueryStatement conn sqlquery
-        return (stmt, params)
-    prepareInsert (GenericDB conn _ _ trans) insert vars = do
-        let (sqlupdate, params) = translateInsertWithParams trans insert vars
-        stmt <- liftIO $ prepareInsertStatement conn sqlupdate
+        stmt <- prepareQueryStatement conn sqlquery
         return (stmt, params)
 
 
-    supported (GenericDB _ _ _ trans) formula = translateable trans formula
-    supportedInsert (GenericDB _ _ _ trans) formula lits = translateableInsert trans  formula lits
+    supported (GenericDB _ _ _ trans) formula vars = translateable trans formula vars
+    supported' (GenericDB _ _ _ trans) formula vars = translateable' trans formula vars
     translateQuery (GenericDB _ _ _ trans) qu vars  = first show (translateQueryWithParams trans qu vars)
-    translateInsert (GenericDB _ _ _ trans) qu vars  =  first show (translateInsertWithParams trans qu vars)
 
 data PreparedSequenceStatement conn trans where
-    PreparedSequenceStatement :: (DBConnection conn query insert, TranslateSequence trans query) =>  conn -> trans -> [Var] -> Var -> PreparedSequenceStatement conn trans
+    PreparedSequenceStatement :: (DBConnection conn query , TranslateSequence trans query) =>  conn -> trans -> [Var] -> Var -> PreparedSequenceStatement conn trans
 
-instance DBStatement DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where
+instance DBStatementClose DBAdapterMonad (PreparedSequenceStatement conn trans)  where
     dbStmtClose _ = return ()
+instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where
     dbStmtExec (PreparedSequenceStatement conn trans vars v) vars2 stream = do
         row <- stream
-        s <- lift $ get
-        nextid <- case (nextidCache s) of
-            Nothing -> do
+        nextid <- do
                 let (sqlquery, var) = translateSequenceQuery trans
-                (PreparedStatement stmt) <- liftIO $ prepareQueryStatement conn sqlquery
+                (PreparedStatement stmt) <- lift $ prepareQueryStatement conn sqlquery
                 nextidrow : _ <- lift $ getAllResultsInStream (execWithParams stmt mempty)
                 let (IntValue nextid) = nextidrow ! var
-                lift $ put (s {nextidCache = Just nextid})
-                return nextid
-            Just nextid ->
                 return nextid
         case lookup v row of
             Nothing -> case vars of
@@ -143,32 +122,18 @@ instance DBStatement DBAdapterMonad MapResultRow (PreparedSequenceStatement conn
                 emptyResultStream
 
 instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans) where
-        dbBegin (SequenceDB _ _ _ _) = do
-            s <- get
-            put s{nextidCache = Nothing}
-        dbCommit (SequenceDB _ _ _ _) = do
-            s <- get
-            put s{nextidCache = Nothing}
-        dbRollback (SequenceDB _ _ _ _) = do
-            s <- get
-            put s{nextidCache = Nothing}
-        dbBeginCommand (SequenceDB _ _ _ _) = do
-            s <- get
-            put s{nextidCache = Nothing}
-        dbEndCommand (SequenceDB _ _ _ _) = do
-            s <- get
-            put s{nextidCache = Nothing}
+        dbBegin (SequenceDB _ _ _ _) = return ()
+        dbPrepare (SequenceDB _ _ _ _) = return True
+        dbCommit (SequenceDB _ _ _ _) = return True
+        dbRollback (SequenceDB _ _ _ _) = return ()
         getName (SequenceDB _ name _ _)= name
-        getPreds (SequenceDB _ _ predname _)= [Pred predname (PredType EssentialPred [Key "Any"])]
-        domainSize (SequenceDB _ _ _ _)= \dsmap sign (Atom _ [VarExpr v]) -> return (singleton v (Bounded 1))
-        prepareQuery (SequenceDB conn _ _ trans) (Query vars (Atomic (Atom _ [VarExpr v]))) _ =
-            -- only consider the case of var for now
+        getPreds (SequenceDB _ _ predname _)= [Pred predname (PredType ObjectPred [Key "Any"])]
+        domainSize (SequenceDB _ _ _ _)= \ _ (Atom _ [VarExpr v]) -> return (singleton v (Bounded 1))
+        prepareQuery (SequenceDB conn _ _ trans) (Query vars (FAtomic (Atom _ [VarExpr v]))) _ =
             return (PreparedSequenceStatement conn trans vars v)
         prepareQuery _ _ _ = error "not supported"
-        prepareInsert _ _ _ = error "not supported"
 
-        supported (SequenceDB _ predname _ _) (Atomic (Atom (Pred predname2 _) _)) = predname == predname2
-        supported _ _ = False
-        supportedInsert _ _ _ = False
-        translateQuery (SequenceDB _ _ _ trans) qu vars = ( show (fst (translateSequenceQuery trans )) ++ " or read from cache", [])
-        translateInsert _ _ _ = error "not supported"
+        supported (SequenceDB _ predname _ _) (FAtomic (Atom (Pred predname2 _) [VarExpr _])) [_] = predname == predname2
+        supported _ _ _ = False
+        supported' _ _ _ = False
+        translateQuery (SequenceDB _ _ _ trans) _ _ = ( show (fst (translateSequenceQuery trans )), [])

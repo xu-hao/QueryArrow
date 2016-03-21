@@ -8,8 +8,6 @@ import ICAT
 
 import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString.Lazy.Char8 as B8
-import Data.Map.Strict
 
 -- config info
 data VerificationInfo = VerificationInfo {
@@ -24,15 +22,6 @@ data DBTrans = DBTrans {
     db_info :: ICATDBConnInfo
 } deriving (Show, Generic)
 
-data PredInfo = PredInfo {
-    pred_name :: String,
-    pred_arity :: Int
-} deriving (Show, Generic)
-data InsMapInfo = InsMapInfo {
-    ins_pred_name :: String,
-    insert_to :: Int,
-    delete_from :: [Int]
-} deriving (Show, Generic)
 
 data ICATDBConnInfo = ICATDBConnInfo {
     db_host :: String,
@@ -46,9 +35,8 @@ data ICATDBConnInfo = ICATDBConnInfo {
 data TranslationInfo = TranslationInfo {
     db_plugins :: [DBTrans],
     hide_predicate :: [String],
-    add_predicate :: [PredInfo],
+    add_predicate :: [String],
     verifier :: VerificationInfo,
-    insert_map :: [InsMapInfo],
     rewriting_file_path :: String
 } deriving (Show, Generic)
 
@@ -64,11 +52,6 @@ instance ToJSON TranslationInfo
 instance FromJSON DBTrans
 instance ToJSON DBTrans
 
-instance FromJSON PredInfo
-instance ToJSON PredInfo
-
-instance FromJSON InsMapInfo
-instance ToJSON InsMapInfo
 
 getConfig :: FromJSON a => String -> IO a
 getConfig filepath = do

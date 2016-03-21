@@ -1,8 +1,9 @@
-module FO.Noop where
+module Prover.Noop where
 
 import FO.Data
-import FO.Parser
-import FO.Config
+import Prover.Prover
+import Prover.Parser
+import Config
 
 import System.IO.Temp
 import GHC.IO.Handle

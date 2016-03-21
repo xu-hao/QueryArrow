@@ -6,20 +6,12 @@ import ResultStream
 import FO.Data
 import FO.Domain
 import QueryPlan
-import Rewriting
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete, singleton, keys, filterWithKey)
-import qualified Data.Map.Strict
-import Data.List ((\\), intercalate, union)
-import Control.Monad.Trans.State.Strict (StateT, evalStateT,evalState, get, put, State, runState   )
-import Control.Applicative ((<$>), liftA2)
-import Data.Convertible.Base
-import Control.Monad.Logic
-import Control.Monad.Except
+import Data.Map.Strict (Map, empty, insert, alter, lookup)
 import Data.Maybe
-import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString.Lazy.Char8 as B8
+import Data.List ((\\), intercalate, transpose)
+import Control.Monad.Catch
 
 
 intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
@@ -28,14 +20,14 @@ intResultStream i = return (insert (Var "i") (IntValue i) empty)
 -- map from predicate name to database names
 type PredDBMap = Map String [String]
 
-constructPredMap :: [Database m  row] -> PredMap
+constructPredMap :: [Database m row ] -> PredMap
 constructPredMap = foldr addPredFromDBToMap empty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
         addPredToMap thepred = insert (predName thepred) thepred
         preds = getPreds db
 
 -- construct map from predicates to db names
-constructPredDBMap :: [Database m  row] -> PredDBMap
+constructPredDBMap :: [Database m row ] -> PredDBMap
 constructPredDBMap = foldr addPredFromDBToMap empty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
         dbname = getName db
@@ -64,11 +56,11 @@ constructPredDBMap = foldr addPredFromDBToMap empty where
 -- a list of effective literals
 -- a list of literal
 -- find the longest prefix of the literal list the literals in which become effective in at least one databases
-findEffectiveFormulas :: (Monad m ) => ([(Database m  row, DomainSizeMap)], [Formula], [Formula]) -> m ([(Database m  row, DomainSizeMap)], [Formula], [Formula])
+findEffectiveFormulas :: (Monad m ) => ([(Database m row , DomainSizeMap)], [Formula], [Formula]) -> m ([(Database m row , DomainSizeMap)], [Formula], [Formula])
 findEffectiveFormulas (db_maps, effective, []) = return (db_maps, effective, [])
-findEffectiveFormulas (db_maps, effective, candidates@(formula : rest)) = do
+findEffectiveFormulas (db_maps, effective, candidates@(form : rest)) = do
     let isFormulaEffective formula' (db@(Database db_), map1) = do
-        map1' <- determinedVars (domainSize db_ map1) Pos formula'
+        map1' <- determinedVars (domainSize db_ map1)  formula'
         let map2 = mmin map1 map1'
         let freevars = freeVars formula'
         return (if all (\freevar -> case lookupDomainSize freevar map2 of
@@ -76,11 +68,11 @@ findEffectiveFormulas (db_maps, effective, candidates@(formula : rest)) = do
             Unbounded -> False) freevars
                 then (Just (db, map2))
                 else Nothing)
-    db_mapmaybes <- mapM (isFormulaEffective formula) db_maps
+    db_mapmaybes <- mapM (isFormulaEffective form) db_maps
     let db_mapsnew = catMaybes db_mapmaybes
     if null db_mapsnew
         then return (db_maps, effective, candidates)
-        else findEffectiveFormulas (db_mapsnew, effective ++ [formula], rest)
+        else findEffectiveFormulas (db_mapsnew, effective ++ [form], rest)
 
 combineLits :: [Lit] -> ([Atom] -> [Atom] -> a) -> ([Atom] -> a) -> (Atom -> a) -> a
 combineLits lits generateUpdate generateInsert generateDelete = do
@@ -97,3 +89,64 @@ combineLits lits generateUpdate generateInsert generateDelete = do
             ([], _) -> generateDelete negobjatom
             _ -> error "tyring to modify propertiese of an object to be deleted" -- delete
         ([posobjatom], [negobjatom]) -> generateUpdate (posobjatom:pospropredatoms) (negobjatom:negproppredatoms) -- update property
+        x -> error ("combineLits: uncombinable " ++ show x)
+
+maximumd :: Ord a => a -> [a] -> a
+maximumd d [] = d
+maximumd _ l = maximum l
+
+superset :: (Eq a) => [a] -> [a] -> Bool
+superset s = all (`elem` s)
+dbCatch :: (MonadCatch m) => m a -> m (Either SomeException a)
+dbCatch action =
+        catch (do
+            r <- action
+            return (Right r)) (\e ->
+                return (Left e))
+
+
+pprint :: ([String], [Map String String]) -> String
+pprint (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+    join = intercalate " " . map (uncurry pad) . zip collen
+    rowstrs = map join m2
+    m2 = transpose m
+    collen = map (maximumd 0 . map length) m
+    m = map f vars
+    f var = map (g var) rows
+    g::String-> Map String String -> String
+    g var row = case lookup var row of
+        Nothing -> "null"
+        Just e -> e
+    pad n s
+        | length s < n  = s ++ replicate (n - length s) ' '
+        | otherwise     = s
+
+pprint3 :: ([String], [[String]]) -> String
+pprint3 (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+            join = intercalate " " . map (uncurry pad) . zip collen
+            rowstrs = map join m2
+            m2 = transpose m
+            collen = map (maximumd 0 . map length) m
+            m = map f [0..length vars-1]
+            f var = map (g var) rows
+            g::Int->  [String] -> String
+            g var row = row !! var
+            pad n s
+                | length s < n  = s ++ replicate (n - length s) ' '
+                | otherwise     = s
+
+pprint2 :: [Var] -> [MapResultRow] -> String
+pprint2 vars rows = join  (map unVar vars) ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+    join = intercalate " " . map (uncurry pad) . zip collen
+    rowstrs = map join m2
+    m2 = transpose m
+    collen = map (maximumd 0 . map length) m
+    m = map f vars
+    f var = map (g var) rows
+    g::Var->MapResultRow->String
+    g var row = case lookup var row of
+        Nothing -> "null"
+        Just e -> show e
+    pad n s
+        | length s < n  = s ++ replicate (n - length s) ' '
+        | otherwise     = s

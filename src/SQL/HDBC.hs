@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
 module SQL.HDBC where
 
+import Prelude hiding (lookup)
 import DBQuery
 import SQL.SQL
 import QueryPlan
@@ -10,10 +11,10 @@ import FO.Data
 import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
 import Control.Applicative ((<$>))
-import Data.Map.Strict (empty, insert, (!))
+import Data.Map.Strict (empty, insert, (!), lookup)
+import Debug.Trace
 
-data HDBCQueryStatement = HDBCQueryStatement [Var] Statement [Var] -- return vars stmt param vars
-data HDBCInsertStatement = HDBCInsertStatement Statement [Var] -- stmt param vars
+data HDBCQueryStatement = HDBCQueryStatement Bool [Var] Statement [Var] -- return vars stmt param vars
 
 convertExprToSQL :: Expr -> SqlValue
 convertExprToSQL (IntExpr i) = toSql i
@@ -31,37 +32,39 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
 class HDBCConnection conn where
+        hdbcPrepare :: conn -> DBAdapterMonad Bool
+        hdbcCommit :: conn -> DBAdapterMonad Bool
+        hdbcRollback :: conn -> DBAdapterMonad ()
         showSQLQuery :: conn -> SQLQuery -> String
-        showSQLInsert :: conn -> SQLInsert -> String
 
 instance PreparedStatement_ HDBCQueryStatement where
-        execWithParams (HDBCQueryStatement vars stmt params) args = resultStream2 (do
-                execute stmt (map (\v -> convertExprToSQL (args ! v)) params)
-                rows <- fetchAllRows stmt
-                return (map (convertSQLToResult vars) rows)) (finish stmt)
+        execWithParams (HDBCQueryStatement ret vars stmt params) args = resultStream2 (do
+                rcode <- execute stmt (map (\v -> convertExprToSQL (case lookup v args of
+                    Just e -> e
+                    Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args))) params)
+                if rcode == -1
+                    then error ("execWithParams: error")
+                    else trace (show rcode ++ " rows changed") $ if ret
+                        then do
+                            rows <- fetchAllRows stmt
+                            return (map (convertSQLToResult vars) rows)
+                        else return [mempty]
+                ) (finish stmt)
         closePreparedStatement _ = return ()
 
-instance PreparedStatement_ HDBCInsertStatement where
-        execWithParams (HDBCInsertStatement stmt params) args = do
-            let exprs = (map (\v -> convertExprToSQL (args ! v)) params)
-            total <- liftIO $ do
-                res <- execute stmt exprs
-                return (fromIntegral res)
-            return empty
-        closePreparedStatement _ = return ()
 
 prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLQuery -> IO HDBCQueryStatement
-prepareHDBCQueryStatement conn sqlquery@(vars, query, params) = HDBCQueryStatement vars <$> prepare conn (showSQLQuery conn sqlquery) <*> pure params
+prepareHDBCQueryStatement conn sqlquery@(vars, query, params) = HDBCQueryStatement (case query of
+                                                                                        SQLQ _ -> True
+                                                                                        _ -> False) vars <$> prepare conn (showSQLQuery conn sqlquery) <*> pure params
 
-prepareHDBCInsertStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLInsert -> IO HDBCInsertStatement
-prepareHDBCInsertStatement conn sqlquery@(query, params) = HDBCInsertStatement <$> prepare conn ( showSQLInsert conn sqlquery) <*> pure params
 
-instance (HDBCConnection conn, IConnection conn) => DBConnection conn SQLQuery SQLInsert where
-        prepareQueryStatement conn query = PreparedStatement <$> prepareHDBCQueryStatement conn query
-        prepareInsertStatement conn query = PreparedStatement <$> prepareHDBCInsertStatement conn query
+instance (HDBCConnection conn, IConnection conn) => DBConnection conn SQLQuery  where
+        prepareQueryStatement conn query = liftIO $ PreparedStatement <$> prepareHDBCQueryStatement conn query
         connBegin _ = return ()
-        connCommit = commit
-        connRollback = rollback
-        connClose = disconnect
+        connCommit = hdbcCommit
+        connPrepare = hdbcPrepare
+        connRollback = hdbcRollback
+        connClose conn = liftIO $ disconnect conn
 
 -- the QueryDB instance is provided for each DB type

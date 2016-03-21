@@ -1,7 +1,8 @@
-module FO.E where
+module Prover.E where
 
 import FO.Data
-import FO.Parser
+import Prover.Prover
+import Prover.Parser
 import Config
 
 import System.IO.Temp
