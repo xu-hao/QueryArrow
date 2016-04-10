@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings #-}
 module SQL.HDBC.PostgreSQL where
 
 import DBQuery

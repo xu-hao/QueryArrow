@@ -13,6 +13,7 @@ import Data.Functor.Identity
 import Control.Monad.State (get, State, evalState)
 import Codec.TPTP.Pretty
 import Codec.TPTP.Export
+import qualified Data.Text as T
 
 type ConvEnv a = State PredMap a
 type Input = (String , String, PureFormula)
@@ -59,7 +60,7 @@ instance Convertible t (ConvEnv Expr) => Convertible (TPTP.Term0 t) (ConvEnv Exp
         if denominator ratio /= 1
             then error "fraction not supported"
             else Right (return (IntExpr (fromIntegral (numerator ratio))))
-    safeConvert (TPTP.DistinctObjectTerm s) = Right (return (StringExpr s))
+    safeConvert (TPTP.DistinctObjectTerm s) = Right (return (StringExpr (T.pack s)))
 
 parseTPTP :: PredMap -> String -> [Input]
 parseTPTP pm s = evalState (mapM convert (TPTP.parse s)) pm
@@ -116,7 +117,7 @@ instance Convertible Var TPTP.V where
 instance Convertible Expr TPTP.Term where
     safeConvert (VarExpr v) = Right (TPTP.var (convert v))
     safeConvert (IntExpr i) = Right (TPTP.numberLitTerm (fromIntegral i))
-    safeConvert (StringExpr s) = Right (TPTP.distinctObjectTerm s)
+    safeConvert (StringExpr s) = Right (TPTP.distinctObjectTerm (T.unpack s))
 
 instance Convertible a b => Convertible [a] [b] where
     safeConvert = mapM safeConvert

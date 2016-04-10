@@ -17,6 +17,7 @@ import Data.Maybe
 import Control.Monad.Trans.Except
 import Debug.Trace
 import Data.Convertible
+import qualified Data.Text as T
 
 type Col = String
 type TableName = String
@@ -37,8 +38,8 @@ type SQLOper = String
 
 data SQLExpr = SQLColExpr SQLQualifiedCol
              | SQLIntConstExpr Int
-             | SQLStringConstExpr String
-             | SQLPatternExpr String
+             | SQLStringConstExpr T.Text
+             | SQLPatternExpr T.Text
              | SQLNullExpr
              | SQLParamExpr String
              | SQLFuncExpr String [SQLExpr] deriving (Eq, Ord)
@@ -111,8 +112,8 @@ instance Show2 SQLExpr where
         then col
         else show var ++ "." ++ col
     show2 (SQLIntConstExpr i) _ = show i
-    show2 (SQLStringConstExpr s) _ = "'" ++ sqlStringEscape s ++ "'"
-    show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape s ++ "'"
+    show2 (SQLStringConstExpr s) _ = "'" ++ sqlStringEscape (T.unpack s) ++ "'"
+    show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
     show2 (SQLParamExpr _) _ = "?"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
     show2 SQLNullExpr _ = "NULL"

@@ -1,14 +1,15 @@
 // aux
 predicate CLIENT_ID         object(key cid)
-rewrite classical CLIENT_ID(u) ⟶      USER_NAME(u, client_user_name) ∧ USER_ZONE_NAME(u, client_zone)
 rewrite CLIENT_ID(u) ⟶      USER_NAME(u, client_user_name) ⊗ USER_ZONE_NAME(u, client_zone)
+rewrite classical CLIENT_ID(u) ⟶      USER_NAME(u, client_user_name) ∧ USER_ZONE_NAME(u, client_zone)
 
 predicate META              object(key oid, key mid, property a, property v, property u)
-rewrite classical META(x, m, a, v, u) ⟶ OBJT_METAMAP_OBJ(x, m) ∧ META_ATTR_UNIT(m, u) ∧ META_ATTR_NAME(m, a) ∧ META_ATTR_VALUE(m, v)
 rewrite META(x, m, a, v, u) ⟶ OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v)
+rewrite classical META(x, m, a, v, u) ⟶ OBJT_METAMAP_OBJ(x, m) ∧ META_ATTR_UNIT(m, u) ∧ META_ATTR_NAME(m, a) ∧ META_ATTR_VALUE(m, v)
 
 predicate META_ATTR_ACCESS_OBJ object(key a, key oid, key uid, key acc)
 rewrite META_ATTR_ACCESS_OBJ(oid, uid, acc) ⟶  OBJT_ACCESS_OBJ(oid, uid, acc)
+rewrite classical META_ATTR_ACCESS_OBJ(oid, uid, acc) ⟶  OBJT_ACCESS_OBJ(oid, uid, acc)
 
 // new predicates
 predicate DATA_NAME_2       object(key oid, property n)
@@ -48,7 +49,7 @@ rewrite insert META_1(x, a, v, u) ⟶  nextid(m) ⊗ insert
 rewrite delete META_1(x, a, v, u) ⟶  OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v) ⊗ delete
                             OBJT_METAMAP_OBJ(x, m)
 
-predicate META_2            object(key oid, property a, property v, property u)
+predicate META_2            object(key oid, key a, key v, key u)
 rewrite classical META_2(x, a, v, u) ⟶  META(x, m, a, v, u) ∧ CLIENT_ID(user) ∧ META_ACCESS_OBJ(m, x, user, acc) ∧ eq(acc, 1200)
 rewrite META_2(x, a, v, u) ⟶  META(x, m, a, v, u) ⊗ CLIENT_ID(user) ⊗ META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
 rewrite insert META_2(x, a, v, u) ⟶  nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ eq(acc,1200) ⊗ insert

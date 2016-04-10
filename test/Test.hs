@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings #-}
 
 import FO hiding (validateInsert, validate)
 import qualified FO
@@ -25,13 +25,14 @@ import Control.Applicative ((<$>), (<*>))
 import Control.Monad (replicateM)
 import Text.Parsec (runParser)
 import Data.Functor.Identity (runIdentity, Identity)
-import Data.Map.Strict ((!), Map, empty, insert, fromList, singleton)
+import Data.Map.Strict ((!), Map, empty, insert, fromList, singleton, toList)
 import Control.Monad.Trans.State.Strict (StateT, evalState, runState, evalStateT, runStateT)
 import Debug.Trace (trace)
 import Test.Hspec
 import Data.Monoid
 import Data.Convertible
 import Control.Monad.Trans.Except
+import qualified Data.Text as T
 
 {- validateInsert :: TheoremProver_ p => p -> [PureFormula] -> Query -> IO (Maybe Bool)
 validateInsert = FO.validateInsert . TheoremProver
@@ -66,6 +67,9 @@ deriving instance Eq PureQueryPlan
 string2 :: Gen String
 string2 = (:) <$> (unChar2 <$> arbitrary) <*> (map unChar2 <$> arbitrary)
 
+text2 :: Gen T.Text
+text2 = T.pack <$> string2
+
 instance Arbitrary PredType where
     arbitrary = PredType <$> arbitrary <*> arbitrary
 
@@ -79,7 +83,7 @@ instance Arbitrary Pred where
     arbitrary = Pred <$> string2 <*> arbitrary
 
 instance Arbitrary Expr where
-    arbitrary = oneof [VarExpr <$> Var <$> string2, IntExpr <$> arbitrary, StringExpr <$> string2]
+    arbitrary = oneof [VarExpr <$> Var <$> string2, IntExpr <$> arbitrary, StringExpr <$> text2]
 
 instance Arbitrary Sign where
     arbitrary = oneof [return Pos, return Neg]
@@ -91,12 +95,12 @@ instance Arbitrary Lit where
     arbitrary = Lit <$> arbitrary <*> arbitrary
 
 instance Arbitrary ResultValue where
-    arbitrary = oneof [IntValue <$> arbitrary, StringValue <$> string2]
+    arbitrary = oneof [IntValue <$> arbitrary, StringValue <$> text2]
 
 instance Arbitrary (MapDB m) where
     arbitrary = do
         (Positive m) <- arbitrary
-        let arbitraryList = oneof [replicateM m (IntValue <$> arbitrary), replicateM m (StringValue <$> string2)]
+        let arbitraryList = oneof [replicateM m (IntValue <$> arbitrary), replicateM m (StringValue <$> text2)]
         MapDB <$> string2 <*> string2 <*> (zip <$> arbitraryList <*> arbitraryList)
 
 newtype LimitedMapDB m = LimitedMapDB (MapDB m) deriving Show
@@ -104,7 +108,7 @@ instance Arbitrary (LimitedMapDB m) where
     arbitrary = do
         (Positive m) <- arbitrary
         (Positive m1) <- arbitrary
-        strList <- replicateM m string2
+        strList <- replicateM m text2
         let arbitraryList = replicateM m1 (oneof ((return . StringValue) <$> strList))
         LimitedMapDB <$> (MapDB <$> string2 <*> string2 <*> (zip <$> arbitraryList <*> arbitraryList))
 
@@ -307,7 +311,7 @@ main = hspec $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
             let (_, sql) = translateQuery2 cypherTrans qu
             print sql
-            show sql `shouldBe` "MATCH (var:DataObject) RETURN var.obj_id,var.data_name"
+            show sql `shouldBe` "MATCH (var:DataObject) RETURN var.object_id,var.data_name"
         it "test translate cypher insert 0" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
             let sql = translateInsert cypherTrans qu
@@ -315,23 +319,23 @@ main = hspec $ do
         it "test translate cypher insert 1" $ do
             let qu = parseStandardInsert "insert DATA_OBJ(1) DATA_NAME(1, \"foo\") DATA_SIZE(1, 1000)"
             let sql = translateInsert cypherTrans qu
-            show (snd sql) `shouldBe` "CREATE (var:DataObject{obj_id:1,data_name:'foo',data_size:1000})"
+            show (snd sql) `shouldBe` "CREATE (var:DataObject{object_id:1,data_name:'foo',data_size:1000})"
         it "test translate cypher insert 2" $ do
             let qu = parseStandardInsert "COLL_NAME(a,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
             let sql = translateInsert cypherTrans qu
-            show (snd sql) `shouldBe` "MATCH (var:Collection) CREATE (var2:DataObject{obj_id:1,data_name:var.coll_name,data_size:1000})"
+            show (snd sql) `shouldBe` "MATCH (var:Collection) CREATE (var2:DataObject{object_id:1,data_name:var.coll_name,data_size:1000})"
         it "test translate cypher insert 3" $ do
             let qu = parseStandardInsert "COLL_NAME(2,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
             let sql = translateInsert cypherTrans qu
-            show (snd sql) `shouldBe` "MATCH (var:Collection{obj_id:2}) CREATE (var2:DataObject{obj_id:1,data_name:var.coll_name,data_size:1000})"
+            show (snd sql) `shouldBe` "MATCH (var:Collection{object_id:2}) CREATE (var2:DataObject{object_id:1,data_name:var.coll_name,data_size:1000})"
         it "test translate cypher insert 4" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c)"
             let sql = translateInsert cypherTrans qu
-            show (snd sql) `shouldBe` "MATCH (var:DataObject{obj_id:1}) SET var.data_name = NULL"
+            show (snd sql) `shouldBe` "MATCH (var:DataObject{object_id:1}) SET var.data_name = NULL"
         it "test translate cypher insert 5" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c) DATA_NAME(1, \"foo\")"
             let sql = translateInsert cypherTrans qu
-            show (snd sql) `shouldBe` "MATCH (var:DataObject{obj_id:1}) SET var.data_name = 'foo'"
+            show (snd sql) `shouldBe` "MATCH (var:DataObject{object_id:1}) SET var.data_name = 'foo'"
         it "test translate cypher insert 6" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, c) DATA_NAME(x, \"foo\")"
             let sql = translateInsert cypherTrans qu
@@ -359,7 +363,7 @@ main = hspec $ do
         it "test translate cypher insert 9" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(1)"
             let sql = translateInsert cypherTrans qu
-            show (snd sql) `shouldBe` "MATCH (var:DataObject{obj_id:1}) DELETE var"
+            show (snd sql) `shouldBe` "MATCH (var:DataObject{object_id:1}) DELETE var"
         it "test tranlate cypher insert 10" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
             let sql = translateInsert cypherTrans qu
@@ -657,3 +661,16 @@ main = hspec $ do
                     qp `shouldBe` (Exec (FInsert (Lit Pos (Atom p [IntExpr 1,IntExpr 1]))) [])
                     let qp2 = runIdentity (runExceptT (checkQueryPlan2 dbs qp))
                     show qp2 `shouldBe` "Left (\"no database\",(insert p(1,1)),fromList [])"
+
+        it "schema 0" $ do
+            let CypherTrans _ _ mappings = cypherTrans
+            show (mappings ! "DATA_NAME") `shouldBe` "([1,2],GraphPattern [(0:DataObject{object_id:1})] [],GraphPattern [] [(0:DataObject{data_name:2})],[(0,[1])])"
+        it "schema 1" $ do
+            let CypherTrans _ _ mappings = cypherTrans
+            show (mappings ! "DATA_COLL_ID") `shouldBe` "([1,2],GraphPattern [(d{object_id:1}),(c{object_id:2})] [],GraphPattern [] [(d)-[e:DATA_COLL_ID]->(c)],[(d,[1]),(e,[1]),(c,[2])])"
+        it "schema 2" $ do
+            let CypherTrans _ _ mappings = cypherTrans
+            show (mappings ! "USER_GROUP_OBJ") `shouldBe` "([1,2],GraphPattern [(d{group_user_id:1}),(c{user_id:2})] [],GraphPattern [] [(d)-[e:USER_GROUP_OBJ]->(c)],[(d,[1]),(e,[1,2]),(c,[2])])"
+        it "schema 3" $ do
+            let CypherTrans _ _ mappings = cypherTrans
+            show (mappings ! "USER_GROUP_CREATE_TS") `shouldBe` "([1,2,3],GraphPattern [(d{group_user_id:1}),(c{user_id:2}),(d)-[e:USER_GROUP_CREATE_TS]->(c)] [],GraphPattern [] [(e{create_ts:3})],[(d,[1]),(e,[1,2]),(c,[2])])"

@@ -12,6 +12,7 @@ import Data.Maybe
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.List (union)
 import qualified Text.Parsec.Token as T
+import qualified Data.Text as TE
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
@@ -55,8 +56,8 @@ argp :: FOParser Expr
 argp =
     (VarExpr <$> Var <$> identifier)
     <|> (IntExpr . fromIntegral <$> integer)
-    <|> (reserved "pattern" >> PatternExpr <$> stringp )
-    <|> (StringExpr <$> stringp)
+    <|> (reserved "pattern" >> PatternExpr. TE.pack <$> stringp )
+    <|> (StringExpr . TE.pack <$> stringp)
 
 arglistp :: FOParser [Expr]
 arglistp =

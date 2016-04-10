@@ -15,10 +15,11 @@ import Data.Maybe
 import Data.Monoid  ((<>))
 import Data.Tree
 import Data.Conduit
+import qualified Data.Text as T
 import Debug.Trace
 
 -- result value
-data ResultValue = StringValue String | IntValue Int | Null deriving (Eq , Show)
+data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Show)
 
 instance Convertible ResultValue Expr where
     safeConvert (StringValue s) = Right (StringExpr s)

@@ -1,4 +1,4 @@
-{-# LANGUAGE MonadComprehensions, ForeignFunctionInterface #-}
+{-# LANGUAGE MonadComprehensions, ForeignFunctionInterface ,OverloadedStrings #-}
 module Main where
 
 --import QueryArrowList
@@ -74,6 +74,7 @@ import Control.Exception
 import Control.Monad.Except
 import Serialization
 import Data.Aeson
+import qualified Data.Text as T
 -- import Data.Serialize
 
 
@@ -147,7 +148,7 @@ run2 query ps = do
 run3 :: String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
 run3 query tdb@(TransDB _ dbs  preds (qr, qr2, ir, dr) ) user zone = do
     let predmap = foldMap (\p@(Pred n _) -> singleton n p) preds
-    let params = fromList [(Var "client_user_name",StringValue user), (Var "client_zone", StringValue zone)]
+    let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
     let pqp qp = do
         liftIO $ putStrLn ("query plan:")
         liftIO $ putStrLn (drawTree (toTree  qp))

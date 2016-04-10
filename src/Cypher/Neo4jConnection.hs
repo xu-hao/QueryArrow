@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs #-}
+{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, OverloadedStrings #-}
 module Cypher.Neo4jConnection where
 
 import FO.Data
@@ -29,8 +29,8 @@ type Neo4jConnection = Neo4jConnInfo
 
 instance Convertible Expr C.ParamValue where
     safeConvert (IntExpr i) = Right (C.newparam (fromIntegral i :: Int64))
-    safeConvert (StringExpr s) = Right (C.newparam (T.pack s))
-    safeConvert e = Left (ConvertError "" "" ""     ("unsupported param value expr type: " ++ show e))
+    safeConvert (StringExpr s) = Right (C.newparam s)
+    safeConvert e = Left (ConvertError (show e) "Expr" "ParamValue" "unsupported param value expr type")
 
 instance Convertible ([Var], [A.Value]) MapResultRow where
     safeConvert (vars, values) = Right (foldl (\row (var, value) ->
@@ -38,7 +38,7 @@ instance Convertible ([Var], [A.Value]) MapResultRow where
                         A.Number n -> case floatingOrInteger n of
                             Left r -> error ("floating not supported")
                             Right i -> IntValue (fromIntegral i)
-                        A.String text -> StringValue (T.unpack text)
+                        A.String text -> StringValue (text)
                         A.Null -> StringValue "<null>"
                         _ -> error ("unsupported json value: " ++ show value)) row) empty (zip vars values) )
 

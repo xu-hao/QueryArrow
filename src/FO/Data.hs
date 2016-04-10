@@ -13,6 +13,7 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Data.Convertible
 import Control.Monad.Except
+import qualified Data.Text as T
 
 -- variable types
 type Type = String
@@ -32,7 +33,7 @@ data Pred = Pred { predName :: String, predType :: PredType} deriving (Eq, Ord, 
 newtype Var = Var {unVar :: String} deriving (Eq, Ord)
 
 -- expression
-data Expr = VarExpr Var | IntExpr Int | StringExpr String | PatternExpr String deriving (Eq, Ord)
+data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text deriving (Eq, Ord)
 
 -- atoms
 data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } deriving (Eq, Ord)
@@ -551,7 +552,7 @@ instance Equate Expr where
 
 instance Equate a => Equate [a] where
     as === bs = conj (zipWith (===) as bs)
-    
+
 class SubstPred a where
     substPred :: Map Pred Pred -> a -> a
 

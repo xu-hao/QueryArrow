@@ -3,7 +3,7 @@ module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
     CypherMapping, translateQueryToCypher, simplifyDependencies', unifyAll, unifysCond, unifyOne, normalizeGraphPatternCond,
     CypherCond(..), CypherQuery, GraphPattern(..), NodePattern(..), PropertyKey(..), Cypher(..), cypherVarExprMap, CypherVarExprMap(..),
     CypherBuiltIn(..), CypherPredTableMap, OneGraphPattern(..),CypherTrans(..), (.=.), (.<>.), (.&&.), (.||.),
-    nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, var, cnull, dot, app, match,
+    nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cnot, cwhere, creturn, cor, cfalse) where
 
 import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, conj, disj, Unify,unify)
@@ -26,6 +26,7 @@ import Data.Set ()
 import qualified Data.Set as Set
 import Control.Applicative ((<$>), liftA2)
 import Control.Monad.Trans.Class
+import qualified Data.Text as T
 import Debug.Trace
 
 -- basic definitions
@@ -34,7 +35,7 @@ newtype CypherVar = CypherVar {unCypherVar::String} deriving (Eq, Ord)
 data CypherExpr = CypherVarExpr CypherVar
                 | CypherRigidVarExpr CypherVar -- used only in unification
                 | CypherIntConstExpr Int
-                | CypherStringConstExpr String
+                | CypherStringConstExpr T.Text
                 | CypherParamExpr String
                 | CypherDotExpr CypherExpr PropertyKey
                 | CypherAppExpr String [CypherExpr]
@@ -228,7 +229,7 @@ instance Show NodePattern where
 instance Show CypherExpr where
     show (CypherVarExpr var) = show var
     show (CypherIntConstExpr i) = show i
-    show (CypherStringConstExpr s) = "'" ++ cypherStringEscape s ++ "'"
+    show (CypherStringConstExpr s) = "'" ++ cypherStringEscape (T.unpack s) ++ "'"
     show (CypherParamExpr m) = "{" ++ m ++ "}"
     show (CypherDotExpr expr (PropertyKey prop)) = show expr ++ "." ++ prop
     show (CypherAppExpr f args) = f ++ "(" ++ intercalate "," (map show args) ++ ")"
