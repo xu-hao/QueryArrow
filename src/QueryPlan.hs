@@ -696,14 +696,14 @@ execQueryPlan  r (qpd, QPSequencing2 qp1 qp2) =
     (inscopevs qpd, do
         let r1 = execQueryPlan  r qp1
             (vars2, rs2) = execQueryPlan r1 qp2 in
-            transformResultStream vars2 (inscopevs qpd) rs2)
+            transformResultStream vars2 (combinedvs qpd) rs2)
 
 execQueryPlan  (vars, rs) (qpd, QPChoice2 qp1 qp2) =
     (inscopevs qpd, do
         row <- rs
         let (vars1, rs1) = execQueryPlan  (vars, pure row) qp1
             (vars2, rs2) = execQueryPlan  (vars, pure row) qp2 in
-            transformResultStream vars1 (inscopevs qpd) rs1 <|> transformResultStream vars2 (inscopevs qpd) rs2)
+            transformResultStream vars1 (combinedvs qpd) rs1 <|> transformResultStream vars2 (combinedvs qpd) rs2)
 
 execQueryPlan (vars, rs) (qpd, QPClassical2 qp) =
         (inscopevs qpd, filterResultStream rs (\row -> do
@@ -760,12 +760,12 @@ execQueryPlan'  (vars, rs) (qpd, QPOr2 qp1 qp2) =
         row <- rs
         let (vars1, rs1) = execQueryPlan'  (vars, pure row) qp1
             (vars2, rs2) = execQueryPlan'  (vars, pure row) qp2
-        transformResultStream vars1 (inscopevs qpd) rs1 <|> transformResultStream vars2 (inscopevs qpd) rs2)
+        transformResultStream vars1 (combinedvs qpd) rs1 <|> transformResultStream vars2 (combinedvs qpd) rs2)
 execQueryPlan'  r (qpd, QPAnd2 qp1 qp2) =
     (inscopevs qpd, do
         let r1 = execQueryPlan' r qp1
             (vars2, rs2) = execQueryPlan'  r1 qp2
-        transformResultStream vars2 (inscopevs qpd) rs2)
+        transformResultStream vars2 (combinedvs qpd) rs2)
 
 execQueryPlan'  (vars, rs) (_, QPNot2 qp) = -- assume no unbounded vars under not
             (vars, filterResultStream rs (\row -> do
