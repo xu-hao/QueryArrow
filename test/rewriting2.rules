@@ -30,8 +30,8 @@ predicate META_2            object(key oid, key a, key v, key u)
 rewrite classical META_2(x, a, v, u) ⟶  META(x, m, a, v, u) ∧ CLIENT_ID(user) ∧ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ∧ eq(acc, 1200)
 rewrite META_2(x, a, v, u) ⟶  META(x, m, a, v, u) ⊗ CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
 rewrite insert META_2(x, a, v, u) ⟶  nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ eq(acc,1200) ⊗
-                            ([ ¬ CYPHER_USER_OBJ(user) ] ⊗ insert CYPHER_USER_OBJ(user) ⊕
-                             [ ¬ CYPHER_DATA_OBJ(x) ] ⊗ insert CYPHER_DATA_OBJ(x) ⊕
+                            ([ ¬ CYPHER_USER_OBJ(user) ] ⊗ insert CYPHER_USER_OBJ(user) ⊗ 𝟎 ⊕
+                             [ ¬ CYPHER_DATA_OBJ(x) ] ⊗ insert CYPHER_DATA_OBJ(x) ⊗ 𝟎 ⊕
                              insert OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)
                              CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, 1200))
 rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200) ⊗

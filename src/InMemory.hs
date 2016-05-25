@@ -11,7 +11,6 @@ import Config
 import Parser
 import DBQuery
 import Utils
-import FO
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete, singleton, keys, filterWithKey)
@@ -236,7 +235,7 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     dbCommit _ = return True
     dbRollback _ = return ()
     getName (EqDB name) = name
-    getPreds _ = [ Pred "eq" (PredType ObjectPred [Key "String", Key "String"]) ]
+    getPreds _ = [ Pred "eq" (PredType ObjectPred [Key "Any", Key "Any"]) ]
     domainSize db varDomainSize (Atom thepred args)
         | thepred `elem` getPreds db =
             let [d1, d2] = map (exprDomainSizeMap varDomainSize Unbounded) args in

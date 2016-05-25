@@ -1,6 +1,15 @@
 {
     "db_plugins" : [{
         "db_info" : {
+            "db_port" : 0,
+            "db_name" : "InMemory/EqDB",
+            "db_password" : "",
+            "db_host" : "",
+            "db_username" : "",
+            "catalog_database_type" : "InMemory/EqDB"
+        }
+    }, {
+        "db_info" : {
            "db_port" : 5432,
            "db_name" : "ICAT",
            "db_password" : "testpassword",

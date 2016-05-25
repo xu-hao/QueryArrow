@@ -14,6 +14,7 @@ import Utils
 -- import Plugins
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified Cypher.Neo4j as Neo4j
+import qualified InMemory as InMemory
 
 import Prelude  hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)
@@ -29,21 +30,6 @@ import Data.Maybe
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
 import Debug.Trace
-
-class SubstituteResultValue a where
-    substResultValue :: MapResultRow -> a -> a
-
-instance SubstituteResultValue Expr where
-    substResultValue varmap expr@(VarExpr var) = case lookup var varmap of
-        Nothing -> expr
-        Just res -> convert res
-
-instance SubstituteResultValue Atom where
-    substResultValue varmap (Atom thesign theargs) = Atom thesign newargs where
-        newargs = map (substResultValue varmap) theargs
-instance SubstituteResultValue Lit where
-    substResultValue varmap (Lit thesign theatom) = Lit thesign newatom where
-        newatom = substResultValue varmap theatom
 
 -- exec query from dbname
 
@@ -126,7 +112,7 @@ getRewriting predmap ps = do
         Right rules -> return rules
 
 dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])
-dbMap = fromList [("SQL/HDBC/PostgreSQL", PostgreSQL.getDB), ("Cypher/Neo4j", Neo4j.getDB)];
+dbMap = fromList [("SQL/HDBC/PostgreSQL", PostgreSQL.getDB), ("Cypher/Neo4j", Neo4j.getDB), ("InMemory/EqDB", \ps -> return [Database (InMemory.EqDB (db_name ps))])];
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = case lookup (catalog_database_type ps) dbMap of

@@ -38,6 +38,23 @@ instance ResultRow MapResultRow where
     transform _ vars2 map1 = foldr (\var map2 -> case lookup var map1 of
                                                         Nothing -> insert var Null map2
                                                         Just rv -> insert var rv map2) empty vars2
+
+class SubstituteResultValue a where
+    substResultValue :: MapResultRow -> a -> a
+
+instance SubstituteResultValue Expr where
+    substResultValue varmap expr@(VarExpr var) = case lookup var varmap of
+        Nothing -> expr
+        Just res -> convert res
+
+instance SubstituteResultValue Atom where
+    substResultValue varmap (Atom thesign theargs) = Atom thesign newargs where
+        newargs = map (substResultValue varmap) theargs
+instance SubstituteResultValue Lit where
+    substResultValue varmap (Lit thesign theatom) = Lit thesign newatom where
+        newatom = substResultValue varmap theatom
+
+
 -- query
 data Query = Query { select :: [Var], cond :: Formula }
 
@@ -283,7 +300,7 @@ optimizeQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
                 let dbs = dbs1 `intersect` dbs2
                     fse = fsequencing [form1, form2]
                     dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported db fse (returnvs qpd)) dbs in
-                    if null dbs' then
+                    trace ("optimizeQueryPlan: test merge " ++ show form1 ++ " at " ++ show dbs1 ++ ", " ++ show form2 ++ " at " ++ show dbs2) $ if null dbs' then
                         (qpd, QPSequencing2 qp1' qp2')
                     else
                         (qpd, Exec2 fse dbs')
