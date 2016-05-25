@@ -19,23 +19,23 @@ sqlStandardTrans =
     (SQLTrans
         (fromList schemas)
         (BuiltIn ( fromList [
-            ("le", simpleBuildIn (\thesign args ->
+            ("le", simpleBuildIn "le" (\thesign args ->
                 return (swhere (SQLCompCond (case thesign of
                     Pos -> "<="
                     Neg -> ">") (head args) (args !! 1))))),
-            ("lt", simpleBuildIn (\thesign args ->
+            ("lt", simpleBuildIn "lt" (\thesign args ->
                 return (swhere (SQLCompCond (case thesign of
                     Pos -> "<"
                     Neg -> ">=") (head args) (args !! 1))))),
-            ("eq", simpleBuildIn (\thesign args ->
+            ("eq", simpleBuildIn "eq" (\thesign args ->
                 return (swhere (SQLCompCond (case thesign of
                     Pos -> "="
                     Neg -> "<>") (head args) (args !! 1))))),
-            ("like", simpleBuildIn (\thesign args ->
+            ("like", simpleBuildIn "like" (\thesign args ->
                 return (swhere (SQLCompCond (case thesign of
                     Pos -> "LIKE"
                     Neg -> "NOT LIKE") (head args) (args !! 1))))),
-            ("like_regex", simpleBuildIn (\thesign args ->
+            ("like_regex", simpleBuildIn "like_regex" (\thesign args ->
                 return (swhere (SQLCompCond (case thesign of
                     Pos -> "~"
                     Neg -> "!~") (head args) (args !! 1)))))

@@ -5,7 +5,9 @@ import ICATGen
 import FO.Data
 
 standardPreds :: [Pred]
-standardPreds = preds ++ [
+standardPreds = preds ++ standardBuiltInPreds
+
+standardBuiltInPreds = [
         Pred "le" (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
         Pred "lt" (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
         Pred "eq" (PredType ObjectPred [Key "Any", Key "Any"]),

@@ -14,46 +14,46 @@ import ICAT
 import qualified Data.Text as T
 import Prelude hiding (lookup)
 import Control.Applicative ((<$>),(<*>))
-import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList)
+import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)
 
-cypherExprFromArg2 (IntExpr i) = CypherIntConstExpr i
-cypherExprFromArg2 (StringExpr s) = CypherStringConstExpr s
-cypherExprFromArg2 (VarExpr (Var a)) = CypherParamExpr a
 
 cypherBuiltIn :: CypherBuiltIn
 cypherBuiltIn = CypherBuiltIn ( fromList [
         ("le", \thesign args ->
             return (cwhere (CypherCompCond (case thesign of
                 Pos -> "<="
-                Neg -> ">") (cypherExprFromArg2 (head args)) (cypherExprFromArg2 (args !! 1))))),
+                Neg -> ">") ( (head args)) ( (args !! 1))))),
         ("lt", \thesign args ->
             return (cwhere (CypherCompCond (case thesign of
                 Pos -> "<"
-                Neg -> ">=") (cypherExprFromArg2 (head args)) (cypherExprFromArg2 (args !! 1))))),
+                Neg -> ">=") ( (head args)) ( (args !! 1))))),
         ("eq", \thesign args ->
             return (cwhere (CypherCompCond (case thesign of
                 Pos -> "="
-                Neg -> "<>") (cypherExprFromArg2 (head args)) (cypherExprFromArg2 (args !! 1))))),
+                Neg -> "<>") ( (head args)) ( (args !! 1))))),
         ("like", \thesign args -> do
-            let pos = CypherCompCond "=~" (cypherExprFromArg2 (head args)) (cypherExprFromArg2 (args !! 1))
+            let pos = CypherCompCond "=~" ( (head args)) ( (args !! 1))
             return (cwhere (case thesign of
                 Pos -> pos
                 Neg -> CypherNotCond pos))),
         ("like_regex", \thesign args -> do
-            let pos = CypherCompCond "=~" (cypherExprFromArg2 (head args)) (cypherExprFromArg2 (args !! 1))
+            let pos = CypherCompCond "=~" ( (head args)) ( (args !! 1))
             return (cwhere (case thesign of
                 Pos -> pos
                 Neg -> CypherNotCond pos)))
     ])
 
-cypherTrans :: CypherTrans
-cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] (sqlToCypher (fromList [
+cypherMapping :: (PredMap, CypherPredTableMap)
+cypherMapping = (sqlToCypher (fromList [
     ("r_data_main", "DataObject"),
     ("r_coll_main", "Collection")
     ]) (fromList [
     ("data_id", "object_id"),
     ("coll_id", "object_id")
     ])(foldMap (\p@(Pred n _) -> singleton n p) preds) (fromList mappings))
+
+cypherTrans :: CypherTrans
+cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] (snd cypherMapping)
 {- fromList [
         ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
         ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
@@ -77,4 +77,4 @@ cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "O
 
 
 makeICATCypherDBAdapter :: Neo4jConnection -> GenericDB   Neo4jConnection CypherTrans
-makeICATCypherDBAdapter conn = GenericDB conn "ICAT" standardPreds cypherTrans
+makeICATCypherDBAdapter conn = GenericDB conn "ICAT" (elems (fst cypherMapping) ++ standardBuiltInPreds) cypherTrans

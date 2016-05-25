@@ -14,7 +14,8 @@ import DBQuery
 import Utils
 import Prover.Prover
 -- import Plugins
-import SQL.HDBC.PostgreSQL
+import qualified SQL.HDBC.PostgreSQL as PostgreSQL
+import qualified Cypher.Neo4j as Neo4j
 -- import Prover.E
 
 import Prelude  hiding (lookup)
@@ -127,6 +128,14 @@ getRewriting predmap ps = do
         Left err -> error (show err)
         Right rules -> return rules
 
+dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])
+dbMap = fromList [("SQL/HDBC/PostgreSQL", PostgreSQL.getDB), ("Cypher/Neo4j", Neo4j.getDB)];
+
+getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+getDB ps = case lookup (catalog_database_type ps) dbMap of
+    Just getDBFunc -> getDBFunc ps
+    Nothing -> error ("unimplemented database type " ++ (catalog_database_type ps))
+
 transDB :: String -> TranslationInfo -> IO (TransDB DBAdapterMonad MapResultRow)
 transDB name transinfo = do
     dbs <- concat <$> mapM (\(DBTrans ps) -> do
@@ -137,5 +146,7 @@ transDB name transinfo = do
     let predmap1 = filterWithKey (\k _ -> not (k `elem` hiding)) predmap0
     let add = add_predicate transinfo
     (rewriting, predmap0') <- getRewriting predmap0 transinfo
-    let predmap2 = foldMap (\n -> singleton n (predmap0' ! n)) add
+    let predmap2 = foldMap (\n -> singleton n (case lookup n predmap0' of
+            Just a -> a
+            Nothing -> error ("add predicate " ++ n ++ " is not defined"))) add
     return (TransDB name dbs (elems (predmap1 `Data.Map.Strict.union` predmap2)) rewriting )

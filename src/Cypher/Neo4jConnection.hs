@@ -12,7 +12,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Map.Strict (insert, empty, Map, foldlWithKey)
 import Data.Convertible.Base
 import qualified Database.Neo4j.Cypher as C
-import Database.Neo4j (withConnection)
+import Database.Neo4j (withAuthConnection)
 import qualified Data.HashMap.Strict as M
 import Data.ByteString.Char8(pack)
 import qualified Data.Text as T
@@ -20,11 +20,14 @@ import Data.Aeson.Types as A
 import Data.Int
 import Data.Scientific
 
+import Debug.Trace
+
+
 -- connections
 
 
 data Neo4jQueryStatement = Neo4jQueryStatement Neo4jConnection CypherQuery
-type Neo4jConnInfo = (String, Int)
+type Neo4jConnInfo = (String, Int, String, String)
 type Neo4jConnection = Neo4jConnInfo
 
 instance Convertible Expr C.ParamValue where
@@ -46,9 +49,9 @@ toCypherParams :: Map Var Expr -> M.HashMap T.Text C.ParamValue
 toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert v) m) M.empty
 
 instance PreparedStatement_ Neo4jQueryStatement where
-        execWithParams (Neo4jQueryStatement (host, port) (vars, stmt)) args = resultStream2 (do
-                resp <- withConnection (pack host) port $ do
-                    C.cypher (T.pack (show stmt)) (toCypherParams args)
+        execWithParams (Neo4jQueryStatement (host, port, username, password) (vars, stmt)) args = resultStream2 (do
+                resp <- withAuthConnection (pack host) port (pack username, pack password) $ do
+                    trace ("cypher: " ++ show stmt ++ " with " ++ show args) $ C.cypher (T.pack (show stmt)) (toCypherParams args)
                 case resp of
                     Left t -> error (T.unpack t)
                     Right (C.Response cols rows) ->

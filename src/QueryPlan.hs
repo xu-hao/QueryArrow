@@ -417,7 +417,7 @@ checkQueryPlan dbs map1 (QPChoice qp1 qp2) = do
 
 checkQueryPlan dbs map1 (QPSequencing qp1 qp2) = do
     map2 <- checkQueryPlan dbs map1 qp1
-    trace (show "checkQueryPlan: " ++ show map1 ++ " " ++ show map2) $ checkQueryPlan dbs map2 qp2
+    trace ("checkQueryPlan: " ++ show map1 ++ " " ++ show map2) $ checkQueryPlan dbs map2 qp2
 
 checkQueryPlan _ map1 (QPOne) = do
     return map1
@@ -427,7 +427,7 @@ checkQueryPlan _ map1 (QPZero) = do
 
 checkQueryPlan dbs map1 (QPClassical qp) = do
     _ <- checkQueryPlan' dbs Pos map1 qp
-    return empty
+    return map1
 
 checkQueryPlan dbs map1 (QPTransaction qp) = do
     checkQueryPlan dbs map1 qp

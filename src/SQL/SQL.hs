@@ -127,7 +127,7 @@ showWhereCond2 cond sqlvar = case cond of
     _ -> " WHERE " ++ show2 cond sqlvar
 
 instance Show2 SQL0 where
-    show2 (SQL0 cols tables conds) sqlvar = "SELECT " ++ intercalate "," (map show cols) ++
+    show2 (SQL0 cols tables conds) sqlvar = "SELECT " ++ (if null cols then "*" else intercalate "," (map show cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map show tables)) ++
@@ -237,13 +237,13 @@ type Schema = Map TableName ([Col], [Col])
 -- builtin predicate -> op, neg op
 newtype BuiltIn = BuiltIn (Map String (Sign -> [Expr] -> TransMonad SQL0))
 
-simpleBuildIn :: (Sign -> [SQLExpr] -> TransMonad SQL0) -> Sign -> [Expr] -> TransMonad SQL0
-simpleBuildIn builtin sign args = do
+simpleBuildIn :: String -> (Sign -> [SQLExpr] -> TransMonad SQL0) -> Sign -> [Expr] -> TransMonad SQL0
+simpleBuildIn n builtin sign args = do
     let err m = do
                 a <- m
                 case a of
                     Left expr -> return expr
-                    Right _ -> error "unconstrained argument to built-in predicate"
+                    Right _ -> error ("unconstrained argument to built-in predicate " ++ n)
     sqlExprs <- mapM (err . sqlExprFromArg) args
     builtin sign sqlExprs
 
@@ -669,8 +669,8 @@ qcolArgToSetNull (qcol@(var, col), arg) = do
 data SQLTrans = SQLTrans Schema BuiltIn PredTableMap
 
 data KeyState = KeyState {
-    queryKeys:: [[Expr]],
-    updateKey:: Maybe [Expr],
+    queryKeys:: [(String, [Expr])],
+    updateKey:: Maybe (String, [Expr]),
     ksDeleteProp :: [Pred],
     ksDeleteObj :: Bool,
     ksInsertProp :: [Pred],
@@ -679,23 +679,25 @@ data KeyState = KeyState {
 }
 
 pureOrExecF :: Bool -> SQLTrans -> Formula -> StateT KeyState Maybe ()
-pureOrExecF _ trans (FAtomic (Atom (Pred _ predType) args)) = do
+pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FAtomic (Atom (Pred n predType) args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
-        else do
-            let key = keyComponents predType args
-            put ks{queryKeys = queryKeys ks `union` [key]}
-pureOrExecF _ trans (FClassical form) = pureOrExecF' trans form
-pureOrExecF top trans (FTransaction form) =  if top
+        else case lookup n predtablemap of
+                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ n ++ " ignored") $ return ()
+                Just (OneTable tablename _, _) -> do
+                    let key = keyComponents predType args
+                    put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
+pureOrExecF  _ trans (FClassical form) = pureOrExecF' trans form
+pureOrExecF  top trans (FTransaction form) =  if top
     then           pureOrExecF False trans form
     else       lift $ Nothing
 
-pureOrExecF _ trans (FSequencing form1 form2) = do
+pureOrExecF  _ trans (FSequencing form1 form2) = do
     pureOrExecF False trans form1
     pureOrExecF False trans form2
 
-pureOrExecF _ trans (FChoice form1 form2) = do
+pureOrExecF  _ trans (FChoice form1 form2) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
@@ -703,12 +705,15 @@ pureOrExecF _ trans (FChoice form1 form2) = do
             put ks {ksChoice = True}
             pureOrExecF False trans form1
             pureOrExecF False trans form2
-pureOrExecF _ (SQLTrans schema builtin predtablemap) (FInsert (Lit sign0 (Atom pred0@(Pred _ predType@(PredType predKind _)) args))) = do
+pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FInsert (Lit sign0 (Atom pred0@(Pred n predType@(PredType predKind _)) args))) = do
             ks <- get
             if ksChoice ks
                 then lift $ Nothing
                 else do
                     let key = keyComponents predType args
+                        tablename = case lookup n predtablemap of
+                            Just (OneTable tn _, _) -> tn
+                            Nothing -> error ("pureOrExecF: cannot find table for predicate " ++ n)
                     let isObject = case predKind of
                             ObjectPred -> True
                             PropertyPred -> False
@@ -719,40 +724,43 @@ pureOrExecF _ (SQLTrans schema builtin predtablemap) (FInsert (Lit sign0 (Atom p
                         Nothing ->
                             if isObject
                                 then if isDelete
-                                    then put ks{updateKey = Just key, ksDeleteObj = True}
-                                    else put ks{updateKey = Just key, ksInsertObj = True}
+                                    then if not (superset [(tablename, key)] (queryKeys ks))
+                                        then lift $ Nothing
+                                        else put ks{updateKey = Just (tablename, key), ksDeleteObj = True}
+                                    else put ks{updateKey = Just (tablename, key), ksInsertObj = True}
                                 else if isDelete
-                                    then put ks{updateKey = Just key, ksDeleteProp = [pred0]}
-                                    else put ks{updateKey = Just key, ksInsertProp = [pred0]}
+                                    then if not (superset [(tablename, key)] (queryKeys ks))
+                                        then lift $ Nothing
+                                        else put ks{updateKey = Just (tablename, key), ksDeleteProp = [pred0]}
+                                    else put ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
                         Just key' ->
                             if isObject
                                 then if isDelete
-                                    then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || key /= key' || case queryKeys ks of
-                                                                                                                                    [] -> False
-                                                                                                                                    [key''] -> key /= key''
-                                                                                                                                    _ -> True
+                                    then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
                                         then lift $ Nothing
                                         else put ks{ksDeleteObj = True}
                                     else lift $ Nothing
                                 else if isDelete
-                                    then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || pred0 `elem` (ksDeleteProp ks) || key /= key'
+                                    then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || pred0 `elem` (ksDeleteProp ks) || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
                                         then lift $ Nothing
                                         else put ks{ksDeleteProp = ksDeleteProp ks ++ [pred0]}
-                                    else if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || key /= key'
+                                    else if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || (tablename, key) /= key'
                                         then lift $ Nothing
                                         else put ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
 
-pureOrExecF _ _ FOne = return ()
-pureOrExecF _ _ FZero = return ()
+pureOrExecF  _ _ FOne = return ()
+pureOrExecF  _ _ FZero = return ()
 
 pureOrExecF' :: SQLTrans -> PureFormula -> StateT KeyState Maybe ()
-pureOrExecF' trans (Atomic (Atom (Pred _ predType) args)) = do
+pureOrExecF' (SQLTrans _ _ predtablemap) (Atomic (Atom (Pred n predType) args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
-        else do
-            let key = keyComponents predType args
-            put ks{queryKeys = queryKeys ks `union` [key]}
+        else case lookup n predtablemap of
+                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ n ++ " ignored") $ return ()
+                Just (OneTable tablename _, _) -> do
+                    let key = keyComponents predType args
+                    put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
 pureOrExecF' trans (Conjunction form1 form2) = do
     pureOrExecF' trans form1
     pureOrExecF' trans form2

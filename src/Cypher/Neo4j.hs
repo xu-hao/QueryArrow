@@ -8,9 +8,9 @@ import ICAT
 import Cypher.ICAT
 
 -- db
-getDB :: ICATDBConnInfo -> IO (Database DBAdapterMonad MapResultRow)
+getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
-    conn <- return (db_host ps, db_port ps)
+    conn <- return (db_host ps, db_port ps, db_username ps, db_password ps)
     let db = makeICATCypherDBAdapter conn
     case db of
-      GenericDB _ _ _ trans -> return (Database db)
+      GenericDB _ _ _ trans -> return [Database db]
