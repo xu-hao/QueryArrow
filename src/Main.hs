@@ -39,10 +39,8 @@ import Parser
 import DBQuery
 import ICAT
 -- import Plugins
-import SQL.HDBC.PostgreSQL
+-- import SQL.HDBC.PostgreSQL
 -- import Cypher.Neo4j
-import Prover.E
-import Prover.Parser
 import FO.Data
 import Config
 import Utils

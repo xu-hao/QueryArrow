@@ -16,7 +16,7 @@ gen: src/*
 	cp src/schema.sql gen/
 	runhaskell -isrc -igen src/schema_parser_main.hs
 
-build: gen src/* external
+build: gen src/*
 	mkdir -p build
 	ghc -isrc -igen -outputdir build -o build/Main -O2 -fPIC -threaded src/Main.hs
 	ghc -isrc -igen  -outputdir build -o /dev/null -O2 -fPIC -dynamic -shared src/SQL/HDBC/PostgreSQL.hs
@@ -24,7 +24,7 @@ build: gen src/* external
 	ghc -isrc -igen  -outputdir build -o /dev/null -O2 -fPIC -dynamic -shared src/Cypher/Neo4j.hs
 	ghc -isrc -igen -itest -outputdir build -o build/ZmqSend test/ZmqSend.hs
 
-prof: gen src/* external
+prof: gen src/*
 	mkdir -p prof
 	ghc -isrc -igen -outputdir prof -o prof/Main -O0 -prof -fprof-auto -rtsopts src/Main.hs
 	ghc -isrc -igen -outputdir prof -o prof/Test -O0 -prof -fprof-auto -rtsopts test/Test.hs
@@ -33,7 +33,7 @@ hdbctest: gen src/* test/*
 	mkdir -p hdbctest
 	ghc -isrc -itest -igen -outputdir hdbctest -o hdbctest/PostgreSQLTest -O2 test/PostgreSQLTest.hs
 
-coverage: gen src/* test/* external
+coverage: gen src/* test/*
 	if [ -e coverage ]; then rm -rf coverage; fi
 	mkdir -p coverage
 	cd coverage; ghc -fhpc -i../src  -i../gen -outputdir . -o Test ../test/Test.hs
@@ -43,7 +43,7 @@ coverage: gen src/* test/* external
 test: gen src/* test/* external
 	runhaskell -isrc -igen test/Test.hs
 
-ffi: gen src/* external
+ffi: gen src/*
 	mkdir -p ffi
 	ghc -isrc  -igen -outputdir ffi -o ffi/libdb.so -fPIC -dynamic -shared src/FFI.hs
 	ghc -isrc  -igen -outputdir ffi -o /dev/null -fPIC -dynamic -shared src/FO/Noop.hs

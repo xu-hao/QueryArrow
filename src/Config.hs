@@ -10,13 +10,6 @@ import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as B
 
 -- config info
-data VerificationInfo = VerificationInfo {
-    verifier_type :: String,
-    verifier_path :: String,
-    rule_file_path :: String,
-    cpu_limit:: Float,
-    memory_limit::Float
-} deriving (Show, Generic)
 
 data DBTrans = DBTrans {
     db_info :: ICATDBConnInfo
@@ -36,15 +29,11 @@ data TranslationInfo = TranslationInfo {
     db_plugins :: [DBTrans],
     hide_predicate :: [String],
     add_predicate :: [String],
-    verifier :: VerificationInfo,
     rewriting_file_path :: String
 } deriving (Show, Generic)
 
 instance FromJSON ICATDBConnInfo
 instance ToJSON ICATDBConnInfo
-
-instance FromJSON VerificationInfo
-instance ToJSON VerificationInfo
 
 instance FromJSON TranslationInfo
 instance ToJSON TranslationInfo

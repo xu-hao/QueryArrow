@@ -5,18 +5,15 @@ module FO where
 import ResultStream
 import FO.Data
 import FO.Domain
-import Prover.Parser
 import QueryPlan
 import Rewriting
 import Config
 import Parser
 import DBQuery
 import Utils
-import Prover.Prover
 -- import Plugins
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified Cypher.Neo4j as Neo4j
--- import Prover.E
 
 import Prelude  hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)
@@ -52,7 +49,7 @@ instance SubstituteResultValue Lit where
 
 getAllResults2 :: (Monad m, ResultRow row) => [Database m row] -> Query -> m [row]
 getAllResults2 dbs query = do
-    qp <- prepareQuery' dbs Nothing  [] [] [] [] query []
+    qp <- prepareQuery' dbs  [] [] [] [] query []
     let (_, stream) = execQueryPlan ([], pure mempty) qp
     getAllResultsInStream stream
 
@@ -69,8 +66,8 @@ queryPlan2 dbs vars vars2 qu@(Query vars0 formula) =
         qp2 = calculateVars vars vars2 qp1 in
         optimizeQueryPlan dbs qp2
 
-prepareQuery' :: (ResultRow row, Monad m) => [Database m row ] -> Maybe (TheoremProver, [Input]) -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> [Var] -> m (QueryPlan2 m row)
-prepareQuery' dbs v qr qr2 ir dr qu0 vars = do
+prepareQuery' :: (ResultRow row, Monad m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> [Var] -> m (QueryPlan2 m row)
+prepareQuery' dbs qr qr2 ir dr qu0 vars = do
     let qu@(Query rvars _) = rewriteQuery vars qr qr2 ir dr qu0
     let insp = queryPlan dbs qu
     effective <- (runExceptT (checkQueryPlan2 dbs insp))
@@ -116,7 +113,7 @@ instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPla
                     return []) dbs
         return (foldl1 (intersectionWith (+)) (concat mps))
     prepareQuery (TransDB _ dbs _ (qr, qr2, ir, dr) ) qu =
-        prepareQuery' dbs  Nothing qr qr2 ir dr qu
+        prepareQuery' dbs  qr qr2 ir dr qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
     supported _ _ _ = True
     supported' _ _ _ = True
