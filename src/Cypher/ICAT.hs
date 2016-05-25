@@ -22,25 +22,19 @@ cypherBuiltIn = CypherBuiltIn ( fromList [
         ("le", \thesign args ->
             return (cwhere (CypherCompCond (case thesign of
                 Pos -> "<="
-                Neg -> ">") ( (head args)) ( (args !! 1))))),
+                Neg -> ">") ( (head args)) ( (args !! 1)) Pos))),
         ("lt", \thesign args ->
             return (cwhere (CypherCompCond (case thesign of
                 Pos -> "<"
-                Neg -> ">=") ( (head args)) ( (args !! 1))))),
+                Neg -> ">=") ( (head args)) ( (args !! 1)) Pos))),
         ("eq", \thesign args ->
             return (cwhere (CypherCompCond (case thesign of
                 Pos -> "="
-                Neg -> "<>") ( (head args)) ( (args !! 1))))),
-        ("like", \thesign args -> do
-            let pos = CypherCompCond "=~" ( (head args)) ( (args !! 1))
-            return (cwhere (case thesign of
-                Pos -> pos
-                Neg -> CypherNotCond pos))),
-        ("like_regex", \thesign args -> do
-            let pos = CypherCompCond "=~" ( (head args)) ( (args !! 1))
-            return (cwhere (case thesign of
-                Pos -> pos
-                Neg -> CypherNotCond pos)))
+                Neg -> "<>") ( (head args)) ( (args !! 1)) Pos))),
+        ("like", \thesign args ->
+            error "cypherBuiltIn: unsupported like operator, use like_regex"),
+        ("like_regex", \thesign args ->
+            return (cwhere (CypherCompCond "=~" ( (head args)) ( (args !! 1)) thesign)))
     ])
 
 cypherMapping :: (PredMap, CypherPredTableMap)

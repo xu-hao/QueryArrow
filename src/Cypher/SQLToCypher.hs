@@ -48,8 +48,8 @@ mappingPattern0 id nodetype keyprops =
     let keypropvars = map show [2..length (keyprops) + 1] in
         (
                 [CypherVar "1"] ++ map CypherVar keypropvars,
-                GraphPattern [] [],
-                GraphPattern [] [nodevlp "0" nodetype ([(PropertyKey id, var "1")]  ++ zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars )],
+                GraphPattern [],
+                GraphPattern [nodevlp "0" nodetype ([(PropertyKey id, var "1")]  ++ zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars )],
                 [(CypherVar "0", [CypherVar "1"] ++ map CypherVar keypropvars)]
         )
 
@@ -60,8 +60,8 @@ mappingPattern1 id nodetype keyprops props =
         propvars = keypropvars ++ proppropvars in
         (
             [CypherVar "1"] ++ map CypherVar propvars,
-            GraphPattern [nodevlp "0" nodetype [(PropertyKey id, var "1")]] [],
-            GraphPattern [] [nodevlp "0" nodetype (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
+            GraphPattern [nodevlp "0" nodetype [(PropertyKey id, var "1")]],
+            GraphPattern [nodevlp "0" nodetype (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
             [(CypherVar "0", [CypherVar "1"] ++ map CypherVar keypropvars)]
         )
 mappingPattern2 :: String -> String -> String -> String -> String -> [String] -> CypherMapping
@@ -69,8 +69,8 @@ mappingPattern2 id1 nodetype1 id2 nodetype2 edge keyprops =
     let keypropvars = map show [3..length (keyprops) + 2] in
     (
         [CypherVar "1", CypherVar "2"] ++ map CypherVar keypropvars,
-        GraphPattern [nodevlp "d" nodetype1 [(PropertyKey id1, var "1")], nodevlp "c" nodetype2 [(PropertyKey id2, var "2")]] [],
-        GraphPattern [] [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
+        GraphPattern [nodevlp "d" nodetype1 [(PropertyKey id1, var "1")], nodevlp "c" nodetype2 [(PropertyKey id2, var "2")]],
+        GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
         [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1", CypherVar "2"]), (CypherVar "c", [CypherVar "2"])]
     )
 
@@ -79,8 +79,8 @@ mappingPattern2m id1 id2 edge keyprops =
     let keypropvars = map show [3..length (keyprops) + 2] in
     (
         [CypherVar "1", CypherVar "2"] ++ map CypherVar keypropvars,
-        GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]] [],
-        GraphPattern [] [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
+        GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]],
+        GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
         [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1", CypherVar "2"]), (CypherVar "c", [CypherVar "2"])]
     )
 
@@ -89,8 +89,8 @@ mappingPattern2prop id1 id2 edge keyprops =
     let keypropvars = map show [3..length (keyprops) + 2] in
     (
         [CypherVar "1", CypherVar "2"] ++ map CypherVar keypropvars,
-        GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]] [],
-        GraphPattern [] [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
+        GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]],
+        GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
         [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1"]), (CypherVar "c", [CypherVar "2"])]
     )
 
@@ -108,8 +108,8 @@ mappingPattern3 keyedges keyedgeids propedges propedgeids nodetype keyprops =
         cyphervars = map CypherVar (vars ++ keypropvars) in
             (
                 cyphervars,
-                GraphPattern (zipWith3 (\edgeid nv v -> nodevp nv [(PropertyKey edgeid, var v)]) edgeids nodevars vars) [],
-                GraphPattern [] ([nodevlp "d0" nodetype (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars)] ++ zipWith3 (\edge ev nv -> edgevl (nodev "d0") ev edge (nodev nv)) edges edgevars nodevars),
+                GraphPattern (zipWith3 (\edgeid nv v -> nodevp nv [(PropertyKey edgeid, var v)]) edgeids nodevars vars),
+                GraphPattern ([nodevlp "d0" nodetype (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars)] ++ zipWith3 (\edge ev nv -> edgevl (nodev "d0") ev edge (nodev nv)) edges edgevars nodevars),
                 [(CypherVar "d0", keycyphervars)] ++ map (\(nv , v) -> (CypherVar nv, [v])) (zip nodevars (map CypherVar vars))
             )
 
@@ -120,8 +120,8 @@ mappingPattern4m  nodeid1 nodeid2 edge keyprops props =
         propvars = keypropvars ++ proppropvars in
             (
                 [CypherVar "1", CypherVar "2"] ++ (map CypherVar propvars),
-                GraphPattern [nodevp "d"  [(PropertyKey nodeid1, var "1")], nodevp "c" [(PropertyKey nodeid2, var "2")], edgevl (nodev "d") "e" edge  (nodev "c")] [],
-                GraphPattern [] [nodevp "e" (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
+                GraphPattern [nodevp "d"  [(PropertyKey nodeid1, var "1")], nodevp "c" [(PropertyKey nodeid2, var "2")], edgevl (nodev "d") "e" edge  (nodev "c")],
+                GraphPattern [nodevp "e" (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
                 [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1", CypherVar "2"]++ map CypherVar keypropvars), (CypherVar "c", [CypherVar "2"])]
             )
 
@@ -132,8 +132,8 @@ mappingPattern4prop  nodeid1 nodeid2 edge keyprops props =
         propvars = keypropvars ++ proppropvars in
             (
                 [CypherVar "1", CypherVar "2"] ++ (map CypherVar propvars),
-                GraphPattern [nodevp "d"  [(PropertyKey nodeid1, var "1")], nodevp "c" [(PropertyKey nodeid2, var "2")]] [],
-                GraphPattern [] [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props propvars) (nodev "c")],
+                GraphPattern [nodevp "d"  [(PropertyKey nodeid1, var "1")], nodevp "c" [(PropertyKey nodeid2, var "2")]],
+                GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props propvars) (nodev "c")],
                 [(CypherVar "d", [CypherVar"1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1"]++ map CypherVar keypropvars), (CypherVar "c", [CypherVar "2"])]
             )
 
@@ -152,7 +152,7 @@ mappingPattern5 keyedges keyedgeids propedges propedgeids nodetype keyprops prop
         cyphervars = map CypherVar vars in
             (
                 cyphervars ++ map CypherVar (keypropvars ++ proppropvars),
-                GraphPattern ([nodevl "d0" nodetype] ++ zipWith3 (\edgeid nv v -> nodevp nv [(PropertyKey edgeid, var v)]) edgeids nodevars vars ++ zipWith3 (\edge ev nv -> edgevl (nodev "d0") ev edge (nodev nv)) edges edgevars nodevars) [],
-                GraphPattern [] [nodevp "d0" (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
+                GraphPattern ([nodevl "d0" nodetype] ++ zipWith3 (\edgeid nv v -> nodevp nv [(PropertyKey edgeid, var v)]) edgeids nodevars vars ++ zipWith3 (\edge ev nv -> edgevl (nodev "d0") ev edge (nodev nv)) edges edgevars nodevars),
+                GraphPattern [nodevp "d0" (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
                 [(CypherVar "d0", keycyphervars)] ++ zipWith (\nv v -> (CypherVar nv, [v])) nodevars cyphervars
             )

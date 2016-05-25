@@ -13,9 +13,9 @@
         "db_info" : {
            "db_port" : 7474,
            "db_name" : "ICAT",
-           "db_password" : "irods",
+           "db_password" : "neo4j",
            "db_host" : "localhost",
-           "db_username" : "irods",
+           "db_username" : "neo4j",
            "db_odbc_type" : "unix",
            "catalog_database_type" : "Cypher/Neo4j"
         }
