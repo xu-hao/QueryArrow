@@ -33,73 +33,6 @@ import Debug.Trace
 -- example MapDB
 
 
-filterResults :: (Monad m) => [Var] -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
-    -> (Pred-> Var -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
-    -> (Pred-> ResultValue -> Var -> MapResultRow -> ResultStream m MapResultRow)
-    -> (Pred-> Var -> Var -> MapResultRow -> ResultStream m MapResultRow)
-    -> ([Var]-> Var -> PureFormula -> MapResultRow -> ResultStream m MapResultRow)
-    -> (Pred-> ResultValue -> ResultValue -> MapResultRow -> ResultStream m MapResultRow)
-    -> ([Var]-> Var -> PureFormula -> MapResultRow -> ResultStream m MapResultRow)
-    -> ResultStream m MapResultRow
-    -> PureFormula
-    -> ResultStream m MapResultRow
-filterResults freevars filterBy expand1 expand2 expand12 exists excludeBy notExists results (Conjunction form1 form2) =
-    foldl (filterResults freevars filterBy expand1 expand2 expand12 exists excludeBy notExists)  results [form1, form2]
-
-filterResults freevars filterBy expand1 expand2 expand12 exists excludeBy notExists results (Disjunction form1 form2) =
-    join ( listResultStream ( map (filterResults freevars filterBy expand1 expand2 expand12 exists excludeBy notExists results) [form1, form2]))
-
-filterResults _ filterBy expand1 expand2 expand12 _ _ _ results (Atomic (Atom thepred args)) = do
-    resrow <- results
-    case args of
-        VarExpr var1 : (VarExpr var2 : _)
-            | var1 `member` resrow ->
-                if var2 `member` resrow then
-                    filterBy thepred (resrow ! var1) (resrow ! var2) resrow else
-                    expand2 thepred (resrow ! var1) var2 resrow
-            | var2 `member` resrow -> expand1 thepred var1 (resrow ! var2) resrow
-            | otherwise -> expand12 thepred var1 var2 resrow
-        VarExpr var1 : StringExpr str2 : _ ->
-            if var1 `member` resrow
-                then filterBy thepred (resrow ! var1) (StringValue str2) resrow
-                else expand1 thepred var1 (StringValue str2) resrow
-        StringExpr str1 : VarExpr var2 : _ ->
-            if var2 `member` resrow
-                then filterBy thepred (StringValue str1) (resrow ! var2) resrow
-                else expand2 thepred (StringValue str1) var2 resrow
-        StringExpr str1 : StringExpr str2 : _ ->
-            filterBy thepred (StringValue str1) (StringValue str2) resrow
-        _ -> listResultStream []
-
-filterResults _ _ _ _ _ _ excludeBy _ results (Not (Atomic (Atom thepred args))) = do
-    resrow <- results
-    case args of
-        VarExpr var1 : VarExpr var2 : _ ->
-            if var1 `member` resrow && var2 `member` resrow
-                then excludeBy thepred (resrow ! var1) (resrow ! var2) resrow
-                else error ("unconstrained variable " ++ show var1 ++ " or " ++ show var2)
-        VarExpr var1 : StringExpr str2 : _ ->
-            if var1 `member` resrow
-                then excludeBy thepred (resrow ! var1) (StringValue str2) resrow
-                else error ("unconstrained variable " ++ show var1 ++ " in " ++ show (Lit Neg (Atom thepred args)))
-        StringExpr str1 : VarExpr var2 : _ ->
-            if var2 `member` resrow
-                then excludeBy thepred (StringValue str1) (resrow ! var2) resrow
-                else error ("unconstrained variable " ++ show var2 ++ " in " ++ show (Lit Neg (Atom thepred args)))
-        StringExpr str1 : StringExpr str2 : _ ->
-            excludeBy thepred (StringValue str1) (StringValue str2) resrow
-        _ -> listResultStream [resrow]
-
-filterResults freevars2 _ _ _ _ exists _ _ results (Exists var conj) =  do
-    row <- results
-    exists (freevars2 `union` (freeVars conj \\ [var])) var conj row
-
-filterResults freevars2 _ _ _ _ _ _ notExists results (Not (Exists var conj)) = do
-    row <- results
-    notExists freevars2 var conj row
-
-filterResults _ _ _ _ _ _ _ _ _ (Not _) = error "not not pushed to atoms or existential quantifications"
-
 limitvarsInRow :: [Var] -> MapResultRow -> MapResultRow
 limitvarsInRow vars row = transform (keys row) vars row
 
@@ -236,16 +169,6 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     dbRollback _ = return ()
     getName (EqDB name) = name
     getPreds _ = [ Pred "eq" (PredType ObjectPred [Key "Any", Key "Any"]) ]
-    domainSize db varDomainSize (Atom thepred args)
-        | thepred `elem` getPreds db =
-            let [d1, d2] = map (exprDomainSizeMap varDomainSize Unbounded) args in
-                return (case toList d1 of
-                        [] -> d2
-                        [(var1, ds1)] -> case toList d2 of
-                            [] -> d1
-                            [(var2, ds2)] ->
-                                let ds = min ds1 ds2 in
-                                    fromList [(var, ds) | var <- [var1, var2]])
     domainSize _ _ _ = return empty
     prepareQuery _ qu _ = return (EqDBStmt qu)
     translateQuery _ qu vars = (show qu, vars)
@@ -259,18 +182,30 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
 instance (Monad m) => DBStatementClose m (EqDBStmt) where
     dbStmtClose _ = return ()
 
-filterBy _ str1 str2 resrow = listResultStream [resrow | str1 == str2]
-excludeBy _ str1 str2 resrow = listResultStream [resrow | str1 /= str2 ]
-exists freevars _ conj resrow = error "dbStmtExec: EqDB exists not supported"
-notExists freevars _ conj resrow = error "dbStmtExec: EqDB not exists not supported"
-expand1 _ var1 str2 resrow = listResultStream [insert var1 str2 resrow ]
-expand2 _ str1 var2 resrow = listResultStream [insert var2 str1 resrow ]
-expand12 _ _ _ _ = error "unconstrained eq predicate"
+evalExpr :: MapResultRow -> Expr -> ResultValue
+evalExpr row (StringExpr s) = StringValue s
+evalExpr row (IntExpr s) = IntValue s
+evalExpr row (VarExpr v) = case lookup v row of
+    Nothing -> Null
+    Just r -> r
 
 instance (Monad m) => DBStatementExec m MapResultRow (EqDBStmt) where
-    dbStmtExec (EqDBStmt (Query vars (FAtomic a))) rsvars stream = (do
-            row2 <- filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists stream (Atomic a)
-            return (limitvarsInRow vars row2))
-    dbStmtExec (EqDBStmt (Query vars (FClassical form))) rsvars stream = (do
-            row2 <- filterResults vars filterBy expand1 expand2 expand12 exists excludeBy notExists stream form
-            return (limitvarsInRow vars row2))
+    dbStmtExec (EqDBStmt (Query _ (FAtomic (Atom _ [a, b])))) rsvars stream = do
+        row <- stream
+        if evalExpr row a == evalExpr row b
+            then return mempty
+            else emptyResultStream
+
+    dbStmtExec (EqDBStmt (Query _ (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
+        row <- stream
+        if evalExpr row a == evalExpr row b
+            then return mempty
+            else emptyResultStream
+
+    dbStmtExec (EqDBStmt (Query _ (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
+        row <- stream
+        if evalExpr row a /= evalExpr row b
+            then return mempty
+            else emptyResultStream
+
+    dbStmtExec (EqDBStmt qu) rsvars stream = error ("dqdb: unsupported query " ++ show qu)
