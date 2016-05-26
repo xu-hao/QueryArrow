@@ -15,6 +15,7 @@ import Utils
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified Cypher.Neo4j as Neo4j
 import qualified InMemory as InMemory
+import qualified ElasticSearch.ElasticSearch as ElasticSearch
 
 import Prelude  hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)
@@ -112,7 +113,12 @@ getRewriting predmap ps = do
         Right rules -> return rules
 
 dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])
-dbMap = fromList [("SQL/HDBC/PostgreSQL", PostgreSQL.getDB), ("Cypher/Neo4j", Neo4j.getDB), ("InMemory/EqDB", \ps -> return [Database (InMemory.EqDB (db_name ps))])];
+dbMap = fromList [
+    ("SQL/HDBC/PostgreSQL", PostgreSQL.getDB),
+    ("Cypher/Neo4j", Neo4j.getDB),
+    ("InMemory/EqDB", \ps -> return [Database (InMemory.EqDB (db_name ps))]),
+    ("ElasticSearch/ElasticSearch", ElasticSearch.getDB)
+    ];
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = case lookup (catalog_database_type ps) dbMap of

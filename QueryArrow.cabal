@@ -93,6 +93,32 @@ executable ZmqSend
                    utf8-string
   ghc-options:
   other-modules:
+executable ElasticSearchSend
+    hs-source-dirs:  src gen test
+    main-is:         ElasticSearchSend.hs
+    build-depends:
+                     base >= 4,
+                     containers,
+                     mtl,
+                     transformers,
+                     bytestring,
+                     unordered-containers,
+                     convertible,
+                     text >= 1.2.1.1,
+                     scientific,
+                     MissingH,
+                     monadplus,
+                     array,
+                     temporary,
+                     process,
+                     http-conduit,
+                     async,
+                     time,
+                     cereal,
+                     exceptions,
+                     utf8-string
+    ghc-options:
+    other-modules:
 executable Test
     hs-source-dirs:  src gen test
     main-is:         Test.hs
@@ -129,6 +155,7 @@ executable Test
                      pretty-tree,
                      conduit-combinators,
                      conduit,
+                     http-conduit,
                      resourcet,
                      zeromq4-haskell,
                      async,

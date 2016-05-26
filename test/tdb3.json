@@ -1,0 +1,15 @@
+{
+    "db_plugins" : [{
+        "db_info" : {
+            "db_port" : 9200,
+            "db_name" : "ES_META",
+            "db_password" : "",
+            "db_host" : "localhost",
+            "db_username" : "",
+            "catalog_database_type" : "ElasticSearch/ElasticSearch"
+        }
+    }],
+    "hide_predicate" : [],
+    "add_predicate" : [],
+    "rewriting_file_path" : "test/rewriting3.rules"
+}

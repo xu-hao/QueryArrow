@@ -1,0 +1,44 @@
+{
+    "db_plugins" : [{
+        "db_info" : {
+            "db_port" : 0,
+            "db_name" : "InMemory/EqDB",
+            "db_password" : "",
+            "db_host" : "",
+            "db_username" : "",
+            "catalog_database_type" : "InMemory/EqDB"
+        }
+    }, {
+        "db_info" : {
+           "db_port" : 5432,
+           "db_name" : "ICAT",
+           "db_password" : "testpassword",
+           "db_host" : "192.168.1.2",
+           "db_username" : "irods",
+           "db_odbc_type" : "unix",
+           "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+        }
+    }, {
+        "db_info" : {
+           "db_port" : 7474,
+           "db_name" : "ICAT",
+           "db_password" : "neo4j",
+           "db_host" : "localhost",
+           "db_username" : "neo4j",
+           "db_odbc_type" : "unix",
+           "catalog_database_type" : "Cypher/Neo4j"
+        }
+    }, {
+        "db_info" : {
+            "db_port" : 9200,
+            "db_name" : "ES_META",
+            "db_password" : "",
+            "db_host" : "localhost",
+            "db_username" : "",
+            "catalog_database_type" : "ElasticSearch/ElasticSearch"
+        }
+    }],
+    "hide_predicate" : ["DATA_NAME", "META_ATTR_NAME", "META_ATTR_VALUE", "META_ATTR_UNIT", "OBJT_METAMAP_OBJ"],
+    "add_predicate" : ["DATA_NAME_2", "META_1", "META_2", "META_3"],
+    "rewriting_file_path" : "test/rewriting3-1.rules"
+}
