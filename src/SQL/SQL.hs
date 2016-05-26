@@ -253,8 +253,7 @@ data TransState = TransState {
     builtin :: BuiltIn,
     predtablemap :: PredTableMap,
     repmap :: RepMap,
-    tablemap :: TableMap,
-    rigidVars :: [Var] -- this is a list of free vars that appear in atoms to be deleted they must be linear
+    tablemap :: TableMap -- this is a list of free vars that appear in atoms to be deleted they must be linear
 }
 type TransMonad a = StateT TransState NewEnv a
 
@@ -266,9 +265,7 @@ sqlExprFromArg arg = do
     ts <- get
     case arg of
         VarExpr var2 ->
-            return (if var2 `elem` rigidVars ts
-                then error (show var2 ++ " is rigid")
-                else case lookup  var2 (repmap ts) of
+            return (case lookup  var2 (repmap ts) of
                     Just e -> Left e
                     Nothing -> Right var2)
         IntExpr i ->
@@ -281,10 +278,6 @@ sqlExprFromArg arg = do
 addVarRep :: Var -> SQLExpr -> TransMonad ()
 addVarRep var expr =
     modify (\ts-> ts {repmap =  insert var expr (repmap ts)})
-
-addRigidVar :: Var -> TransMonad ()
-addRigidVar var =
-    modify (\ts -> ts {rigidVars = rigidVars ts ++ [var]})
 
 condFromArg :: (SQLExpr -> SQLExpr -> SQLCond) -> (Expr, SQLQualifiedCol) -> TransMonad SQLCond
 condFromArg op (arg, col) = do
@@ -620,9 +613,7 @@ qcolArgToDelete (qcol, arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (SQLColExpr qcol .=. sqlexpr)
-        Right var -> do
-            addRigidVar var
-            return SQLTrueCond -- unbounded var
+        Right var -> error ("unbounded var " ++ show var)
 
 qcolArgToValue :: (SQLQualifiedCol, Expr) -> TransMonad (Col, SQLExpr)
 qcolArgToValue (qcol@(var, col), arg) = do
@@ -779,7 +770,7 @@ instance Translate SQLTrans MapResultRow SQLQuery where
       trace ("translateQueryWithParams: translating " ++ show query ++ " with " ++ show env) $
         let (SQLTrans schema builtin predtablemap) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {schema = schema, builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, rigidVars = []})) in
+            (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {schema = schema, builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             trace ("translateQueryWithParams: and the resulting query is " ++ show sql) $ (sql, params sql)
     translateable trans form vars = isJust (evalStateT (pureOrExecF True trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
     translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))

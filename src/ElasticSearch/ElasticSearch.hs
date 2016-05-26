@@ -179,7 +179,7 @@ instance PreparedStatement_ ElasticSearchStatement where
                     case res of
                         Left res1 -> error ("execWithParams: cannot decode response " ++ res1)
                         Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> do
-                            mapM_ (\hit -> ESQ.deleteById esci (show (_id hit))) hits1
+                            mapM_ (\hit -> ESQ.deleteById esci (_id hit)) hits1
                             return [mempty]
                             ) (return ())
         closePreparedStatement _ = return ()

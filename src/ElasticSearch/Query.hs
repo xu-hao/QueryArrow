@@ -73,4 +73,4 @@ queryBySearch esci qu = do
 
 deleteById :: ElasticSearchConnInfo -> String -> IO BL.ByteString
 deleteById esci esid =
-        delete (esConnInfoToUrl esci) esid
+        trace ("deleteById: " ++ esid) $ delete (esConnInfoToUrl esci) esid
