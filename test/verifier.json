@@ -1,9 +1,0 @@
-{
-   "verifier_type" : "FO/E",
-   "verifier_path" : "external/E/PROVER/eprover",
-   "rule_file_path" : "test/rules.tptp",
-   "cpu_limit" : 30,
-   "memory_limit" : 32,
-   "add_set" : "gen/add_set.tptp",
-   "delete_set" : "gen/delete_set.tptp"
-}
