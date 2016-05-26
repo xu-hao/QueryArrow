@@ -4,9 +4,7 @@ import FO hiding (validateInsert, validate)
 import qualified FO
 import QueryPlan
 import ResultStream
-import Prover.FunSat
 import FO.Data
-import Prover.Parser
 import Parser
 import SQL.SQL
 import ICAT
@@ -15,8 +13,6 @@ import Cypher.ICAT
 import Cypher.Cypher
 import qualified Cypher.Cypher as Cypher
 import DBQuery
-import Prover.E
-import Prover.CVC4
 import InMemory
 import Utils
 
@@ -201,13 +197,6 @@ test5 (LimitedMapDB db) = case db of
 testsFunc ::(Show a, Arbitrary a)=>(a-> Bool)->IO ()
 testsFunc = quickCheckWith stdArgs {maxSize = 5}
 
-loadStandardICATRule :: String -> [Input]
-loadStandardICATRule s = parseTPTP standardPredMap s
-
-
-verifier = CVC4 "external/CVC4/cvc4-1.4-x86_64-linux-opt" 1000 1000 32
-verifier2 = E "external/E/PROVER/eprover" 1 32
-
 translateQuery2 trans qu = fst (translateQueryWithParams trans qu mempty)
 translateInsert trans qu = fst (translateQueryWithParams trans qu mempty)
 main :: IO ()
@@ -229,7 +218,7 @@ main = hspec $ do
             (v1, v2) <- return (runNew (evalStateT (do
                 v1 <- freshSQLVar "t"
                 v2 <- freshSQLVar "t"
-                return (v1, v2)) (TransState empty (BuiltIn empty) empty empty empty [])))
+                return (v1, v2)) (TransState empty (BuiltIn empty) empty empty empty)))
             v1 `shouldBe` SQLVar "t"
             v2 `shouldBe` SQLVar "t0"
         it "test parse query 0" $ do
@@ -303,10 +292,10 @@ main = hspec $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(1)"
             let sql = translateInsert sqlStandardTrans qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "DELETE FROM r_data_main WHERE data_id = 1"
-        it "test tranlate sql insert 10" $ do
-            let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
-            let sql = translateInsert sqlStandardTrans qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "DELETE FROM r_data_main"
+        it "test tranlate sql insert 10" $ (
+                let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
+                    sql = translateInsert sqlStandardTrans qu in                    print (show ((\(_,x,_) -> x)sql))
+            ) `shouldThrow` anyException
         it "test translate cypher query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
             let (_, sql) = translateQuery2 cypherTrans qu
@@ -375,14 +364,14 @@ main = hspec $ do
         let e = (var "e")
         let f = (var "f")
         it "monoid <> graph 0" $ do
-            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] [] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] [] `shouldBe`
-                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] []
+            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] `shouldBe`
+                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]]
         it "monoid <> graph 1" $ do
-            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] [] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "p", b)]] [] `shouldBe`
-                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)], nodevlp "0" "l" [(PropertyKey "p", b)]] []
+            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)]] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "p", b)]] `shouldBe`
+                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a)], nodevlp "0" "l" [(PropertyKey "p", b)]]
         it "monoid <> graph 2" $ do
-            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] [] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] [] `shouldBe`
-                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] []
+            GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]] <> GraphPattern [nodevlp "0" "l" [(PropertyKey "q", b)]] `shouldBe`
+                GraphPattern [nodevlp "0" "l" [(PropertyKey "p",a), (PropertyKey "q", b)]]
         it "unifyOne 0" $ do
             unifyOne ("a" `dot` "l") ["b" `dot` "l"] `shouldBe`
                 Just (["b" `dot` "l"], cypherVarExprMap (CypherVar "a") b)
@@ -544,14 +533,6 @@ main = hspec $ do
 
 
 
-        it "atom to int" $ do
-            let at1 = at "p" [s "a", s "b"]
-            let (i, (n, m)) = runState (convert at1) (1 :: Int, empty)
-            i `shouldBe` (1 :: Int)
-            n `shouldBe` 2
-            m `shouldBe` insert at1 (1 :: Int) empty
-
-
         {- it "sat solver" $ do
             let rule = (a1 --> a2) & a3
             let goal = a4
@@ -576,10 +557,6 @@ main = hspec $ do
             let x = valid (rule --> goal)
             case x of Just ce -> print ce; _ -> return ()
             x `shouldNotBe` Nothing -}
-        it "standard rules" $ do
-            let formulas = loadStandardICATRule "fof(test, axiom, ('DATA_NAME'(X, Y) => 'DATA_OBJ'(X)))."
-            let f = ("test", "axiom", (standardPredMap ! "DATA_NAME") @@ [v "X", v "Y"] --> ((standardPredMap ! "DATA_OBJ") @@ [v "X"]))
-            formulas `shouldBe` [f]
 
 
 
@@ -664,13 +641,13 @@ main = hspec $ do
 
         it "schema 0" $ do
             let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "DATA_NAME") `shouldBe` "([1,2],GraphPattern [(0:DataObject{object_id:1})] [],GraphPattern [] [(0:DataObject{data_name:2})],[(0,[1])])"
+            show (mappings ! "DATA_NAME") `shouldBe` "([1,2],GraphPattern [(0:DataObject{object_id:1})],GraphPattern [(0:DataObject{data_name:2})],[(0,[1])])"
         it "schema 1" $ do
             let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "DATA_COLL_ID") `shouldBe` "([1,2],GraphPattern [(d{object_id:1}),(c{object_id:2})] [],GraphPattern [] [(d)-[e:DATA_COLL_ID]->(c)],[(d,[1]),(e,[1]),(c,[2])])"
+            show (mappings ! "DATA_COLL_ID") `shouldBe` "([1,2],GraphPattern [(d{object_id:1}),(c{object_id:2})],GraphPattern [(d)-[e:DATA_COLL_ID]->(c)],[(d,[1]),(e,[1]),(c,[2])])"
         it "schema 2" $ do
             let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "USER_GROUP_OBJ") `shouldBe` "([1,2],GraphPattern [(d{group_user_id:1}),(c{user_id:2})] [],GraphPattern [] [(d)-[e:USER_GROUP_OBJ]->(c)],[(d,[1]),(e,[1,2]),(c,[2])])"
+            show (mappings ! "USER_GROUP_OBJ") `shouldBe` "([1,2],GraphPattern [(d{group_user_id:1}),(c{user_id:2})],GraphPattern [(d)-[e:USER_GROUP_OBJ]->(c)],[(d,[1]),(e,[1,2]),(c,[2])])"
         it "schema 3" $ do
             let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "USER_GROUP_CREATE_TS") `shouldBe` "([1,2,3],GraphPattern [(d{group_user_id:1}),(c{user_id:2}),(d)-[e:USER_GROUP_CREATE_TS]->(c)] [],GraphPattern [] [(e{create_ts:3})],[(d,[1]),(e,[1,2]),(c,[2])])"
+            show (mappings ! "USER_GROUP_CREATE_TS") `shouldBe` "([1,2,3],GraphPattern [(d{group_user_id:1}),(c{user_id:2}),(d)-[e:USER_GROUP_CREATE_TS]->(c)],GraphPattern [(e{create_ts:3})],[(d,[1]),(e,[1,2]),(c,[2])])"
