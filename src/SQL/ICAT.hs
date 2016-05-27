@@ -20,7 +20,6 @@ sqlMapping = fromList (map (\(n, m) -> (standardPredMap ! n, m)) mappings)
 sqlStandardTrans :: SQLTrans
 sqlStandardTrans =
     (SQLTrans
-        (fromList schemas)
         (BuiltIn ( fromList [
             (standardBuiltInPredsMap ! "le", simpleBuildIn "le" (\thesign args ->
                 return (swhere (SQLCompCond (case thesign of

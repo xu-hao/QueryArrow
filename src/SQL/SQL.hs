@@ -246,7 +246,6 @@ simpleBuildIn n builtin sign args = do
 
 
 data TransState = TransState {
-    schema :: Schema,
     builtin :: BuiltIn,
     predtablemap :: PredTableMap,
     repmap :: RepMap,
@@ -447,21 +446,17 @@ translateAtomToSQL thesign (Atom name args) = do
             Just (table, cols) -> do
                 (tables, varmap, cols2, args2) <- case table of
                     OneTable tablename sqlvar -> do
-                        let (_, prikeycols) = fromMaybe (error (tablename ++ " is not defined in the schema")) (lookup tablename (schema ts))
-                        let (prikeyargs, prikeyargcols) = unzip [(arg, (sqlvar2, col)) | prikeycol <- prikeycols, (arg, (sqlvar2, col)) <- zip args cols, prikeycol == col ]
-                        if length prikeyargs == length prikeycols -- if primary key columns correspond to args
-                            then do
-                                (new, v) <- lookupTableVar tablename prikeyargs
-                                if new
-                                    then
-                                        return ([table], singleton sqlvar v, cols, args)
-                                    else do
-                                        let cols2 = cols \\ prikeyargcols
-                                        let args2 = args \\ prikeyargs
-                                        return ([], singleton sqlvar v, cols2 , args2)
+                        let prikeyargs = keyComponents name args
+                        let prikeyargcols = keyComponents name cols
+                         -- if primary key columns correspond to args
+                        (new, v) <- lookupTableVar tablename prikeyargs
+                        if new
+                            then
+                                return ([table], singleton sqlvar v, cols, args)
                             else do
-                                sqlvar2 <- freshSQLVar tablename
-                                return ([table], singleton sqlvar sqlvar2, cols, args)
+                                let cols2 = cols \\ prikeyargcols
+                                let args2 = args \\ prikeyargs
+                                return ([], singleton sqlvar v, cols2 , args2)
 
                 let tables2 = map (subst varmap) tables
                 let cols3 = map (subst varmap) cols2
@@ -654,7 +649,7 @@ qcolArgToSetNull (qcol@(var, col), arg) = do
             return ((col, SQLNullExpr), SQLTrueCond)
 
 
-data SQLTrans = SQLTrans Schema BuiltIn PredTableMap
+data SQLTrans = SQLTrans  BuiltIn PredTableMap
 
 data KeyState = KeyState {
     queryKeys:: [(String, [Expr])],
@@ -667,7 +662,7 @@ data KeyState = KeyState {
 }
 
 pureOrExecF :: Bool -> SQLTrans -> Formula -> StateT KeyState Maybe ()
-pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FAtomic (Atom n args)) = do
+pureOrExecF  _ (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
@@ -693,7 +688,7 @@ pureOrExecF  _ trans (FChoice form1 form2) = do
             put ks {ksChoice = True}
             pureOrExecF False trans form1
             pureOrExecF False trans form2
-pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
+pureOrExecF  _ (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
             if ksChoice ks
                 then lift $ Nothing
@@ -738,7 +733,7 @@ pureOrExecF  _ _ FOne = return ()
 pureOrExecF  _ _ FZero = return ()
 
 pureOrExecF' :: SQLTrans -> PureFormula -> StateT KeyState Maybe ()
-pureOrExecF' (SQLTrans _ _ predtablemap) (Atomic (Atom n args)) = do
+pureOrExecF' (SQLTrans  _ predtablemap) (Atomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
@@ -763,9 +758,9 @@ pureOrExecF' trans (CFalse) = return ()
 instance Translate SQLTrans MapResultRow SQLQuery where
     translateQueryWithParams trans query env =
       trace ("translateQueryWithParams: translating " ++ show query ++ " with " ++ show env) $
-        let (SQLTrans schema builtin predtablemap) = trans
+        let (SQLTrans  builtin predtablemap) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {schema = schema, builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
+            (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             trace ("translateQueryWithParams: and the resulting query is " ++ show sql) $ (sql, params sql)
     translateable trans form vars = isJust (evalStateT (pureOrExecF True trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
     translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))
@@ -780,4 +775,4 @@ instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQL
                 argsDomainSizeMaps = map (exprDomainSizeMap varDomainSize Unbounded) args
                 maxArgDomainSize = mmaxs argsDomainSizeMaps
                 isBuiltIn = name `member` builtin
-                (SQLTrans _ (BuiltIn builtin) predtablemap) = trans
+                (SQLTrans (BuiltIn builtin) predtablemap) = trans
