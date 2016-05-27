@@ -9,17 +9,15 @@ import Data.String.Utils
 import FO.Data
 import Debug.Trace
 
-sqlToCypher :: Map String String -> Map String String -> PredMap -> PredTableMap -> (PredMap, CypherPredTableMap)
-sqlToCypher tabletype colprop predtable mappings =
-    foldrWithKey (\key (OneTable tablename _, qcols) (predtable', mappings') ->
+sqlToCypher :: Map String String -> Map String String -> PredTableMap -> (PredMap, CypherPredTableMap)
+sqlToCypher tabletype colprop  mappings =
+    foldrWithKey (\predtype (OneTable tablename _, qcols) (predtable', mappings') ->
         let lookup2 tablename0 table =
                 case lookup tablename0 table  of
                     Nothing -> tablename0
                     Just t -> t
             cols = map snd qcols
-            (Pred _ predtype) = case lookup key predtable of
-                Just p -> p
-                Nothing -> error ("sqlToCypher: cannot find key " ++ key)
+            key = predName predtype
             keyCols = keyComponents predtype cols
             propCols = propComponents predtype cols
             (edgeKeyCols, propKeyCols) = partition (/= "access_type_id") keyCols
@@ -41,7 +39,7 @@ sqlToCypher tabletype colprop predtable mappings =
                         _ -> mappingPattern5 edges edges propEdges propEdges key keyprops propprops
             key' = "CYPHER_" ++ key
         in
-            trace ("generating mapping for predicate " ++ key' ++ show keyprops ++ show propprops ++ " -> " ++ show mapping') $ (insert key' (Pred key' predtype) predtable', insert key' mapping' mappings')) (empty, empty) mappings
+            trace ("generating mapping for predicate " ++ key' ++ show keyprops ++ show propprops ++ " -> " ++ show mapping') $ (insert key' (Pred key' (predType predtype)) predtable', insert key' mapping' mappings')) (empty, empty) mappings
 
 mappingPattern0 :: String -> String -> [String] -> CypherMapping
 mappingPattern0 id nodetype keyprops =

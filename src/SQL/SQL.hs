@@ -208,11 +208,8 @@ instance Monoid SQL0 where
 
 sor (SQL0 sselect1 sfrom1 swhere1) (SQL0 sselect2 sfrom2 swhere2) = SQL0 (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2)
 
-negCond :: SQLCond -> SQLCond
-negCond cond = SQLNotCond cond
-
 snot :: SQL0 -> SQL0
-snot (SQL0 sselect sfrom swhere) = SQL0 sselect sfrom (negCond swhere)
+snot (SQL0 sselect sfrom swhere) = SQL0 sselect sfrom (SQLNotCond swhere)
 
 swhere swhere1 = SQL0 [] [] swhere1
 -- translate relational calculus to sql
@@ -231,11 +228,11 @@ swhere swhere1 = SQL0 [] [] swhere1
 type RepMap = Map Var SQLExpr
 type TableMap = Map (TableName, [Expr]) SQLVar
 -- predicate -> table
-type PredTableMap = Map String (Table, [SQLQualifiedCol])
+type PredTableMap = Map Pred (Table, [SQLQualifiedCol])
 -- table -> cols, primary key
 type Schema = Map TableName ([Col], [Col])
 -- builtin predicate -> op, neg op
-newtype BuiltIn = BuiltIn (Map String (Sign -> [Expr] -> TransMonad SQL0))
+newtype BuiltIn = BuiltIn (Map Pred (Sign -> [Expr] -> TransMonad SQL0))
 
 simpleBuildIn :: String -> (Sign -> [SQLExpr] -> TransMonad SQL0) -> Sign -> [Expr] -> TransMonad SQL0
 simpleBuildIn n builtin sign args = do
@@ -439,7 +436,7 @@ lookupTableVar tablename prikeyargs = do
             return (True, sqlvar2)
 
 translateAtomToSQL :: Sign -> Atom -> TransMonad SQL0
-translateAtomToSQL thesign (Atom (Pred name _) args) = do
+translateAtomToSQL thesign (Atom name args) = do
     ts <- get
     let (BuiltIn builtints) = builtin ts
     --try builtin first
@@ -471,7 +468,7 @@ translateAtomToSQL thesign (Atom (Pred name _) args) = do
                 condsFromArgs <- mapM (condFromArg (.=.)) (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
                 return (SQL0 [] tables2 cond3)
-            Nothing -> error (name ++ " is not defined")
+            Nothing -> error (show name ++ " is not defined")
 
 
 
@@ -524,17 +521,17 @@ toInsert tablelist cond (SQLUpdate tname colexprs cond2) = SQLUpdate tname colex
 combineLitsSQL :: [Lit] -> TransMonad [SQL]
 combineLitsSQL lits = combineLits lits generateUpdateSQL generateInsertSQL generateDeleteSQL
 
-preproc0 tname sqlvar qcols predtype args = do
-        let key = keyComponents predtype args
+preproc0 tname sqlvar qcols pred1 args = do
+        let key = keyComponents pred1 args
         (_, sqlvar2) <- lookupTableVar tname key
         let varmap = singleton sqlvar sqlvar2
         let qcol_args = zip (subst varmap qcols) args
         return (qcol_args, sqlvar2)
 
-preproc tname sqlvar qcols predtype args = do
-        (qcol_args , sqlvar2) <- preproc0 tname sqlvar qcols predtype args
-        let keyqcol_args = keyComponents predtype qcol_args
-        let propqcol_args = propComponents predtype qcol_args
+preproc tname sqlvar qcols pred1 args = do
+        (qcol_args , sqlvar2) <- preproc0 tname sqlvar qcols pred1 args
+        let keyqcol_args = keyComponents pred1 qcol_args
+        let propqcol_args = propComponents pred1 qcol_args
         return (keyqcol_args, propqcol_args, sqlvar2)
 
 generateDeleteSQL :: Atom -> TransMonad [SQL]
@@ -566,19 +563,19 @@ generateUpdateSQLForPred (pred, [], [negatom]) = translateNegUpdateAtomToSQL neg
 generateUpdateSQLForPred (pred, _, _) = error "unsupported number of pos and neg literals" -- set property
 
 translateDeleteAtomToSQL :: Atom -> TransMonad SQL
-translateDeleteAtomToSQL (Atom (Pred pred predtype) args) = do
+translateDeleteAtomToSQL (Atom pred1 args) = do
     ts <- get
-    case lookup pred (predtablemap ts) of
+    case lookup pred1 (predtablemap ts) of
         Just (OneTable tname sqlvar, qcols) -> do
-            (qcol_args, sqlvar2) <- preproc0 tname sqlvar qcols predtype args
+            (qcol_args, sqlvar2) <- preproc0 tname sqlvar qcols pred1 args
             cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToDelete qcol_args
             return (SQLDelete (tname, sqlvar2) cond)
         Nothing -> error "not an updatable predicate"
 
 translatePosInsertAtomToSQL :: Atom -> TransMonad SQL
-translatePosInsertAtomToSQL (Atom (Pred pred predtype) args) = do
+translatePosInsertAtomToSQL (Atom pred1 args) = do
     ts <- get
-    case lookup pred (predtablemap ts) of
+    case lookup pred1 (predtablemap ts) of
         Just (OneTable tname _, qcols) -> do
             let qcol_args = zip qcols args
             colexprs <- mapM qcolArgToValue qcol_args
@@ -586,11 +583,11 @@ translatePosInsertAtomToSQL (Atom (Pred pred predtype) args) = do
         Nothing -> error "not an updatable predicate"
 
 translatePosUpdateAtomToSQL :: Atom -> TransMonad SQL
-translatePosUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
+translatePosUpdateAtomToSQL (Atom pred1 args) = do
     ts <- get
-    case lookup pred (predtablemap ts) of
+    case lookup pred1 (predtablemap ts) of
         Just (OneTable tname sqlvar, qcols) -> do
-            (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols predtype args
+            (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols pred1 args
             cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToUpdateCond keyqcol_args
             set <- mapM qcolArgToSet propqcol_args
             return (SQLUpdate (tname, sqlvar2) set cond)
@@ -598,11 +595,11 @@ translatePosUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
 
 
 translateNegUpdateAtomToSQL :: Atom -> TransMonad SQL
-translateNegUpdateAtomToSQL (Atom (Pred pred predtype) args) = do
+translateNegUpdateAtomToSQL (Atom pred1 args) = do
     ts <- get
-    case lookup pred (predtablemap ts) of
+    case lookup pred1 (predtablemap ts) of
         Just (OneTable tname sqlvar, qcols) -> do
-            (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols predtype args
+            (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols pred1 args
             cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToUpdateCond keyqcol_args
             (set, conds) <- unzip <$> mapM qcolArgToSetNull propqcol_args
             return (SQLUpdate (tname, sqlvar2) set (foldl (.&&.) cond conds))
@@ -670,14 +667,14 @@ data KeyState = KeyState {
 }
 
 pureOrExecF :: Bool -> SQLTrans -> Formula -> StateT KeyState Maybe ()
-pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FAtomic (Atom (Pred n predType) args)) = do
+pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FAtomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
         else case lookup n predtablemap of
-                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ n ++ " ignored") $ return ()
+                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
                 Just (OneTable tablename _, _) -> do
-                    let key = keyComponents predType args
+                    let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
 pureOrExecF  _ trans (FClassical form) = pureOrExecF' trans form
 pureOrExecF  top trans (FTransaction form) =  if top
@@ -696,18 +693,16 @@ pureOrExecF  _ trans (FChoice form1 form2) = do
             put ks {ksChoice = True}
             pureOrExecF False trans form1
             pureOrExecF False trans form2
-pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FInsert (Lit sign0 (Atom pred0@(Pred n predType@(PredType predKind _)) args))) = do
+pureOrExecF  _ (SQLTrans schema builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
             if ksChoice ks
                 then lift $ Nothing
                 else do
-                    let key = keyComponents predType args
-                        tablename = case lookup n predtablemap of
+                    let key = keyComponents pred0 args
+                        tablename = case lookup pred0 predtablemap of
                             Just (OneTable tn _, _) -> tn
-                            Nothing -> error ("pureOrExecF: cannot find table for predicate " ++ n)
-                    let isObject = case predKind of
-                            ObjectPred -> True
-                            PropertyPred -> False
+                            Nothing -> error ("pureOrExecF: cannot find table for predicate " ++ show pred0)
+                    let isObject = isObjectPred pred0
                     let isDelete = case sign0 of
                             Pos -> False
                             Neg -> True
@@ -743,14 +738,14 @@ pureOrExecF  _ _ FOne = return ()
 pureOrExecF  _ _ FZero = return ()
 
 pureOrExecF' :: SQLTrans -> PureFormula -> StateT KeyState Maybe ()
-pureOrExecF' (SQLTrans _ _ predtablemap) (Atomic (Atom (Pred n predType) args)) = do
+pureOrExecF' (SQLTrans _ _ predtablemap) (Atomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
         else case lookup n predtablemap of
-                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ n ++ " ignored") $ return ()
+                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
                 Just (OneTable tablename _, _) -> do
-                    let key = keyComponents predType args
+                    let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
 pureOrExecF' trans (Conjunction form1 form2) = do
     pureOrExecF' trans form1
@@ -776,7 +771,7 @@ instance Translate SQLTrans MapResultRow SQLQuery where
     translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))
 
 instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQLTrans where
-    extractDomainSize _ trans varDomainSize (Atom (Pred name _) args) =
+    extractDomainSize _ trans varDomainSize (Atom name args) =
         if isBuiltIn
             then return maxArgDomainSize -- assume that builtins don't restrict domain size
             else return (if name `member` predtablemap

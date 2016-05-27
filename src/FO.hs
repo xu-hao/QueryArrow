@@ -130,7 +130,7 @@ transDB name transinfo = do
     dbs <- concat <$> mapM (\(DBTrans ps) -> do
             db <- getDB ps
             return db) (db_plugins transinfo)
-    let predmap0 = constructPredMap dbs
+    let predmap0 = constructDBPredMap dbs
     let hiding = hide_predicate transinfo
     let predmap1 = filterWithKey (\k _ -> not (k `elem` hiding)) predmap0
     let add = add_predicate transinfo

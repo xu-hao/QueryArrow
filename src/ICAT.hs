@@ -13,3 +13,7 @@ standardBuiltInPreds = [
         Pred "eq" (PredType ObjectPred [Key "Any", Key "Any"]),
         Pred "like" (PredType ObjectPred [Key "String", Key "Pattern"]),
         Pred "like_regex" (PredType ObjectPred [Key "String", Key "Pattern"])]
+
+
+standardBuiltInPredsMap = constructPredMap standardBuiltInPreds
+standardPredMap = constructPredMap standardPreds

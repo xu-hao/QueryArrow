@@ -229,8 +229,8 @@ rulesp = do
     return (mconcat rules, st)
 
 samePredAndKey :: Atom -> Atom -> Bool
-samePredAndKey (Atom p1@(Pred _ pt1) args1) (Atom p2@(Pred _ pt2) args2) | p1 == p2 =
-    keyComponents pt1 args1 == keyComponents pt2 args2
+samePredAndKey (Atom p1 args1) (Atom p2 args2) | p1 == p2 =
+    keyComponents p1 args1 == keyComponents p2 args2
 samePredAndKey _ _ = False
 
 unionPred :: [Atom] -> [Atom] -> [Atom]

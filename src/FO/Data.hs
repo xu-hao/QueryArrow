@@ -204,21 +204,28 @@ splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     Pos -> (theatom : pos, neg)
     Neg -> (pos, theatom : neg)) ([],[])
 
-keyComponents :: PredType -> [a] -> [a]
-keyComponents (PredType _ paramtypes) = map snd . filter (\(type1, _) -> case type1 of
+keyComponents :: Pred -> [a] -> [a]
+keyComponents (Pred _ (PredType _ paramtypes)) = map snd . filter (\(type1, _) -> case type1 of
     Key _ -> True
     _ -> False) . zip paramtypes
 
-propComponents :: PredType -> [a] -> [a]
-propComponents (PredType _ paramtypes) = map snd . filter (\(type1, _) -> case type1 of
+propComponents :: Pred -> [a] -> [a]
+propComponents (Pred _ (PredType _ paramtypes)) = map snd . filter (\(type1, _) -> case type1 of
     Property _ -> True
     _ -> False) . zip paramtypes
 
+isObjectPred :: Pred -> Bool
+isObjectPred (Pred _ (PredType predKind _)) = case predKind of
+            ObjectPred -> True
+            PropertyPred -> False
+
+constructPredMap :: [Pred] -> PredMap
+constructPredMap = foldl (\map1 pred1@(Pred name _) -> insert name pred1 map1) empty
 
 sortByKey :: [Lit] -> Map [Expr] [Lit]
 sortByKey = foldl insertByKey empty where
-    insertByKey map1 lit@(Lit _ (Atom (Pred _ predtype) args)) =
-        let keyargs = keyComponents predtype args in
+    insertByKey map1 lit@(Lit _ (Atom pred1 args)) =
+        let keyargs = keyComponents pred1 args in
             alter (\l -> case l of
                 Nothing -> Just [lit]
                 Just lits -> Just (lits ++ [lit])) keyargs map1

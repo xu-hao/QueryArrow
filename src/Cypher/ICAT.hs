@@ -6,10 +6,9 @@ import Cypher.Neo4jConnection
 import Cypher.Cypher
 import Cypher.SQLToCypher
 import Utils
-import ICATGen
-import SQL.ICATGen
 import DBQuery
 import ICAT
+import SQL.ICAT
 
 import qualified Data.Text as T
 import Prelude hiding (lookup)
@@ -44,7 +43,7 @@ cypherMapping = (sqlToCypher (fromList [
     ]) (fromList [
     ("data_id", "object_id"),
     ("coll_id", "object_id")
-    ])(foldMap (\p@(Pred n _) -> singleton n p) preds) (fromList mappings))
+    ]) sqlMapping)
 
 cypherTrans :: CypherTrans
 cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] (snd cypherMapping)
