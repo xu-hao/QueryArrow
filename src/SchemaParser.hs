@@ -12,7 +12,6 @@ import System.IO.Unsafe
 import Data.String.Utils
 import Data.List (partition)
 import Data.Char
-import Prover.Parser
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
@@ -205,39 +204,10 @@ generateICATSchema (Stmt tablename coldefs) = do
 generateICATSchemas :: [Stmt2] -> Q Exp
 generateICATSchemas = foldr (\stmt q2 -> [| $(generateICATSchema stmt) : $q2 |] ) [|[]|]
 
-generateRule :: Stmt2 -> [Input]
-generateRule (Stmt tablename coldefs) = runNew $ do
-    let prefix = extractPrefix tablename
-    if prefix `elem` []
-        then
-            return []
-        else do
-            let predname = prefixToPredName prefix
-            -- find all keys
-            let (keys, props) = findAllKeys prefix coldefs
-            let notnulls = findAllNotNulls props
-            if null notnulls
-              then return []
-              else do
-                let dummypred = Pred predname (PredType ObjectPred [])
-                keyvarexprs <- new (map (const (Var "")) keys)
-                let objatom = dummypred @@ keyvarexprs
-                let propPred (ColDef key2 _ _) = do
-                        let predname2 = colNameToPredName prefix key2
-                        let dummypred2 = Pred predname2 (PredType PropertyPred [])
-                        newvar <- new (Var "")
-                        return (Exists newvar (dummypred2 @@ (keyvarexprs ++ [VarExpr newvar])))
-                proppreds <- mapM propPred notnulls
-                proppreds2 <- mapM propPred props
-                return [(predname++"_not_null", "axiom", (objatom --> conj proppreds) & (disj proppreds2 --> objatom))]
-
-generateRules :: [Stmt2] -> [Input]
-generateRules = concatMap generateRule
-
-schema :: ((Q Exp, (Q Exp, Q Exp)), [Input])
+schema :: ((Q Exp, (Q Exp, Q Exp)))
 schema =
     let path = "gen/schema.sql"
         file = unsafePerformIO $ readFile path in
         case runParser prog () path file of
             Left err -> error (show err)
-            Right ast -> ((generateICATDefs ast, (generateICATMappings ast, generateICATSchemas ast)), generateRules ast)
+            Right ast -> (generateICATDefs ast, (generateICATMappings ast, generateICATSchemas ast))

@@ -52,16 +52,13 @@ rewrite META_2(x, a, v, u) ⟶
                             ) ⊗ CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
 rewrite insert META_2(x, a, v, u) ⟶
                             nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ eq(acc,1200) ⊗
+                            ([ ¬ CYPHER_USER_OBJ(user) ] ⊗ insert CYPHER_USER_OBJ(user) ⊗ 𝟎 ⊕ 𝟏) ⊗
+                            ([ ¬ CYPHER_DATA_OBJ(x) ] ⊗ insert CYPHER_DATA_OBJ(x) ⊗ 𝟎 ⊕ 𝟏) ⊗
+                            insert CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, 1200) ⊗
                             (
-                                [ ¬ CYPHER_USER_OBJ(user) ] ⊗ insert CYPHER_USER_OBJ(user) ⊗ 𝟎 ⊕
-                                [ ¬ CYPHER_DATA_OBJ(x) ] ⊗ insert CYPHER_DATA_OBJ(x) ⊗ 𝟎 ⊕
-                                insert CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, 1200) ⊗
-                                (
-                                    [ ¬ eq(a, "searchable") ] ⊗ OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) ⊕
-                                    eq(a, "searchable") ⊗ insert ES_META(x, m, a, v, u)
-                                )
-                             )
-
+                                [ ¬ eq(a, "searchable") ] ⊗ OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) ⊕
+                                eq(a, "searchable") ⊗ insert ES_META(x, m, a, v, u)
+                            )
 
 rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200) ⊗
                             OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v) ⊗

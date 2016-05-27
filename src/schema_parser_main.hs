@@ -8,7 +8,6 @@ import System.Environment
 import Language.Haskell.TH
 import SQL.SQL hiding (schema)
 import FO.Data
-import Prover.Parser
 
 import SchemaParser
 
@@ -21,11 +20,9 @@ showHaskellSQLMappingList l = "[\n" ++ intercalate ",\n" (map (\(p, (OneTable tn
 
 main :: IO ()
 main = do
-      let s = $(fst (fst schema))
-      let t = $(fst (snd (fst schema)))
-      let u = $(snd (snd (fst schema)))
-      let r = snd schema
-      writeFile "gen/rules.tptp" (toTPTP3' r  )
+      let s = $(fst schema)
+      let t = $(fst (snd schema))
+      let u = $(snd (snd schema))
       writeFile "gen/ICATGen.hs" (
           "module ICATGen where\nimport FO.Data\npreds = " ++
               showHaskellList s)
