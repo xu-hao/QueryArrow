@@ -29,6 +29,8 @@ import Data.Monoid
 import Data.Convertible
 import Control.Monad.Trans.Except
 import qualified Data.Text as T
+import Control.Monad.IO.Class
+import System.IO.Unsafe
 
 {- validateInsert :: TheoremProver_ p => p -> [PureFormula] -> Query -> IO (Maybe Bool)
 validateInsert = FO.validateInsert . TheoremProver
@@ -76,7 +78,7 @@ instance Arbitrary ParamType where
     arbitrary = oneof [Key <$> arbitrary, Property <$> arbitrary]
 
 instance Arbitrary Pred where
-    arbitrary = Pred <$> string2 <*> arbitrary
+    arbitrary = Pred <$> (UQPredName <$> string2) <*> arbitrary
 
 instance Arbitrary Expr where
     arbitrary = oneof [VarExpr <$> Var <$> string2, IntExpr <$> arbitrary, StringExpr <$> text2]
@@ -108,11 +110,11 @@ instance Arbitrary (LimitedMapDB m) where
         let arbitraryList = replicateM m1 (oneof ((return . StringValue) <$> strList))
         LimitedMapDB <$> (MapDB <$> string2 <*> string2 <*> (zip <$> arbitraryList <*> arbitraryList))
 
-runQuery ::  (ResultRow row, Show row) => [Database Identity row] -> String -> [row]
+runQuery ::  (ResultRow row, Show row) => [Database IO row] -> String -> [row]
 runQuery dbs query2 =
-    case runParser progp (constructPredMap dbs) "" query2 of
+    case runParser progp (constructDBPredMap dbs) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right (qu2, _) -> runIdentity (getAllResults2 dbs  qu2)
+            Right (qu2, _) -> unsafePerformIO (getAllResults2 dbs  qu2)
 
 parseStandardQuery ::  String -> Query
 parseStandardQuery query2 =
@@ -139,56 +141,56 @@ db2 :: EqDB DBAdapterMonad
 db2 = EqDB "Eq"
 
 -- test that simple query of the form p(x,y) returns all rows
-test0 :: MapDB Identity -> Bool
+test0 :: MapDB IO -> Bool
 test0 db = case db of
-    MapDB _ predName2 rows ->
-        let query2 = predName2 ++ "(x,y) return x y"
+    MapDB name predName2 rows ->
+        let query2 = name ++ "." ++ predName2 ++ "(x,y) return x y"
             results = runQuery [Database db] query2 in
             to1 [Var "x", Var "y"] results == to2 rows
 
 -- test that simple query of the form p(x,y) p(y,z)
-test1 :: LimitedMapDB Identity -> Bool
+test1 :: LimitedMapDB IO -> Bool
 test1 (LimitedMapDB db) = case db of
-    MapDB _ predName2 rows ->
-        let query2 = predName2 ++ "(x,y)" ++ predName2 ++ "(y,z) return x y z"
+    MapDB name predName2 rows ->
+        let query2 = name ++ "." ++ predName2 ++ "(x,y)" ++ name ++ "." ++ predName2 ++ "(y,z) return x y z"
             results = to1 [Var "x",Var "y",Var "z"] (runQuery [Database db] query2)
             rr = to2 rows in
             results ==  [ [a1, a2, b2] | [a1,a2] <- rr, [b1,b2] <- rr, a2 == b1]
 
 -- test that simple query of the form p(x,y) ~exists p(y,z)
-test2 :: LimitedMapDB Identity -> Bool
+test2 :: LimitedMapDB IO -> Bool
 test2 (LimitedMapDB db) = case db of
-    MapDB _ predName2 rows ->
-        let query2 = predName2 ++ "(x,y)[~(exists z." ++ predName2 ++ "(y,z))] return x y"
+    MapDB name predName2 rows ->
+        let query2 = name ++ "." ++ predName2 ++ "(x,y)[~(exists z." ++ name ++ "." ++ predName2 ++ "(y,z))] return x y"
             results = to1 [Var "x",Var "y"] (runQuery [Database db] query2)
             rr = to2 rows in
             results == [ [a,b] | [a,b] <- rr, null [ [a1,b1] | [a1,b1] <- rr, b==a1]]
 
 -- test that simple query of the form p(x,y) exists p(y,z)
-test3 :: LimitedMapDB Identity -> Bool
+test3 :: LimitedMapDB IO -> Bool
 test3 (LimitedMapDB db) = case db of
-    MapDB _ predName2 rows ->
-        let query2 = predName2 ++ "(x,y)[exists z." ++ predName2 ++ "(y,z)] return x y"
+    MapDB name predName2 rows ->
+        let query2 = name ++ "." ++ predName2 ++ "(x,y)[exists z." ++ name ++ "." ++ predName2 ++ "(y,z)] return x y"
             results = to1 [Var "x", Var "y"] (runQuery [Database db] query2)
             rr = to2 rows in
             -- trace ("rr: " ++show rr++"\nresults: "++show results)
                 results == [ [a,b] | [a,b] <- rr, not (null [ [a1,b1] | [a1,b1] <- rr, b==a1])]
 
 -- test that simple query of the form p(x,y) p(y,z) ~p(x,z)
-test4 :: LimitedMapDB Identity -> Bool
+test4 :: LimitedMapDB IO -> Bool
 test4 (LimitedMapDB db) = case db of
-    MapDB _ predName2 rows ->
-        let query2 = predName2 ++ "(x,y)" ++ predName2 ++ "(y,z)[~"++predName2++"(x,z)] return x y z"
+    MapDB name predName2 rows ->
+        let query2 = name ++ "." ++ predName2 ++ "(x,y)" ++ name ++ "." ++ predName2 ++ "(y,z)[~"++name ++ "." ++ predName2++"(x,z)] return x y z"
             results = to1 [Var "x", Var "y", Var "z"] (runQuery [Database db] query2)
             rr = to2 rows in
             -- trace ("rr: " ++concatMap (\x-> show x++"\n") rr ++"\nresults: "++concatMap (\x-> show x++"\n") results)
                 results == [ [a,b,c] | [a,b,c] <- [ [a1, a2, b2] | [a1,a2] <- rr, [b1,b2] <- rr, a2 == b1], [a, c] `notElem` rr]
 
 -- test that simple query of the form p(x,y) | p(y,x)
-test5 :: LimitedMapDB Identity -> Bool
+test5 :: LimitedMapDB IO -> Bool
 test5 (LimitedMapDB db) = case db of
-    MapDB _ predName2 rows ->
-        let query2 = predName2 ++ "(x,y)|"++predName2 ++ "(y,x) return x y"
+    MapDB name predName2 rows ->
+        let query2 = name ++ "." ++ predName2 ++ "(x,y)|"++name ++ "." ++ predName2 ++ "(y,x) return x y"
             results = to1 [Var "x", Var "y"] (runQuery [Database db, Database (EqDB "")] query2)
             rr = to2 rows in
             -- trace ("rr: " ++concatMap (\x-> show x++"\n") rr ++"\nresults: "++concatMap (\x-> show x++"\n") results)
@@ -218,126 +220,126 @@ main = hspec $ do
             (v1, v2) <- return (runNew (evalStateT (do
                 v1 <- freshSQLVar "t"
                 v2 <- freshSQLVar "t"
-                return (v1, v2)) (TransState empty (BuiltIn empty) empty empty empty)))
+                return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty)))
             v1 `shouldBe` SQLVar "t"
             v2 `shouldBe` SQLVar "t0"
         it "test parse query 0" $ do
             let (Query vars formula) = parseStandardQuery "DATA_NAME(x, y) return x y"
             vars `shouldBe` [Var "x", Var "y"]
-            formula `shouldBe` FAtomic (Atom (standardPredMap ! "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y")])
+            formula `shouldBe` FAtomic (Atom (standardPredMap ! UQPredName "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y")])
 
         it "test translate sql query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
-            let sql = translateQuery2 sqlStandardTrans qu
+            let sql = translateQuery2 (sqlStandardTrans "") qu
             sql `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), [])
         it "test translate sql query with param" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
-            let sql = translateQueryWithParams sqlStandardTrans qu [Var "w"]
+            let sql = translateQueryWithParams (sqlStandardTrans "") qu [Var "w"]
             (fst sql) `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), [])
             (snd sql) `shouldBe` []
         it "test translate sql query with param 2" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x"
-            let sql = translateQueryWithParams sqlStandardTrans qu [Var "y"]
+            let sql = translateQueryWithParams (sqlStandardTrans "") qu [Var "y"]
             ((\(x,_,_) -> x) (fst sql)) `shouldBe` [Var "x"]
             show ((\(_,x,_) -> x) (fst sql)) `shouldBe` "SELECT r_data_main.data_id FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
             (snd sql) `shouldBe` [Var "y"]
         it "test translate sql insert 0" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
         it "test translate sql insert 1" $ do
             let qu = parseStandardInsert "insert DATA_OBJ(1) DATA_NAME(1, \"foo\") DATA_SIZE(1, 1000)"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) VALUES (1,'foo',1000)"
         it "test translate sql insert 2" $ do
             let qu = parseStandardInsert "COLL_NAME(a,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main"
         it "test translate sql insert 3" $ do
             let qu = parseStandardInsert "COLL_NAME(2,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main WHERE r_coll_main.coll_id = 2"
         it "test translate sql insert 4" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c)"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL"
         it "test translate sql insert 5" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c) DATA_NAME(1, \"foo\")"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
         it "test translate sql insert 6" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, c) DATA_NAME(x, \"foo\")"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
         it "test translate sql insert 7" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_NAME(x, \"foo\")"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
         it "test translate sql insert 7.1" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\")"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 7.2" $ do
             let ins@(Query _ form) = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_SIZE(x, 1000)"
-            let sql = translateable sqlStandardTrans form []
+            let sql = translateable (sqlStandardTrans "") form []
             sql `shouldBe` False
             -- length sql `shouldBe` 2
             -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
             -- show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 8" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"bar\") insert DATA_NAME(x, \"foo\")"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo' WHERE data_name = 'bar'"
         it "test translate sql insert 9" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(1)"
-            let sql = translateInsert sqlStandardTrans qu
+            let sql = translateInsert (sqlStandardTrans "") qu
             show ((\(_,x,_) -> x)sql) `shouldBe` "DELETE FROM r_data_main WHERE data_id = 1"
         it "test tranlate sql insert 10" $ (
                 let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
-                    sql = translateInsert sqlStandardTrans qu in                    print (show ((\(_,x,_) -> x)sql))
+                    sql = translateInsert (sqlStandardTrans "") qu in                    print (show ((\(_,x,_) -> x)sql))
             ) `shouldThrow` anyException
         it "test translate cypher query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
-            let (_, sql) = translateQuery2 cypherTrans qu
+            let (_, sql) = translateQuery2 (cypherTrans "") qu
             print sql
             show sql `shouldBe` "MATCH (var:DataObject) RETURN var.object_id,var.data_name"
         it "test translate cypher insert 0" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject{data_name:'foo'}) SET var.data_size = 1000"
         it "test translate cypher insert 1" $ do
             let qu = parseStandardInsert "insert DATA_OBJ(1) DATA_NAME(1, \"foo\") DATA_SIZE(1, 1000)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "CREATE (var:DataObject{object_id:1,data_name:'foo',data_size:1000})"
         it "test translate cypher insert 2" $ do
             let qu = parseStandardInsert "COLL_NAME(a,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:Collection) CREATE (var2:DataObject{object_id:1,data_name:var.coll_name,data_size:1000})"
         it "test translate cypher insert 3" $ do
             let qu = parseStandardInsert "COLL_NAME(2,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:Collection{object_id:2}) CREATE (var2:DataObject{object_id:1,data_name:var.coll_name,data_size:1000})"
         it "test translate cypher insert 4" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject{object_id:1}) SET var.data_name = NULL"
         it "test translate cypher insert 5" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(1, c) DATA_NAME(1, \"foo\")"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject{object_id:1}) SET var.data_name = 'foo'"
         it "test translate cypher insert 6" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, c) DATA_NAME(x, \"foo\")"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject) SET var.data_name = 'foo'"
         {- it "test translate cypher insert 7 E" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_NAME(x, \"foo\")"
             val <- validate verifier2 qu
             val `shouldNotBe` Nothing
-            -- let sql = translateInsert cypherTrans qu
+            -- let sql = translateInsert (cypherTrans "") qu
             -- show sql `shouldBe` "MATCH (var:DataObject) SET var.data_name = 'foo'" -}
         it "test translate cypher insert 7.1" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\")"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject{data_name:'foo1'}) SET var.data_name = NULL"
         {- it "test translate cypher insert 7.2 E" $ do
             let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_SIZE(x, 1000)"
@@ -347,15 +349,15 @@ main = hspec $ do
             -- show sql `shouldBe` "MATCH (var:DataObject) SET var.data_size = 1000 WITH (var:DataObject{data_name:'foo1'}) SET var.data_name = NULL" -}
         it "test translate cypher insert 8" $ do
             let qu = parseStandardInsert "DATA_NAME(x, \"bar\") insert DATA_NAME(x, \"foo\")"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject{data_name:'bar'}) SET var.data_name = 'foo'"
         it "test translate cypher insert 9" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(1)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject{object_id:1}) DELETE var"
         it "test tranlate cypher insert 10" $ do
             let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
-            let sql = translateInsert cypherTrans qu
+            let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:DataObject) DELETE var"
         let a = (var "a")
         let b = (var "b")
@@ -508,7 +510,7 @@ main = hspec $ do
             let qu = parseStandardInsert "DATA_NAME(y, \"foo\") insert ~DATA_SIZE(x, 1000)"
             val <- validate verifier2 qu
             val `shouldBe` Nothing -}
-        let at p args = Atom (Pred p (PredType ObjectPred (map (const (Key "String")) args))) args
+        let at p args = Atom (Pred (UQPredName p) (PredType ObjectPred (map (const (Key "String")) args))) args
         let atom p args = Atomic (at p args)
         let v = VarExpr . Var
         let i = IntExpr
@@ -585,7 +587,7 @@ main = hspec $ do
             let [eq] = getPreds db3
             let [eq2] = getPreds db2
             eq `shouldBe` eq2
-            case runParser progp (constructPredMap dbs) "" query2 of
+            case runParser progp (constructDBPredMap dbs) "" query2 of
                  Left _ -> error ("cannot parse query: " ++ show query2)
                  Right (qu, _) -> do
                     let qp = queryPlan dbs qu
@@ -601,12 +603,12 @@ main = hspec $ do
             let query2 = "insert eq(1,1)"
             let [eqp] = getPreds db2
             let insmap = empty
-            case runParser progp (constructPredMap dbs) "" query2 of
+            case runParser progp (constructDBPredMap dbs) "" query2 of
                  Left _ -> error ("cannot parse query: " ++ show query2)
                  Right (ins, _) -> do
                     let qp = queryPlan dbs  ins
                     qp `shouldBe` (Exec (FInsert (Lit Pos (Atom eqp [IntExpr 1,IntExpr 1]))) [])
-                    let qp2 = runIdentity (runExceptT (checkQueryPlan2 dbs qp))
+                    let qp2 = runIdentity (runExceptT (checkQueryPlan dbs (calculateVars [] [] qp)))
                     show qp2 `shouldBe` "Left (\"no database\",(insert eq(1,1)),fromList [])"
         it "queryplan insert map" $ do
             let db = StateMapDB "mapdb" "p" :: StateMapDB Identity
@@ -616,12 +618,12 @@ main = hspec $ do
             let [eqp] = getPreds db2
             let [p] = getPreds db
             let insmap = empty
-            case runParser progp (constructPredMap dbs) "" query2 of
+            case runParser progp (constructDBPredMap dbs) "" query2 of
                  Left _ -> error ("cannot parse query: " ++ show query2)
                  Right (ins, _) -> do
                     let qp = queryPlan dbs  ins
                     qp `shouldBe` (Exec (FInsert (Lit Pos (Atom p [IntExpr 1,IntExpr 1]))) [0])
-                    let qp2 = runIdentity (evalStateT (runExceptT (checkQueryPlan2 dbs qp)) (singleton "mapdb" [(StringValue "a", StringValue "b")]))
+                    let qp2 = runIdentity (evalStateT (runExceptT (checkQueryPlan dbs (calculateVars [] [] qp))) (singleton "mapdb" [(StringValue "a", StringValue "b")]))
                     show qp2 `shouldBe` "Right (fromList [])"
         it "queryplan insert insmap" $ do
             let db = MapDB "mapdb" "p" [(StringValue "a", StringValue "b")]:: MapDB Identity
@@ -631,23 +633,23 @@ main = hspec $ do
             let [eqp] = getPreds db2
             let [p] = getPreds db
             let insmap = singleton p ([1], [1])
-            case runParser progp (constructPredMap dbs) "" query2 of
+            case runParser progp (constructDBPredMap dbs) "" query2 of
                  Left _ -> error ("cannot parse query: " ++ show query2)
                  Right (ins, _) -> do
                     let qp = queryPlan dbs  ins
-                    qp `shouldBe` (Exec (FInsert (Lit Pos (Atom p [IntExpr 1,IntExpr 1]))) [])
-                    let qp2 = runIdentity (runExceptT (checkQueryPlan2 dbs qp))
+                    -- qp `shouldBe` (Exec (FInsert (Lit Pos (Atom p [IntExpr 1,IntExpr 1]))) [])
+                    let qp2 = runIdentity (runExceptT (checkQueryPlan dbs (calculateVars [] [] qp)))
                     show qp2 `shouldBe` "Left (\"no database\",(insert p(1,1)),fromList [])"
 
         it "schema 0" $ do
-            let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "DATA_NAME") `shouldBe` "([1,2],GraphPattern [(0:DataObject{object_id:1})],GraphPattern [(0:DataObject{data_name:2})],[(0,[1])])"
+            let CypherTrans _ _ mappings = cypherTrans ""
+            show (mappings ! Pred (QPredName "" "DATA_NAME") (PredType PropertyPred [Key "Number",Property "Text"] )) `shouldBe` "([1,2],GraphPattern [(0:DataObject{object_id:1})],GraphPattern [(0:DataObject{data_name:2})],[(0,[1])])"
         it "schema 1" $ do
-            let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "DATA_COLL_ID") `shouldBe` "([1,2],GraphPattern [(d{object_id:1}),(c{object_id:2})],GraphPattern [(d)-[e:DATA_COLL_ID]->(c)],[(d,[1]),(e,[1]),(c,[2])])"
+            let CypherTrans _ _ mappings = cypherTrans ""
+            show (mappings ! Pred (QPredName "" "DATA_COLL_ID") (PredType PropertyPred [Key "Number",Property "Number"])) `shouldBe` "([1,2],GraphPattern [(d{object_id:1}),(c{object_id:2})],GraphPattern [(d)-[e:DATA_COLL_ID]->(c)],[(d,[1]),(e,[1]),(c,[2])])"
         it "schema 2" $ do
-            let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "USER_GROUP_OBJ") `shouldBe` "([1,2],GraphPattern [(d{group_user_id:1}),(c{user_id:2})],GraphPattern [(d)-[e:USER_GROUP_OBJ]->(c)],[(d,[1]),(e,[1,2]),(c,[2])])"
+            let CypherTrans _ _ mappings = cypherTrans ""
+            show (mappings ! Pred (QPredName "" "USER_GROUP_OBJ") (PredType PropertyPred [Key "Number", Key "Number"])) `shouldBe` "([1,2],GraphPattern [(d{group_user_id:1}),(c{user_id:2})],GraphPattern [(d)-[e:USER_GROUP_OBJ]->(c)],[(d,[1]),(e,[1,2]),(c,[2])])"
         it "schema 3" $ do
-            let CypherTrans _ _ mappings = cypherTrans
-            show (mappings ! "USER_GROUP_CREATE_TS") `shouldBe` "([1,2,3],GraphPattern [(d{group_user_id:1}),(c{user_id:2}),(d)-[e:USER_GROUP_CREATE_TS]->(c)],GraphPattern [(e{create_ts:3})],[(d,[1]),(e,[1,2]),(c,[2])])"
+            let CypherTrans _ _ mappings = cypherTrans ""
+            show (mappings ! Pred (QPredName "" "USER_GROUP_CREATE_TS") (PredType PropertyPred [Key "Number", Key "Number", Property "Text"])) `shouldBe` "([1,2,3],GraphPattern [(d{group_user_id:1}),(c{user_id:2}),(d)-[e:USER_GROUP_CREATE_TS]->(c)],GraphPattern [(e{create_ts:3})],[(d,[1]),(e,[1,2]),(c,[2])])"
