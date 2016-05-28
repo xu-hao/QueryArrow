@@ -9,9 +9,9 @@ import Data.String.Utils
 import FO.Data
 import Debug.Trace
 
-sqlToCypher :: Map String String -> Map String String -> PredTableMap -> (PredMap, CypherPredTableMap)
+sqlToCypher :: Map String String -> Map String String -> PredTableMap -> CypherPredTableMap
 sqlToCypher tabletype colprop  mappings =
-    foldrWithKey (\predtype (OneTable tablename _, qcols) (predtable', mappings') ->
+    foldrWithKey (\predtype (OneTable tablename _, qcols) mappings' ->
         let lookup2 tablename0 table =
                 case lookup tablename0 table  of
                     Nothing -> tablename0
@@ -30,16 +30,15 @@ sqlToCypher tabletype colprop  mappings =
             mapping' = case propprops of
                     [] -> case edges of
                         [keyCol] -> mappingPattern0 keyCol ty keyprops
-                        [keyCol1, keyCol2] -> mappingPattern2m keyCol1 keyCol2 key keyprops
-                        _ -> mappingPattern3 edges edges propEdges propEdges key keyprops
+                        [keyCol1, keyCol2] -> mappingPattern2m keyCol1 keyCol2 (predNameToString2 key) keyprops
+                        _ -> mappingPattern3 edges edges propEdges propEdges (predNameToString2 key) keyprops
                     _ -> case (edges, propEdges) of
                         ([keyCol], []) ->   mappingPattern1 keyCol ty keyprops propprops
-                        ([keyCol1, keyCol2], []) -> mappingPattern4m keyCol1  keyCol2   key keyprops propprops
-                        ([keyCol1], [keyCol2]) -> mappingPattern4prop keyCol1  keyCol2   key keyprops propprops
-                        _ -> mappingPattern5 edges edges propEdges propEdges key keyprops propprops
-            key' = "CYPHER_" ++ key
+                        ([keyCol1, keyCol2], []) -> mappingPattern4m keyCol1  keyCol2   (predNameToString2 key) keyprops propprops
+                        ([keyCol1], [keyCol2]) -> mappingPattern4prop keyCol1  keyCol2   (predNameToString2 key) keyprops propprops
+                        _ -> mappingPattern5 edges edges propEdges propEdges (predNameToString2 key) keyprops propprops
         in
-            trace ("generating mapping for predicate " ++ key' ++ show keyprops ++ show propprops ++ " -> " ++ show mapping') $ (insert key' (Pred key' (predType predtype)) predtable', insert key' mapping' mappings')) (empty, empty) mappings
+            trace ("generating mapping for predicate " ++ show key ++ show keyprops ++ show propprops ++ " -> " ++ show mapping') $ insert predtype mapping' mappings') empty mappings
 
 mappingPattern0 :: String -> String -> [String] -> CypherMapping
 mappingPattern0 id nodetype keyprops =

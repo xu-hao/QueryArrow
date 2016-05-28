@@ -1,69 +1,60 @@
+import all from ICAT except META_ACCESS_OBJ
+import all from ES_META
+import all from NextID
+import all from EqDB
+export DATA_NAME_2 META_1 META_2
+export all from ICAT except DATA_NAME META_ATTR_NAME META_ATTR_VALUE META_ATTR_UNIT OBJT_METAMAP_OBJ META_ACCESS_OBJ
+export qualified all from ICAT except META_ACCESS_OBJ
+export META_ACCESS_OBJ eq lt le like like_regex from Neo4j
+export qualified META_ACCESS_OBJ eq lt le like like_regex from Neo4j
+export all from EqDB
+export qualified all from EqDB
+export all from ES_META
+export qualified all from ES_META
+
 // aux
 predicate CLIENT_ID         object(key cid)
 rewrite CLIENT_ID(u) ⟶      USER_NAME(u, client_user_name) ⊗ USER_ZONE_NAME(u, client_zone)
-rewrite classical CLIENT_ID(u) ⟶      USER_NAME(u, client_user_name) ∧ USER_ZONE_NAME(u, client_zone)
 
 predicate META              object(key oid, key mid, property a, property v, property u)
 rewrite META(x, m, a, v, u) ⟶ OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v)
-rewrite classical META(x, m, a, v, u) ⟶ OBJT_METAMAP_OBJ(x, m) ∧ META_ATTR_UNIT(m, u) ∧ META_ATTR_NAME(m, a) ∧ META_ATTR_VALUE(m, v)
 
 predicate META_ATTR_ACCESS_OBJ object(key a, key oid, key uid, key acc)
 rewrite META_ATTR_ACCESS_OBJ(oid, uid, acc) ⟶  OBJT_ACCESS_OBJ(oid, uid, acc)
-rewrite classical META_ATTR_ACCESS_OBJ(oid, uid, acc) ⟶  OBJT_ACCESS_OBJ(oid, uid, acc)
 
 // new predicates
 predicate DATA_NAME_2       object(key oid, property n)
 rewrite DATA_NAME_2(x, y) ⟶   DATA_NAME(x, y) ⊗ CLIENT_ID(u) ⊗ OBJT_ACCESS_OBJ(x, u, a) ⊗ eq(a, 1200)
-rewrite classical DATA_NAME_2(x, y) ⟶   DATA_NAME(x, y) ∧ CLIENT_ID(u) ∧ OBJT_ACCESS_OBJ(x, u, a) ∧ eq(a, 1200)
 rewrite insert DATA_NAME_2(x, y)  ⟶  insert DATA_NAME(x, y)
 rewrite delete DATA_NAME_2(x, y)  ⟶  delete DATA_NAME(x, y)
 
 predicate META_1            object(key oid, key a, key v, key u)
 rewrite META_1(x, a, v, u) ⟶  META(x, m, a, v, u)
-rewrite classical META_1(x, a, v, u) ⟶  META(x, m, a, v, u)
 rewrite insert META_1(x, a, v, u) ⟶  nextid(m) ⊗ insert
                             OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)
 rewrite delete META_1(x, a, v, u) ⟶  OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v) ⊗ delete
                             OBJT_METAMAP_OBJ(x, m)
 
-predicate META_3            object(key oid, key a, key v, key u)
-rewrite classical META_3(x, a, v, u) ⟶  META(x, m, a, v, u) ∧ CLIENT_ID(user) ∧ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ∧ eq(acc, 1200)
-rewrite META_3(x, a, v, u) ⟶  META(x, m, a, v, u) ⊗ CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
-rewrite insert META_3(x, a, v, u) ⟶  nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ eq(acc,1200) ⊗
-                            ([ ¬ CYPHER_USER_OBJ(user) ] ⊗ insert CYPHER_USER_OBJ(user) ⊗ 𝟎 ⊕
-                             [ ¬ CYPHER_DATA_OBJ(x) ] ⊗ insert CYPHER_DATA_OBJ(x) ⊗ 𝟎 ⊕
-                             insert OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v)
-                             CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, 1200))
-rewrite delete META_3(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200) ⊗
-                            OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v) ⊗
-                            delete OBJT_METAMAP_OBJ(x, m)
-                            CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, acc)
-
 predicate META_2            object(key oid, key a, key v, key u)
-rewrite classical META_2(x, a, v, u) ⟶
-                            (
-                                ES_META(x, m, a, v, u)  ∨
-                                META(x, m, a, v, u)
-                            ) ∧ CLIENT_ID(user) ∧ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ∧ eq(acc, 1200)
 rewrite META_2(x, a, v, u) ⟶
                             (
                                 ES_META(x, m, a, v, u)  ⊕
                                 META(x, m, a, v, u)
-                            ) ⊗ CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
+                            ) ⊗ CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
 rewrite insert META_2(x, a, v, u) ⟶
                             nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ eq(acc,1200) ⊗
-                            ([ ¬ CYPHER_USER_OBJ(user) ] ⊗ insert CYPHER_USER_OBJ(user) ⊗ 𝟎 ⊕ 𝟏) ⊗
-                            ([ ¬ CYPHER_DATA_OBJ(x) ] ⊗ insert CYPHER_DATA_OBJ(x) ⊗ 𝟎 ⊕ 𝟏) ⊗
-                            insert CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, 1200) ⊗
+                            ([ ¬ Neo4j.USER_OBJ(user) ] ⊗ insert Neo4j.USER_OBJ(user) ⊗ 𝟎 ⊕ 𝟏) ⊗
+                            ([ ¬ Neo4j.DATA_OBJ(x) ] ⊗ insert Neo4j.DATA_OBJ(x) ⊗ 𝟎 ⊕ 𝟏) ⊗
+                            insert Neo4j.META_OBJ(m) Neo4j.META_ACCESS_OBJ(m, x, user, 1200) ⊗
                             (
-                                [ ¬ eq(a, "searchable") ] ⊗ OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) ⊕
+                                [ ¬ eq(a, "searchable") ] ⊗ insert OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) ⊕
                                 eq(a, "searchable") ⊗ insert ES_META(x, m, a, v, u)
                             )
 
-rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200) ⊗
+rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200) ⊗
                             OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v) ⊗
-                            delete CYPHER_META_OBJ(m) CYPHER_META_ACCESS_OBJ(m, x, user, acc) ⊗
+                            delete Neo4j.META_OBJ(m) Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗
                             (
-                                [ ¬ eq(a, "searchable") ] ⊗ OBJT_METAMAP_OBJ(x, m) ⊕
+                                [ ¬ eq(a, "searchable") ] ⊗ delete OBJT_METAMAP_OBJ(x, m) ⊕
                                 eq(a, "searchable") ⊗ delete ES_META(x, m, a, v, u)
                             )

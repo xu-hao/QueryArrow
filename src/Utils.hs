@@ -16,12 +16,13 @@ intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
 intResultStream i = return (insert (Var "i") (IntValue i) empty)
 
 -- map from predicate name to database names
-type PredDBMap = Map String [String]
+type PredDBMap = Map Pred [String]
 
 constructDBPredMap :: [Database m row ] -> PredMap
 constructDBPredMap = foldr addPredFromDBToMap empty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
-        addPredToMap thepred = insert (predName thepred) thepred
+        addPredToMap thepred map1 =
+            insert (predName thepred) thepred map1
         preds = getPreds db
 
 -- construct map from predicates to db names
@@ -29,7 +30,7 @@ constructPredDBMap :: [Database m row ] -> PredDBMap
 constructPredDBMap = foldr addPredFromDBToMap empty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
         dbname = getName db
-        addPredToMap thepred = alter alterValue (predName thepred) where
+        addPredToMap thepred = alter alterValue  thepred where
             alterValue Nothing = Just [dbname]
             alterValue (Just dbnames) = Just (dbname : dbnames)
         preds = getPreds db

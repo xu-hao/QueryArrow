@@ -16,37 +16,42 @@ import Control.Applicative ((<$>),(<*>))
 import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)
 
 
-cypherBuiltIn :: CypherBuiltIn
-cypherBuiltIn = CypherBuiltIn ( fromList [
-        ("le", \thesign args ->
-            return (cwhere (CypherCompCond (case thesign of
-                Pos -> "<="
-                Neg -> ">") ( (head args)) ( (args !! 1)) Pos))),
-        ("lt", \thesign args ->
-            return (cwhere (CypherCompCond (case thesign of
-                Pos -> "<"
-                Neg -> ">=") ( (head args)) ( (args !! 1)) Pos))),
-        ("eq", \thesign args ->
-            return (cwhere (CypherCompCond (case thesign of
-                Pos -> "="
-                Neg -> "<>") ( (head args)) ( (args !! 1)) Pos))),
-        ("like", \thesign args ->
-            error "cypherBuiltIn: unsupported like operator, use like_regex"),
-        ("like_regex", \thesign args ->
-            return (cwhere (CypherCompCond "=~" ( (head args)) ( (args !! 1)) thesign)))
-    ])
+cypherBuiltIn :: String -> CypherBuiltIn
+cypherBuiltIn ns =
+    let cypherStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
+        lookupPred n = case lookup (QPredName ns n) cypherStandardBuiltInPredsMap of
+                Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ n)
+                Just pred1 -> pred1 in
+        CypherBuiltIn ( fromList [
+            (lookupPred "le", \thesign args ->
+                return (cwhere (CypherCompCond (case thesign of
+                    Pos -> "<="
+                    Neg -> ">") ( (head args)) ( (args !! 1)) Pos))),
+            (lookupPred "lt", \thesign args ->
+                return (cwhere (CypherCompCond (case thesign of
+                    Pos -> "<"
+                    Neg -> ">=") ( (head args)) ( (args !! 1)) Pos))),
+            (lookupPred "eq", \thesign args ->
+                return (cwhere (CypherCompCond (case thesign of
+                    Pos -> "="
+                    Neg -> "<>") ( (head args)) ( (args !! 1)) Pos))),
+            (lookupPred "like", \thesign args ->
+                error "cypherBuiltIn: unsupported like operator, use like_regex"),
+            (lookupPred "like_regex", \thesign args ->
+                return (cwhere (CypherCompCond "=~" ( (head args)) ( (args !! 1)) thesign)))
+        ])
 
-cypherMapping :: (PredMap, CypherPredTableMap)
-cypherMapping = (sqlToCypher (fromList [
+cypherMapping :: String -> CypherPredTableMap
+cypherMapping ns = (sqlToCypher (fromList [
     ("r_data_main", "DataObject"),
     ("r_coll_main", "Collection")
     ]) (fromList [
     ("data_id", "object_id"),
     ("coll_id", "object_id")
-    ]) sqlMapping)
+    ]) (sqlMapping ns))
 
-cypherTrans :: CypherTrans
-cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] (snd cypherMapping)
+cypherTrans :: String -> CypherTrans
+cypherTrans ns = CypherTrans (cypherBuiltIn ns)  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] ((cypherMapping ns))
 {- fromList [
         ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
         ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
@@ -69,5 +74,5 @@ cypherTrans = CypherTrans cypherBuiltIn  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "O
         ] -}
 
 
-makeICATCypherDBAdapter :: Neo4jConnection -> GenericDB   Neo4jConnection CypherTrans
-makeICATCypherDBAdapter conn = GenericDB conn "ICAT" (elems (fst cypherMapping) ++ standardBuiltInPreds) cypherTrans
+makeICATCypherDBAdapter :: String -> Neo4jConnection -> GenericDB   Neo4jConnection CypherTrans
+makeICATCypherDBAdapter ns conn = GenericDB conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns) (cypherTrans ns)

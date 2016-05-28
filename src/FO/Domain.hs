@@ -84,7 +84,6 @@ instance DeterminedVars Formula where
 instance DeterminedVars PureFormula where
     determinedVars dsp  (Atomic atom0) = determinedVars dsp  atom0
     determinedVars _  (Not _) = return empty
-    determinedVars _  (Forall _ _) = return empty
     determinedVars dsp  (Exists v form) = do
         dsp' <- determinedVars dsp  form
         return (delete v dsp')

@@ -24,9 +24,9 @@ instance HDBCConnection Connection where
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
-    conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_name ps++" user="++db_username ps++" password="++db_password ps)
-    let db = makeICATSQLDBAdapter conn
-    let db2 = SequenceDB conn "NextID" "nextid" NextidTrans
+    conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_path ps !! 0++" user="++db_username ps++" password="++db_password ps)
+    let db = makeICATSQLDBAdapter (db_name ps !! 0) conn
+    let db2 = SequenceDB conn (db_name ps !! 1) "nextid" NextidTrans
     return [Database db, Database db2]
 
 data NextidTrans = NextidTrans

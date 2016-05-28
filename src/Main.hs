@@ -143,26 +143,28 @@ run2 query ps = do
     pp <- run3 query tdb "rods" "tempZone"
     putStr (pprint pp)
 
-run3 :: String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
-run3 query tdb@(TransDB _ dbs  preds (qr, qr2, ir, dr) ) user zone = do
-    let predmap = foldMap (\p@(Pred n _) -> singleton n p) preds
-    let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
+printQuery (TransDB _ dbs  _ (qr, qr2, ir, dr) ) params qu = do
     let pqp qp = do
-        liftIO $ putStrLn ("query plan:")
-        liftIO $ putStrLn (drawTree (toTree  qp))
+            putStrLn ("query plan:")
+            putStrLn (drawTree (toTree  qp))
+    let qu'@(Query vars f') = rewriteQuery (keys params) qr qr2 ir dr qu
+    putStrLn ("original query: " ++ show qu)
+    putStrLn ("rewritten query: " ++ show qu')
+    pqp (queryPlan2 dbs (keys params) vars qu')
+
+run3 :: String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
+run3 query tdb user zone = do
+    let predmap = constructDBPredMap [Database tdb]
+    let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
+
 
     r <- runResourceT $ evalStateT (dbCatch $ do
                 case runParser progp predmap "" query of
                             Left err -> error (show err)
-                            Right (qu, _) ->
+                            Right (qu@(Query vars _), _) ->
                                 case runExcept (checkQuery qu) of
                                     Right _ -> do
-                                        liftIO $ putStrLn ("original query: " ++ show qu)
-                                        let qu'@(Query vars f') = rewriteQuery (keys params) qr qr2 ir dr qu
-                                        liftIO $ putStrLn ("rewritten query: " ++ show qu')
-                                        pqp  (queryPlan2 dbs (keys params) vars qu' )
-                                        -- liftIO $ print (printFunc qu)
-                                        -- liftIO $ print (keys params)
+                                        liftIO $ printQuery tdb params qu
                                         rows <- getAllResultsInStream ( doQuery tdb qu (keys params) (pure params))
                                         return (vars, rows)
                                     Left e -> error e) (DBAdapterState Nothing)

@@ -4,9 +4,7 @@ module Config where
 import Data.Aeson
 import GHC.Generics
 import FO.Data
-import ICAT
 
-import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as B
 
 -- config info
@@ -19,7 +17,8 @@ data DBTrans = DBTrans {
 data ICATDBConnInfo = ICATDBConnInfo {
     db_host :: String,
     db_password :: String,
-    db_name :: String,
+    db_name :: [String],
+    db_path :: [String],
     catalog_database_type :: String,
     db_port :: Int,
     db_username :: String
@@ -27,8 +26,6 @@ data ICATDBConnInfo = ICATDBConnInfo {
 
 data TranslationInfo = TranslationInfo {
     db_plugins :: [DBTrans],
-    hide_predicate :: [String],
-    add_predicate :: [String],
     rewriting_file_path :: String
 } deriving (Show, Generic)
 

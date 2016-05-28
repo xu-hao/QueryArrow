@@ -110,8 +110,6 @@ rewrite1' ext  qr form0 =
             (Exists v <$> rewrite1' ext  qr form)
         (Not form) ->
             (Not <$> rewrite1' ext  qr form)
-        (Forall v form) ->
-            (Forall v <$> rewrite1' ext  qr form)
 
 rewrites    :: Int -> [Var] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrites n ext  rules rules2 ir dr form | n < 0     = error "maximum number of rewrites reached"

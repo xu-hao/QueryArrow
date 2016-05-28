@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances,
-   RankNTypes, FlexibleContexts, GADTs #-}
+   RankNTypes, FlexibleContexts, GADTs, PatternSynonyms #-}
 
 module FO.Data where
 
@@ -27,7 +27,9 @@ data ParamType = Key Type
                | Property Type deriving (Eq, Ord, Show)
 
 -- predicate
-data Pred = Pred { predName :: String, predType :: PredType} deriving (Eq, Ord, Show)
+data PredName = PredName {namespace :: Maybe String, name :: String} deriving (Eq, Ord, Show)
+
+data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Ord, Show)
 
 -- variables
 newtype Var = Var {unVar :: String} deriving (Eq, Ord)
@@ -49,7 +51,6 @@ data PureFormula = Atomic Atom
              | Conjunction PureFormula PureFormula
              | Not PureFormula
              | Exists { boundvar :: Var, formula :: PureFormula }
-             | Forall { boundvar :: Var, formula :: PureFormula }
              | CTrue
              | CFalse deriving (Eq, Ord)
 data Formula = FTransaction Formula
@@ -67,9 +68,18 @@ instance Convertible PureFormula Formula where
     safeConvert (Conjunction a b) = Right (FSequencing (convert a)  (convert b))
     safeConvert f@(Not _) = Right (FClassical f)
     safeConvert f@(Exists _ _) = Right (FClassical f)
-    safeConvert f@(Forall _ _) = Right (FClassical f)
     safeConvert CTrue = Right FOne
     safeConvert CFalse = Right FZero
+
+instance Convertible Formula PureFormula where
+    safeConvert (FAtomic a) = Right (Atomic a)
+    safeConvert (FClassical a) = Right a
+    safeConvert (FChoice a b) = Disjunction <$> (safeConvert a) <*> (safeConvert b)
+    safeConvert (FSequencing a b) = Conjunction <$> (safeConvert a) <*> (safeConvert b)
+    safeConvert f@(FInsert _) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
+    safeConvert f@(FTransaction _) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
+    safeConvert FOne = Right CTrue
+    safeConvert FZero = Right CFalse
 
 intersects :: Eq a => [[a]] -> [a]
 intersects [] = error "can't intersect zero lists"
@@ -114,8 +124,6 @@ instance FreeVars PureFormula where
     freeVars (Not formula1) =
         freeVars formula1
     freeVars (Exists var formula1) =
-        freeVars formula1 \\ [var]
-    freeVars (Forall var formula1) =
         freeVars formula1 \\ [var]
     freeVars _ = []
 
@@ -174,7 +182,7 @@ pushNegations Neg (Exists var formula) = Forall var (pushNegations Neg formula)
 pushNegations Neg (Forall var formula) = Exists var (pushNegations Neg formula)
 pushNegations Neg (FClassical formula) = Not (FClassical (pushNegations Pos formula))
 pushNegations Neg a@(Atomic _) = Not a
--}
+
 convertForall' :: Sign -> PureFormula -> PureFormula
 convertForall' Pos (Conjunction form1 form2) = Conjunction (convertForall' Pos form1) (convertForall' Pos form2)
 convertForall' Pos (Disjunction form1 form2) = Disjunction (convertForall' Pos form1) (convertForall' Pos form2)
@@ -198,7 +206,7 @@ convertForall (FChoice form1 form2) = FChoice (convertForall form1) (convertFora
 convertForall form@(FInsert _) = form
 convertForall form@(FAtomic _) = form
 convertForall form = form
-
+-}
 splitPosNegLits :: [Lit] -> ([Atom], [Atom])
 splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     Pos -> (theatom : pos, neg)
@@ -237,12 +245,56 @@ isObjectPredAtom _ = False
 isObjectPredLit :: Lit -> Bool
 isObjectPredLit (Lit _ a) = isObjectPredAtom a
 
-sortAtomByPred :: [Atom] -> Map String [Atom]
+sortAtomByPred :: [Atom] -> Map Pred [Atom]
 sortAtomByPred = foldl insertAtomByPred empty where
-    insertAtomByPred map1 a@(Atom (Pred name _) _) =
+    insertAtomByPred map1 a@(Atom pred1 _) =
         alter (\asmaybe -> case asmaybe of
             Nothing -> Just [a]
-            Just as -> Just (as ++ [a])) name map1
+            Just as -> Just (as ++ [a])) pred1 map1
+
+pattern QPredName ns n = PredName (Just ns) n
+pattern UQPredName n = PredName Nothing n
+
+predNameToString :: PredName -> String
+predNameToString (PredName mns n)= case mns of
+                            Just ns -> ns ++ "." ++ n
+                            Nothing -> n
+
+predNameToString2 :: PredName -> String
+predNameToString2 (PredName _ n) = n
+
+predNameMatches :: PredName -> PredName -> Bool
+predNameMatches (PredName Nothing n1) (PredName Nothing n2) = n1 == n2
+predNameMatches (PredName (Just _) n1) (PredName Nothing n2) = n1 == n2
+predNameMatches (PredName (Just ns1) n1) (PredName (Just ns2) n2) = ns1 == ns2 && n1 == n2
+predNameMatches _ _ = False
+
+setNamespace :: String -> PredName -> PredName
+setNamespace ns (UQPredName n) = QPredName ns n
+setNamespace ns1 n@(QPredName ns2 _) | ns1 == ns2 = n
+                                     | otherwise = error ("cannot set namespace to a qualified predicate name" ++ ns1 ++ ns2)
+
+setPredNamespace :: String -> Pred -> Pred
+setPredNamespace ns (Pred name paramtypes) = Pred (setNamespace ns name) paramtypes
+
+setFormulaNamespace :: String -> Formula -> Formula
+setFormulaNamespace ns (FAtomic (Atom (Pred n pts) args)) = FAtomic (Atom (Pred (setNamespace ns n) pts) args)
+setFormulaNamespace ns (FInsert (Lit sign1 (Atom (Pred n pts) arg))) = (FInsert (Lit sign1 (Atom (Pred (setNamespace ns n) pts) arg)))
+setFormulaNamespace ns (FTransaction form) = FTransaction (setFormulaNamespace ns form)
+setFormulaNamespace ns (FClassical form) = FClassical (setPureFormulaNamespace ns form)
+setFormulaNamespace ns (FChoice form1 form2) = FChoice (setFormulaNamespace ns form1) (setFormulaNamespace ns form2)
+setFormulaNamespace ns (FSequencing form1 form2) = FSequencing (setFormulaNamespace ns form1) (setFormulaNamespace ns form2)
+setFormulaNamespace ns FOne = FOne
+setFormulaNamespace ns FZero = FZero
+
+setPureFormulaNamespace :: String -> PureFormula -> PureFormula
+setPureFormulaNamespace ns (Atomic (Atom (Pred n pts) args)) = Atomic (Atom (Pred (setNamespace ns n) pts) args)
+setPureFormulaNamespace ns (Conjunction form1 form2) = Conjunction (setPureFormulaNamespace ns form1) (setPureFormulaNamespace ns form2)
+setPureFormulaNamespace ns (Disjunction form1 form2) = Disjunction (setPureFormulaNamespace ns form1) (setPureFormulaNamespace ns form2)
+setPureFormulaNamespace ns (Not form) = Not (setPureFormulaNamespace ns form)
+setPureFormulaNamespace ns (Exists var form) = Exists var (setPureFormulaNamespace ns form)
+setPureFormulaNamespace ns CTrue = CTrue
+setPureFormulaNamespace ns CFalse = CFalse
 
 -- instance Show Pred where
 --     show (Pred name t) = name ++ show t
@@ -256,7 +308,7 @@ sortAtomByPred = foldl insertAtomByPred empty where
 --     show (Property type1) = "PROP " ++ type1
 
 instance Show Atom where
-    show (Atom (Pred name _) args) = name ++ "(" ++ intercalate "," (map show args) ++ ")"
+    show (Atom (Pred name _) args) = (predNameToString name) ++ "(" ++ intercalate "," (map show args) ++ ")"
 
 instance Show Expr where
     show (VarExpr var) = show var
@@ -277,7 +329,6 @@ instance Show PureFormula where
     show form@(Conjunction _ _) = "(" ++ intercalate " ∧ " (map show (getConjuncts' form)) ++ ")"
     show form@(Disjunction _ _) = "(" ++ intercalate " ∨ " (map show (getDisjuncts' form)) ++ ")"
     show (Exists var form) = "(∃ " ++ show var ++ "." ++ show form ++ ")"
-    show (Forall var form) = "(∀ " ++ show var ++ "." ++ show form ++ ")"
     show (Not form) = "¬" ++ show form
     show (CTrue) = "⊤"
     show (CFalse) = "⊥"
@@ -386,7 +437,6 @@ instance Subst PureFormula where
     subst s (Disjunction a b) = Disjunction (subst s a) (subst s b)
     subst s (Conjunction a b) = Conjunction (subst s a) (subst s b)
     subst s (Not a) = Not (subst s a)
-    subst s (Forall var a) = Forall var (subst (delete var s) a)
     subst s (Exists var a) = Exists var (subst (delete var s) a)
     subst _ form = form
 
@@ -468,7 +518,6 @@ infixr 1 -->
 infixl 2 |||
 infixl 3 &
 infixr 5 @@
-infixl 4 ===
 (-->) :: PureFormula -> PureFormula -> PureFormula
 rule --> goal = disj [Not rule, goal]
 
@@ -548,18 +597,6 @@ fchoice = foldl (.+.) FZero
 (@@) :: Pred -> [Expr] -> PureFormula
 pred' @@ args = Atomic (Atom pred' args)
 
-eqPred :: Pred
-eqPred = Pred "==" (PredType ObjectPred [Key "Any", Key "Any"])
-
-class Equate a where
-    (===) :: a -> a -> PureFormula
-
-instance Equate Expr where
-    a === b = eqPred @@ [a, b]
-
-instance Equate a => Equate [a] where
-    as === bs = conj (zipWith (===) as bs)
-
 class SubstPred a where
     substPred :: Map Pred Pred -> a -> a
 
@@ -569,7 +606,6 @@ instance SubstPred PureFormula where
     substPred pmap (Disjunction form1 form2) = Disjunction (substPred pmap form1) (substPred pmap form2)
     substPred pmap (Not a) = Not (substPred pmap a)
     substPred pmap (Exists v a) = Exists v (substPred pmap a)
-    substPred pmap (Forall v a) = Forall v (substPred pmap a)
     substPred _ form = form
 
 instance SubstPred Formula where
@@ -594,7 +630,7 @@ instance SubstPred a => SubstPred [a] where
 
 
 -- predicate map
-type PredMap = Map String Pred
+type PredMap = Map PredName Pred
 
 checkFormula' :: PureFormula -> Except String ()
 checkFormula' (Atomic a) = checkAtom a
@@ -606,7 +642,6 @@ checkFormula' (Conjunction form1 form2) = do
     checkFormula' form2
 checkFormula' (Not a) = checkFormula' a
 checkFormula' (Exists _ a) = checkFormula' a
-checkFormula' (Forall _ a) = checkFormula' a
 checkFormula' _ = return ()
 
 checkFormula :: Formula -> Except String ()

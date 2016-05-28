@@ -24,5 +24,5 @@ instance HDBCConnection Connection where
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
     conn <- connectSqlite3 (db_name ps)
-    let db = makeICATSQLDBAdapter conn
+    let db = makeICATSQLDBAdapter (db_name ps) conn
     return [Database db]

@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
-module Parser (progp, rulesp) where
+module Parser (progp, rulesp, Export(..)) where
 
 import FO.Data
 import QueryPlan
@@ -10,7 +10,7 @@ import Data.Map.Strict (Map, (!), member, insert, lookup, fromList, keys)
 import Text.ParserCombinators.Parsec hiding (State)
 import Data.Maybe
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
-import Data.List (union)
+import Data.List (union, (\\), intercalate)
 import qualified Text.Parsec.Token as T
 import qualified Data.Text as TE
 
@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "forall", "if", "then", "else", "classical", "linear", "true", "false", "one", "zero"],
+    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "true", "false", "one", "zero"],
     T.reservedOpNames = ["~", "|", "⊗", "⊕", "∧", "∨", "∀", "∃", "¬", "⟶","𝟏","𝟎", "⊤", "⊥"],
     T.caseSensitive = True
 }
@@ -50,7 +50,7 @@ whiteSpace = T.whiteSpace lexer
 dot = T.dot lexer
 
 -- parser
-type FOParser = GenParser Char (Map String Pred)
+type FOParser = GenParser Char PredMap
 
 argp :: FOParser Expr
 argp =
@@ -65,10 +65,10 @@ arglistp =
 
 atomp :: FOParser Atom
 atomp = do
-    predname <- identifier
+    predname <- prednamep
     arglist <- arglistp
     predmap <- getState
-    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ predname ++ ", available " ++ show (keys predmap))) (lookup predname predmap)
+    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ intercalate "\n" (map show (keys predmap)))) (lookup predname predmap)
     return (Atom thepred arglist)
 
 negp :: FOParser ()
@@ -85,9 +85,6 @@ truep = reserved "true" <|> reservedOp "⊤"
 
 falsep :: FOParser ()
 falsep = reserved "false" <|> reservedOp "⊥"
-
-forallp :: FOParser ()
-forallp = reserved "forall" <|> reservedOp "∀"
 
 existsp :: FOParser ()
 existsp = reserved "exists" <|> reservedOp "∃"
@@ -136,12 +133,6 @@ formula1p' = try (parens formulap')
           _ <- dot
           form <- formulap'
           return (foldr Exists form vars))
-      <|> (do
-          forallp
-          vars <- varsp
-          _ <- dot
-          form <- formulap'
-          return (foldr Forall form vars))
       <|> (Atomic <$> try atomp)
       <|> truep *> pure CTrue
       <|> falsep *> pure CFalse
@@ -174,10 +165,19 @@ predtypep :: FOParser PredType
 predtypep = PredType <$> (reserved "object" *> return ObjectPred <|> reserved "property" *> return PropertyPred) <*>
     parens (sepBy paramtypep comma)
 
+prednamep :: FOParser PredName
+prednamep = do
+    name <- identifier
+    (do
+        dot
+        name2 <- identifier
+        return (PredName (Just name) name2))
+        <|> return (PredName Nothing name)
+
 predp :: FOParser ()
 predp = do
     reserved "predicate"
-    name <- identifier
+    name <- prednamep
     t <- predtypep
     let thepred = Pred name t
     updateState (insert name thepred)
@@ -188,7 +188,7 @@ varp = Var <$> identifier
 varsp :: FOParser [Var]
 varsp = many1 varp
 
-progp :: FOParser (Query, Map String Pred)
+progp :: FOParser (Query, PredMap)
 progp = do
     whiteSpace
     q <- formulap
@@ -199,34 +199,119 @@ progp = do
     return (qv, predmap)
 
 
-rulep :: FOParser ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+rulep :: FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
 rulep = (do
     whiteSpace
     _ <- many predp
     reserved "rewrite"
     reserved "insert" *> irulep
       <|> reserved "delete" *> drulep
-      <|> reserved "classical" *> qrulep
       <|> qrule2p) where
-          qrulep = do
-              r <- QueryRewritingRule <$> atomp <* rarrowp <*> formulap'
-              return ([r], [], [], [])
           qrule2p = do
               r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
-              return ([], [r], [], [])
+              return ([r], [], [])
           irulep = do
               r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
-              return ([], [], [r], [])
+              return ([], [r], [])
           drulep = do
               r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
-              return ([], [], [], [r])
+              return ([], [], [r])
 
-rulesp :: FOParser (([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), Map String Pred)
+importp :: FOParser ()
+importp = do
+    predmap <- getState
+    reserved "import"
+    (ns, prednames) <-
+        (do
+            reserved "all"
+            reserved "from"
+            ns <- identifier
+            (do
+                reserved "except"
+                preds <- many1 prednamep
+                return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)) \\ preds)
+                ) <|> (do
+                predmap <- getState
+                return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)))
+                )
+        ) <|> (do
+            prednames <- many1 prednamep
+            reserved "from"
+            ns <- identifier
+            return (ns, prednames)
+        )
+    let predmap' = foldr (\x predmap' ->
+                        let
+                            predname = setNamespace ns x
+                        in case lookup predname predmap of
+                            Nothing -> error ("cannot import " ++ show x ++ " from " ++ ns)
+                            Just pred1 -> insert x pred1 predmap') predmap prednames
+    setState predmap'
+
+
+importsp :: FOParser ()
+importsp = do
+    many importp
+    return ()
+
+data Export = ExportQualified PredName | ExportUnqualified PredName | ExportAdd PredName deriving Show
+exportp :: FOParser [Export]
+exportp = do
+    predmap <- getState
+    reserved "export"
+    (do
+        reserved "qualified"
+        (do
+            reserved "all"
+            reserved "from"
+            ns <- identifier
+            (do
+                reserved "except"
+                preds <- many1 prednamep
+                return (map ExportQualified (filter (\x -> namespace x == Just ns) (keys predmap) \\ (map (setNamespace ns) preds)))
+                ) <|> (do
+                predmap <- getState
+                return (map ExportQualified (filter (\x -> namespace x == Just ns) (keys predmap)))
+                )
+            ) <|> (do
+            prednames <- many1 prednamep
+            reserved "from"
+            ns <- identifier
+            return (map ExportQualified (map (setNamespace ns) prednames))
+            )
+        ) <|> (do
+        reserved "all"
+        reserved "from"
+        ns <- identifier
+        (do
+            reserved "except"
+            preds <- many1 prednamep
+            return (map ExportUnqualified (filter (\x -> namespace x == Just ns) (keys predmap) \\ (map (setNamespace ns) preds)))
+            ) <|> (do
+            predmap <- getState
+            return (map ExportUnqualified (filter (\x -> namespace x == Just ns) (keys predmap)))
+            )
+        ) <|> (do
+        prednames <- many1 prednamep
+        (do
+            reserved "from"
+            ns <- identifier
+            return (map ExportUnqualified (map (setNamespace ns) prednames))
+            ) <|> (return (map ExportAdd prednames))
+        )
+
+
+exportsp :: FOParser [Export]
+exportsp = concat <$> many exportp
+
+rulesp :: FOParser (([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), PredMap, [Export])
 rulesp = do
+    importsp
+    exports <- exportsp
     rules <- many rulep
     eof
     st <- getState
-    return (mconcat rules, st)
+    return (mconcat rules, st, exports)
 
 samePredAndKey :: Atom -> Atom -> Bool
 samePredAndKey (Atom p1 args1) (Atom p2 args2) | p1 == p2 =

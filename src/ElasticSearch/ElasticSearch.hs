@@ -245,11 +245,11 @@ instance Translate ESTrans MapResultRow ElasticSearchQuery where
     translateable' _ (Atomic _) _ = True
     translateable' _ _ _ = False
 
-makeElasticSearchDBAdapter :: ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
-makeElasticSearchDBAdapter conn = GenericDB conn "ElasticSearch" [Pred "ES_META" (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])] ESTrans
+makeElasticSearchDBAdapter :: String -> ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
+makeElasticSearchDBAdapter ns conn = GenericDB conn "ElasticSearch" [Pred (QPredName ns "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])] ESTrans
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
-    let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_name ps)) (db_name ps)
-    let db = makeElasticSearchDBAdapter conn
+    let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_path ps !! 0)) (db_path ps !! 1)
+    let db = makeElasticSearchDBAdapter (db_name ps !! 0) conn
     return [Database db]

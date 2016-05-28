@@ -7,7 +7,7 @@ import FO.Domain
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete)
-import Data.List ((\\), intercalate, union, intersect)
+import Data.List ((\\), intercalate, union, intersect, find, elem)
 import Control.Monad.Except
 import Control.Applicative ((<|>))
 import Data.Convertible.Base
@@ -46,6 +46,7 @@ instance SubstituteResultValue Expr where
     substResultValue varmap expr@(VarExpr var) = case lookup var varmap of
         Nothing -> expr
         Just res -> convert res
+    substResultValue _ expr = expr
 
 instance SubstituteResultValue Atom where
     substResultValue varmap (Atom thesign theargs) = Atom thesign newargs where
@@ -170,10 +171,12 @@ instance ToTree (PureQueryPlan2 m row ) where
     toTree (qpd, QPTrue2) = Node ("(generate [[]])" ++ show qpd) []
     toTree (qpd, QPFalse2) = Node ("(generate [])" ++ show qpd) []
 
+findDB pred0 dbs = filter (\x -> case dbs !! x of
+                            Database db -> pred0 `elem` getPreds db) [0..(length dbs-1)]
+
 formulaToQueryPlan :: (Monad m)=> [Database m row] -> Formula -> QueryPlan
 formulaToQueryPlan dbs  form@(FAtomic (Atom pred0  _)) =
-    Exec form  (filter (\x -> case dbs !! x of
-                                Database db -> pred0 `elem` getPreds db) [0..(length dbs-1)])
+    Exec form  (findDB pred0 dbs)
 formulaToQueryPlan _ FOne = QPOne
 formulaToQueryPlan _ FZero = QPZero
 formulaToQueryPlan dbs  (FClassical form) = QPClassical (formulaToQueryPlan' dbs  form)
@@ -181,26 +184,22 @@ formulaToQueryPlan dbs  (FTransaction form) = QPTransaction (formulaToQueryPlan 
 formulaToQueryPlan dbs  (FChoice form1 form2) = QPChoice (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (FSequencing form1 form2) = QPSequencing (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  ins@(FInsert (Lit _ (Atom pred1 _))) =
-    let p pred0 x = case dbs !! x of Database db -> pred0 `elem` getPreds db
-        xs = [0..length dbs - 1]
-        findPredicateDB pred0 = filter (p pred0) xs
-        xs2 = findPredicateDB pred1 in
-        Exec ins (filter (\x ->
+    let xs2 = findDB pred1 dbs
+        xs3 = (filter (\x ->
             case dbs !! x of
                  Database db ->
-                    supported db ins []) xs2)
+                    supported db ins []) xs2) in
+        Exec ins xs3
 
 
 formulaToQueryPlan' :: (Monad m)=> [Database m row] -> PureFormula -> PureQueryPlan
-formulaToQueryPlan' dbs  form@(Atomic (Atom pred0 _)) = If form (filter (\x -> case dbs !! x of
-                            Database db -> pred0 `elem` getPreds db) [0..(length dbs-1)])
+formulaToQueryPlan' dbs  form@(Atomic (Atom pred0 _)) = If form (findDB pred0 dbs)
 formulaToQueryPlan' dbs  (Not form) = QPNot (formulaToQueryPlan' dbs  form)
 formulaToQueryPlan' dbs  (Disjunction form1 form2) = QPOr  (formulaToQueryPlan' dbs form1) (formulaToQueryPlan' dbs form2)
 formulaToQueryPlan' dbs  (Conjunction form1 form2) = QPAnd  (formulaToQueryPlan' dbs form1) (formulaToQueryPlan' dbs form2)
 formulaToQueryPlan' dbs  (Exists v form) = QPExists v (formulaToQueryPlan' dbs  form)
 formulaToQueryPlan' _ CFalse = QPFalse
 formulaToQueryPlan' _ CTrue = QPTrue
-formulaToQueryPlan' _  (Forall _ _) = error "formulaToQueryPlan': Forall is not supported"
 
 
 {- near semi-ring -}
@@ -299,11 +298,11 @@ optimizeQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
             ((_, Exec2 form1 dbs1), (_, Exec2 form2 dbs2)) ->
                 let dbs = dbs1 `intersect` dbs2
                     fse = fsequencing [form1, form2]
-                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported db fse (returnvs qpd)) dbs in
-                    trace ("optimizeQueryPlan: test merge " ++ show form1 ++ " at " ++ show dbs1 ++ ", " ++ show form2 ++ " at " ++ show dbs2) $ if null dbs' then
-                        (qpd, QPSequencing2 qp1' qp2')
-                    else
-                        (qpd, Exec2 fse dbs')
+                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported db (fse) (returnvs qpd)) dbs in
+                    trace ("optimizeQueryPlan: test merge " ++ show form1 ++ " at " ++ show dbs1 ++ ", " ++ show form2 ++ " at " ++ show dbs2) $
+                        if null dbs'
+                            then (qpd, QPSequencing2 qp1' qp2')
+                            else (qpd, Exec2 fse dbs')
             ((qpd1, Exec2  _ _), (_, QPSequencing2 qp21@(qpd3, _) qp22)) ->
                 (qpd ,QPSequencing2 (optimizeQueryPlan dbsx (combineQPSequencingData qpd1 qpd3, QPSequencing2 qp1' qp21)) qp22)
             ((_, QPSequencing2 qp11 qp12@(qpd3, _)), (qpd2, Exec2  _ _)) ->
@@ -318,7 +317,7 @@ optimizeQueryPlan dbsx (qpd, QPChoice2 qp1 qp2) =
             ((_, Exec2 formula1 dbs1), (_, Exec2 formula2 dbs2)) ->
                 let dbs = dbs1 `intersect` dbs2
                     fch = fchoice [formula1, formula2]
-                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported db fch (returnvs qpd)) dbs in
+                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported db (fch) (returnvs qpd)) dbs in
                     if null dbs' then
                         (qpd, QPChoice2 qp1' qp2')
                     else
@@ -334,10 +333,12 @@ optimizeQueryPlan dbsx (qpd, QPClassical2 qp) =
     (qpd, QPClassical2 (optimizePureQueryPlan dbsx qp))
 optimizeQueryPlan dbsx (qpd, QPTransaction2 qp) =
     (qpd, QPTransaction2 (optimizeQueryPlan dbsx qp))
-optimizeQueryPlan _ qp = qp
+optimizeQueryPlan _ qp@(_, QPOne2) = qp
+optimizeQueryPlan _ qp@(_, QPZero2) = qp
 
 optimizePureQueryPlan :: (Monad m ) => [Database m row] -> PureQueryPlan2 m row -> PureQueryPlan2 m row
 
+optimizePureQueryPlan _ qp@(_, If2 _ _) = qp
 optimizePureQueryPlan dbsx (qpd, QPOr2 qp1 qp2) =
     let qp1' = optimizePureQueryPlan dbsx qp1
         qp2' = optimizePureQueryPlan dbsx qp2 in
@@ -345,7 +346,7 @@ optimizePureQueryPlan dbsx (qpd, QPOr2 qp1 qp2) =
             ((_, If2 formula1 dbs1), (_, If2 formula2 dbs2)) ->
                 let dbs = dbs1 `intersect` dbs2
                     disjs = disj [formula1, formula2]
-                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db disjs (returnvs qpd)) dbs in
+                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db (disjs) (returnvs qpd)) dbs in
                     if null dbs' then
                         (qpd, QPOr2 qp1' qp2')
                     else
@@ -364,7 +365,7 @@ optimizePureQueryPlan dbsx (qpd, QPAnd2 qp1 qp2) =
             ((_, If2 formula1 dbs1), (_, If2 formula2 dbs2)) ->
                 let dbs = dbs1 `intersect` dbs2
                     conjs = Conjunction formula1 formula2
-                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db conjs (returnvs qpd)) dbs in
+                    dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db (conjs) (returnvs qpd)) dbs in
                     if null dbs' then
                         (qpd, QPAnd2 qp1' qp2')
                     else
@@ -381,7 +382,7 @@ optimizePureQueryPlan dbsx (qpd, QPExists2 v qp1) =
         case qp1' of
             (_, If2 formula1 dbs) ->
                         let exi = (Exists v formula1)
-                            dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db exi (returnvs qpd)) dbs  in
+                            dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db (exi) (returnvs qpd)) dbs  in
                             if null dbs' then
                                 (qpd, QPExists2 v qp1')
                             else
@@ -392,118 +393,106 @@ optimizePureQueryPlan dbsx (qpd, QPNot2 qp1) =
         case qp1' of
             (_, If2 formula1 dbs) ->
                         let notform = Not formula1
-                            dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db notform (returnvs qpd)) dbs  in
+                            dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported' db (notform) (returnvs qpd)) dbs  in
                             if null dbs' then
                                 (qpd, QPNot2 qp1')
                             else
                                 (qpd, If2 notform  dbs')
             _ -> (qpd, QPNot2 qp1')
-optimizePureQueryPlan _ qp = qp
+optimizePureQueryPlan _ qp@(_, QPTrue2) = qp
+optimizePureQueryPlan _ qp@(_, QPFalse2) = qp
+
 
 domainSizeFormula :: (Monad m) => DomainSizeMap -> Database m row -> Formula -> m DomainSizeMap
 domainSizeFormula map1 (Database db_) form = do
-        map1' <- determinedVars (domainSize db_ map1)  form
+        map1' <- determinedVars (domainSize db_ map1)  (form)
         return (mmin map1 map1')
 
-domainSizeFormula' :: (Monad m) => DomainSizeMap -> Database m row -> PureFormula -> m DomainSizeMap
-domainSizeFormula' map1 (Database db_) form = do
-        map1' <- determinedVars (domainSize db_ map1)  form
-        return (mmin map1 map1')
-
-checkQueryPlan2 :: (Monad m ) => [Database m row] -> QueryPlan -> ExceptT (String, Formula, DomainSizeMap) m DomainSizeMap
-checkQueryPlan2 dbs qp = do
-    checkQueryPlan dbs empty qp
-
-checkQueryPlan :: (Monad m) => [Database m row] -> DomainSizeMap -> QueryPlan -> ExceptT (String, Formula, DomainSizeMap) m DomainSizeMap
-checkQueryPlan _ map1 (Exec form []) = throwError ("no database", form, map1)
-checkQueryPlan dbs map1 (Exec form (x : _)) = do
-    let fvs0 = freeVars form
+checkQueryPlan :: (Monad m ) => [Database m row] -> QueryPlan2 m row -> ExceptT (String, Formula) m ()
+checkQueryPlan _ (_, Exec2 form []) = throwError ("no database", form)
+checkQueryPlan dbs (qpd, Exec2 form (x : _)) = do
+    let par0 = paramvs qpd
+    let det0 = determinevs qpd
+    let map1 = foldr (\v map1' -> insert v (Bounded 1) map1') empty par0
     map2 <- lift (domainSizeFormula map1 (dbs !! x) form)
     let vec = map (\v ->
             case lookupDomainSize v map2 of
                 Bounded _ -> True
-                Unbounded -> False) fvs0
+                Unbounded -> False) det0
     if and vec
-        then return (  map2)
-        else throwError ("checkQueryPlan: unbounded vars: " ++ show fvs0 ++ " " ++ show vec ++ ", the formula is " ++ show form ++ " " ++ show map1 ++ " " ++ show map2, form, map2)
+        then return ()
+        else throwError ("checkQueryPlan: unbounded vars: " ++ show det0 ++ " " ++ show vec ++ ", the formula is " ++ show form ++ " " ++ show map1 ++ " " ++ show map2, form)
 
-checkQueryPlan dbs map1 (QPChoice qp1 qp2) = do
-    map2 <- checkQueryPlan dbs map1 qp1
-    map3 <- checkQueryPlan dbs map1 qp2
-    return (intersectionWith (+) map2 map3)
+checkQueryPlan dbs (_, QPChoice2 qp1 qp2) = do
+    checkQueryPlan dbs qp1
+    checkQueryPlan dbs qp2
 
-checkQueryPlan dbs map1 (QPSequencing qp1 qp2) = do
-    map2 <- checkQueryPlan dbs map1 qp1
-    trace ("checkQueryPlan: " ++ show map1 ++ " " ++ show map2) $ checkQueryPlan dbs map2 qp2
+checkQueryPlan dbs (_, QPSequencing2 qp1 qp2) = do
+    checkQueryPlan dbs qp1
+    checkQueryPlan dbs qp2
 
-checkQueryPlan _ map1 (QPOne) = do
-    return map1
+checkQueryPlan _ (_, QPOne2) = do
+    return ()
 
-checkQueryPlan _ map1 (QPZero) = do
-    return map1
+checkQueryPlan _ (_, QPZero2) = do
+    return ()
 
-checkQueryPlan dbs map1 (QPClassical qp) = do
-    _ <- checkQueryPlan' dbs Pos map1 qp
-    return map1
+checkQueryPlan dbs (_, QPClassical2 qp) = do
+    checkQueryPlan' dbs Pos qp
 
-checkQueryPlan dbs map1 (QPTransaction qp) = do
-    checkQueryPlan dbs map1 qp
+checkQueryPlan dbs (_, QPTransaction2 qp) = do
+    checkQueryPlan dbs qp
 
 
-checkQueryPlan' :: (Monad m) => [Database m row] -> Sign -> DomainSizeMap -> PureQueryPlan -> ExceptT (String, Formula, DomainSizeMap) m DomainSizeMap
-checkQueryPlan' _ Pos map1 (If form []) =
-    throwError ("checkQueryPlan': no database", FClassical form, map1)
-checkQueryPlan' dbs Pos map1 (If form (x : _)) = do
-    let fvs0 = freeVars form
-    map2 <- lift (domainSizeFormula' map1 (dbs !! x) form)
+checkQueryPlan' :: (Monad m) => [Database m row] -> Sign -> PureQueryPlan2 m row -> ExceptT (String, Formula) m ()
+checkQueryPlan' _ Pos (_, If2 form []) =
+    throwError ("checkQueryPlan': no database", FClassical form)
+checkQueryPlan' dbs Pos (qpd, If2 form (x : _)) = do
+    let det0 = determinevs qpd
+    let par0 = paramvs qpd
+    let map1 = foldr (\v map1' -> insert v (Bounded 1) map1') empty par0
+    map2 <- lift (domainSizeFormula map1 (dbs !! x) (FClassical form))
     if all (\v ->
         case lookupDomainSize v map2 of
             Bounded _ -> True
-            Unbounded -> False) fvs0
-        then return map2
-        else throwError ("checkQueryPlan': unbounded vars: " ++ show fvs0 ++ " " ++ show map2, FClassical form, map2)
+            Unbounded -> False) det0
+        then return ()
+        else throwError ("checkQueryPlan': unbounded vars: " ++ show det0, FClassical form)
 
-checkQueryPlan' _ Neg map1 (If form _) = do
-    let fvs0 = freeVars form
-    if all (\v ->
-        case lookupDomainSize v map1 of
-            Bounded _ -> True
-            Unbounded -> False) fvs0
-        then return map1
-        else throwError ("checkQueryPlan': unbounded vars: " ++ show fvs0, FClassical form, map1)
+checkQueryPlan' _ Neg (qpd, If2 form _) = do
+    let fvs0 = freevs qpd
+    let par0 = paramvs qpd
+    if null (fvs0 \\ par0)
+        then return ()
+        else throwError ("checkQueryPlan': unbounded vars: " ++ show (fvs0 \\ par0), FClassical form)
 
-checkQueryPlan' dbs Pos map1 (QPOr qp1 qp2) = do
-    map2 <- checkQueryPlan' dbs Pos map1 qp1
-    map3 <- checkQueryPlan' dbs Pos map1 qp2
-    return (intersectionWith (+) map2 map3)
+checkQueryPlan' dbs Pos  (_, QPOr2 qp1 qp2) = do
+    checkQueryPlan' dbs Pos qp1
+    checkQueryPlan' dbs Pos qp2
 
-checkQueryPlan' dbs Neg map1 (QPOr qp1 qp2) = do
-    _ <- checkQueryPlan' dbs Neg map1 qp1
-    _ <- checkQueryPlan' dbs Neg map1 qp2
-    return map1
+checkQueryPlan' dbs Neg (_, QPOr2 qp1 qp2) = do
+    checkQueryPlan' dbs Neg qp1
+    checkQueryPlan' dbs Neg qp2
 
-checkQueryPlan' dbs Pos map1 (QPAnd qp1 qp2) = do
-    map2 <- checkQueryPlan' dbs Pos map1 qp1
-    checkQueryPlan' dbs Pos map2 qp2
+checkQueryPlan' dbs Pos  (_, QPAnd2 qp1 qp2) = do
+    checkQueryPlan' dbs Pos  qp1
+    checkQueryPlan' dbs Pos  qp2
 
-checkQueryPlan' dbs Neg map1 (QPAnd qp1 qp2) = do
-    _ <- checkQueryPlan' dbs Neg map1 qp1
-    _ <- checkQueryPlan' dbs Neg map1 qp2
-    return map1
+checkQueryPlan' dbs Neg  (_, QPAnd2 qp1 qp2) = do
+    checkQueryPlan' dbs Neg  qp1
+    checkQueryPlan' dbs Neg  qp2
 
-checkQueryPlan' _ _ map1 (QPTrue) = do
-    return map1
+checkQueryPlan' _ _  (_, QPTrue2) = do
+    return ()
 
-checkQueryPlan' _ _ map1 (QPFalse) = do
-    return map1
+checkQueryPlan' _ _  (_, QPFalse2) = do
+    return ()
 
-checkQueryPlan' dbs _ map1 (QPNot qp) = do
-    _ <- checkQueryPlan' dbs Neg map1 qp
-    return map1
+checkQueryPlan' dbs _  (_, QPNot2 qp) = do
+    checkQueryPlan' dbs Neg  qp
 
-checkQueryPlan' dbs _ map1 (QPExists v qp) = do
-    map2 <- checkQueryPlan' dbs Pos map1 qp
-    return (delete v map2)
+checkQueryPlan' dbs _ (_, QPExists2 _ qp) = do
+    checkQueryPlan' dbs Pos qp
 
 calculateVars :: [Var] -> [Var] -> QueryPlan -> QueryPlan2 m row
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
@@ -617,8 +606,9 @@ prepareQueryPlan dbs (qpd, e@(Exec2  form (x : _))) =
         Database db -> do
             let vars = paramvs qpd
                 vars2 = returnvs qpd
-                qu = (Query vars2 form)
-                stmtshow = "at " ++ show x ++ " " ++ show (translateQuery db qu vars ) ++ " returnvs " ++ show vars2
+                qu = Query vars2 form
+                (stmtshow0, paramvars) = translateQuery db qu vars
+                stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
             trace ("prepare " ++ stmtshow) $ return ()
             stmt <- prepareQuery db qu vars
             return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
@@ -651,7 +641,8 @@ prepareQueryPlan' dbs  (qpd, e@(If2 form (x:_))) =
             let vars = paramvs qpd
                 vars2 = returnvs qpd
                 qu = Query vars2 (convert form)
-                stmtshow = "at " ++ show x ++ " " ++ show (translateQuery db qu vars) ++ " returnvs " ++ show vars2
+                (stmtshow0, paramvars) = translateQuery db qu vars
+                stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
             trace ("prepare " ++ stmtshow) $ return ()
             stmt <- prepareQuery db qu vars
             return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)

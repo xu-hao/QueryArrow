@@ -638,9 +638,9 @@ type Dependencies = [(CypherVar, [CypherVar])]
 type CypherVarMap = Map Var CypherExpr
 
 -- predicate -> pattern (query, insert, update, delete)
-type CypherPredTableMap = Map String CypherMapping
+type CypherPredTableMap = Map Pred CypherMapping
 -- builtin predicate -> op, neg op
-newtype CypherBuiltIn = CypherBuiltIn (Map String (Sign -> [CypherExpr] -> TransMonad Cypher))
+newtype CypherBuiltIn = CypherBuiltIn (Map Pred (Sign -> [CypherExpr] -> TransMonad Cypher))
 type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap, DependencyGraph, CypherVarMap) NewEnv a
 
 addDependencies :: DependencyGraph -> TransMonad ()
@@ -1073,25 +1073,25 @@ simplifyDependencies' cypher = do
 translateQueryAtomToCypher :: Sign -> Atom -> TransMonad Cypher
 translateQueryAtomToCypher thesign atom = do
     (CypherBuiltIn builtin, predtablemap, _, params) <- get
-    let (Atom (Pred name _) args) = atom
+    let (Atom pred1 args) = atom
     --try builtin first
-    trace (show atom) $ case lookup name builtin of
+    trace (show atom) $ case lookup pred1 builtin of
         Just builtinpred -> do
             exprs <- instantiateArgs args
             builtinpred thesign exprs
-        Nothing -> case lookup name predtablemap of
+        Nothing -> case lookup pred1 predtablemap of
             Just (vars, matchpattern, pattern, dependencies) -> do
                 (matchpattern, pattern) <- instantiate vars matchpattern pattern dependencies args
                 trace (show matchpattern ++ " <-> " ++ show pattern)$ case thesign of
                     Pos -> return (cwhere (UnmergableCypherPatternCond matchpattern .&&. CypherPatternCond pattern))
                     Neg -> error "translateQueryAtomToCypher: unsupported negative literal"
-            Nothing -> error (name ++ " is not defined")
+            Nothing -> error (show pred1 ++ " is not defined")
 
 translateDeleteAtomToCypher :: Atom -> TransMonad Cypher
 translateDeleteAtomToCypher atom = do
     (CypherBuiltIn builtin, predtablemap, _, params) <- get
-    let (Atom (Pred pred predtype) args) = atom
-    case lookup pred predtablemap of
+    let (Atom pred1 args) = atom
+    case lookup pred1 predtablemap of
         Just (vars, matchpattern, pattern, dependencies) -> do
             (matchpattern, pattern) <- instantiate vars matchpattern pattern dependencies args
             -- generate a list of vars of match pattern and pattern, the vars that are in pattern but not match pattern needs to be deleted
@@ -1102,12 +1102,12 @@ translateDeleteAtomToCypher atom = do
             let (del, setnull) = trace ("translateDeleteAtomToCypher" ++ show fvt ++ show mfvt) $ partition (\(v, c, p, t) -> t == CypherNodeVar) (filter (\(x,_,_,_) -> not (elem x mfvt1)) fvt)
             return (cwhere (UnmergableCypherPatternCond matchpattern .&&. CypherPatternCond pattern) <> delete (map (\(a,_,_,_)->a) del)
                  <> set (map (\(_, Dot v prop, _, var) -> (CypherDotExpr (CypherVarExpr v) prop, CypherNullExpr)) setnull))
-        Nothing -> error (pred ++ " is not defined")
+        Nothing -> error (show pred1 ++ " is not defined")
 
 translateInsertAtomToCypher :: Atom -> TransMonad Cypher
-translateInsertAtomToCypher x@(Atom (Pred pred predtype) args) = do
+translateInsertAtomToCypher x@(Atom pred1 args) = do
     (CypherBuiltIn builtin, predtablemap, _, _) <- get
-    case lookup pred predtablemap of
+    case lookup pred1 predtablemap of
         Just (vars, matchpattern, pattern, dependencies) -> do
             (matchpattern, pattern) <- instantiate vars matchpattern pattern dependencies args
             -- generate a list of vars of match pattern and pattern, the vars that are in pattern but not match pattern needs to be inserted
@@ -1120,7 +1120,7 @@ translateInsertAtomToCypher x@(Atom (Pred pred predtype) args) = do
                       Node l -> nodevlp' var l nonvarprops
                       ) cre)
                  <> set (map (\(var, Dot v prop, _, _) -> (CypherDotExpr (CypherVarExpr v) prop, CypherVarExpr var)) setexpr))
-        Nothing -> error (pred ++ " is not defined")
+        Nothing -> error (show pred1 ++ " is not defined")
 
 postprocess =
   normalizeCond
@@ -1210,7 +1210,6 @@ translateableCypher' (CypherTrans builtin positiverequired predtablemap) (Not fo
                 lookForPositiveRequiredSubformula pr p@(Not _) = True
                 lookForPositiveRequiredSubformula pr p@(Exists _ _) = True -}
 translateableCypher' _ (Exists _ _)  = lift $ Nothing
-translateableCypher' _ (Forall _ _)  = lift $ Nothing
 translateableCypher' trans (Conjunction form1 form2)  = do
     translateableCypher' trans form1
     translateableCypher' trans form2
@@ -1218,7 +1217,7 @@ translateableCypher' trans (Disjunction form1 form2)  = lift $ Nothing
 translateableCypher' _ (Atomic _)  = return ()
 
 instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
-    extractDomainSize conn trans varDomainSize (Atom (Pred name _) args) =
+    extractDomainSize conn trans varDomainSize (Atom name args) =
         return (if isBuiltIn
             then maxArgDomainSize
             else if name `member` predtablemap then fromList [(fv, Bounded 1) | fv <- freeVars args] else empty) where

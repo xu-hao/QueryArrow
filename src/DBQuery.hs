@@ -127,13 +127,14 @@ instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (Prepared
         dbCommit (SequenceDB _ _ _ _) = return True
         dbRollback (SequenceDB _ _ _ _) = return ()
         getName (SequenceDB _ name _ _)= name
-        getPreds (SequenceDB _ _ predname _)= [Pred predname (PredType ObjectPred [Key "Any"])]
+        getPreds (SequenceDB _ name predname _)= [Pred (PredName (Just name) predname) (PredType ObjectPred [Key "Any"])]
         domainSize (SequenceDB _ _ _ _)= \ _ (Atom _ [VarExpr v]) -> return (singleton v (Bounded 1))
         prepareQuery (SequenceDB conn _ _ trans) (Query vars (FAtomic (Atom _ [VarExpr v]))) _ =
             return (PreparedSequenceStatement conn trans vars v)
         prepareQuery _ _ _ = error "not supported"
 
-        supported (SequenceDB _ predname _ _) (FAtomic (Atom (Pred predname2 _) [VarExpr _])) [_] = predname == predname2
+        supported (SequenceDB _ name predname _) (FAtomic (Atom (Pred predname2 _) [VarExpr _])) [_] =
+            predNameMatches (PredName (Just name) predname) predname2
         supported _ _ _ = False
         supported' _ _ _ = False
         translateQuery (SequenceDB _ _ _ trans) _ _ = ( show (fst (translateSequenceQuery trans )), [])

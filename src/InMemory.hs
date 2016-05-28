@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
-   RankNTypes, FlexibleContexts, GADTs, DeriveGeneric #-}
+   RankNTypes, FlexibleContexts, GADTs, DeriveGeneric, PatternSynonyms #-}
 module InMemory where
 
 import ResultStream
@@ -45,7 +45,7 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
     dbPrepare _ = return True
     dbRollback _ = return ()
     getName (MapDB name _ _) = name
-    getPreds (MapDB _ predname _) = [ Pred predname (PredType ObjectPred [Key "String", Key "String"]) ]
+    getPreds (MapDB name predname _) = [ Pred (QPredName name predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     domainSize db varDomainSize  (Atom thepred args)
         | thepred `elem` getPreds db = return (case db of
                 MapDB _ _ rows ->
@@ -53,9 +53,9 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
              -- this just look up each var from the varDomainSize
     domainSize _ _ _ = return empty
     prepareQuery db qu _ = return (MapDBStmt db qu)
-    supported (MapDB _ predname _) (FAtomic (Atom (Pred p _) _)) _ | p == predname = True
+    supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
     supported _ _ _ = False
-    supported' (MapDB _ predname _) (Atomic (Atom (Pred p _) _)) _ | p == predname = True
+    supported' (MapDB name predname _) (Atomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
     supported' _ _ _ = False
     translateQuery _ qu vars = (show qu, vars)
 
@@ -80,7 +80,7 @@ instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue
     dbCommit _ = return True
     dbRollback _ = return ()
     getName (StateMapDB name _) = name
-    getPreds (StateMapDB _ predname) = [ Pred predname (PredType ObjectPred [Key "String", Key "String"]) ]
+    getPreds (StateMapDB name predname) = [ Pred (PredName (Just name) predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     domainSize db varDomainSize  (Atom thepred args)
         | thepred `elem` getPreds db = do
                 rows <- get
@@ -161,6 +161,8 @@ mapDBFilterResults rows  results (FAtomic (Atom thepred args)) = do
 
 data EqDB (m :: * -> *) = EqDB String
 
+pattern EqPred ns = Pred (QPredName ns "eq") (PredType ObjectPred [Key "Any", Key "Any"])
+
 data EqDBStmt = EqDBStmt Query
 instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     dbBegin _ = return ()
@@ -168,15 +170,15 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     dbCommit _ = return True
     dbRollback _ = return ()
     getName (EqDB name) = name
-    getPreds _ = [ Pred "eq" (PredType ObjectPred [Key "Any", Key "Any"]) ]
+    getPreds db = [ EqPred (getName db)]
     domainSize _ _ _ = return empty
     prepareQuery _ qu _ = return (EqDBStmt qu)
     translateQuery _ qu vars = (show qu, vars)
 
-    supported _ (FAtomic (Atom (Pred "eq" _) _)) _ = True
+    supported _ (FAtomic (Atom (EqPred _) _)) _ = True
     supported _ _ _ = False
-    supported' _ (Atomic (Atom (Pred "eq" _) _)) _ = True
-    supported' _ (Not (Atomic (Atom (Pred "eq" _) _))) _ = True
+    supported' _ (Atomic (Atom (EqPred _) _)) _ = True
+    supported' _ (Not (Atomic (Atom (EqPred _) _))) _ = True
     supported' _ _ _ = False
 
 instance (Monad m) => DBStatementClose m (EqDBStmt) where

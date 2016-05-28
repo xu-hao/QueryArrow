@@ -544,18 +544,18 @@ generateUpdateSQL pospropatoms negpropatoms = do
     let posprednamemap = sortAtomByPred pospropatoms
     let negprednamemap = sortAtomByPred negpropatoms
     let allkeys = keys posprednamemap `union` keys negprednamemap
-    let poslist = [l | key <- allkeys, let l = case lookup key posprednamemap of Nothing -> []; Just l -> l]
-    let neglist = [l | key <- allkeys, let l = case lookup key negprednamemap of Nothing -> []; Just l -> l]
+    let poslist = [l | key <- allkeys, let l = case lookup key posprednamemap of Nothing -> []; Just l' -> l']
+    let neglist = [l | key <- allkeys, let l = case lookup key negprednamemap of Nothing -> []; Just l' -> l']
     mapM generateUpdateSQLForPred (zip3 allkeys poslist neglist)
 
-generateInsertSQLForPred :: (String, [Atom]) -> TransMonad SQL
-generateInsertSQLForPred (pred, [posatom]) = translatePosInsertAtomToSQL posatom -- set property
-generateInsertSQLForPred (pred, _) = error "unsupported number of pos and neg literals" -- set property
+generateInsertSQLForPred :: (Pred, [Atom]) -> TransMonad SQL
+generateInsertSQLForPred (pred1, [posatom]) = translatePosInsertAtomToSQL posatom -- set property
+generateInsertSQLForPred (pred1, _) = error "unsupported number of pos and neg literals" -- set property
 
-generateUpdateSQLForPred :: (String, [Atom], [Atom]) -> TransMonad SQL
-generateUpdateSQLForPred (pred, [posatom], _) = translatePosUpdateAtomToSQL posatom -- set property
-generateUpdateSQLForPred (pred, [], [negatom]) = translateNegUpdateAtomToSQL negatom -- set property
-generateUpdateSQLForPred (pred, _, _) = error "unsupported number of pos and neg literals" -- set property
+generateUpdateSQLForPred :: (Pred, [Atom], [Atom]) -> TransMonad SQL
+generateUpdateSQLForPred (pred1, [posatom], _) = translatePosUpdateAtomToSQL posatom -- set property
+generateUpdateSQLForPred (pred1, [], [negatom]) = translateNegUpdateAtomToSQL negatom -- set property
+generateUpdateSQLForPred (pred1, _, _) = error "unsupported number of pos and neg literals" -- set property
 
 translateDeleteAtomToSQL :: Atom -> TransMonad SQL
 translateDeleteAtomToSQL (Atom pred1 args) = do
@@ -750,7 +750,6 @@ pureOrExecF' trans (Disjunction form1 form2) = do
     pureOrExecF' trans form2
 pureOrExecF' trans (Not form) = pureOrExecF' trans form
 pureOrExecF' trans (Exists _ form) = pureOrExecF' trans form
-pureOrExecF' trans (Forall _ _) = lift $ Nothing
 pureOrExecF' trans (CTrue) = return ()
 pureOrExecF' trans (CFalse) = return ()
 
