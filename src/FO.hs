@@ -30,11 +30,11 @@ import Control.Monad.Except
 import Data.Maybe
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
-import Debug.Trace
+import System.Log.Logger
 
 -- exec query from dbname
 
-getAllResults2 :: (Monad m, ResultRow row) => [Database m row] -> Query -> m [row]
+getAllResults2 :: (MonadIO m, ResultRow row) => [Database m row] -> Query -> m [row]
 getAllResults2 dbs query = do
     qp <- prepareQuery' dbs  [] [] [] [] query []
     let (_, stream) = execQueryPlan ([], pure mempty) qp
@@ -81,7 +81,7 @@ rewriteQuery ext qr qr2 ir dr (Query vars form) = Query vars (runNew (do
 instance (Monad m, ResultRow row) => DBStatementClose m (QueryPlan2 m row) where
     dbStmtClose qp = return ()
 
-instance (Monad m, ResultRow row) => DBStatementExec m row (QueryPlan2 m row) where
+instance (MonadIO m, ResultRow row) => DBStatementExec m row (QueryPlan2 m row) where
     dbStmtExec qp vars rs = snd (execQueryPlan  (vars, rs) qp)
 
 instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPlan2 m row) where

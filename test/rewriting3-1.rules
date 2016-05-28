@@ -24,7 +24,7 @@ rewrite META_ATTR_ACCESS_OBJ(oid, uid, acc) ⟶  OBJT_ACCESS_OBJ(oid, uid, acc)
 
 // new predicates
 predicate DATA_NAME_2       object(key oid, property n)
-rewrite DATA_NAME_2(x, y) ⟶   DATA_NAME(x, y) ⊗ CLIENT_ID(u) ⊗ OBJT_ACCESS_OBJ(x, u, a) ⊗ eq(a, 1200)
+rewrite DATA_NAME_2(x, y) ⟶   DATA_NAME(x, y) ⊗ CLIENT_ID(u) ⊗ OBJT_ACCESS_OBJ(x, u, a) ⊗ ICAT.eq(a, 1200)
 rewrite insert DATA_NAME_2(x, y)  ⟶  insert DATA_NAME(x, y)
 rewrite delete DATA_NAME_2(x, y)  ⟶  delete DATA_NAME(x, y)
 
@@ -37,24 +37,23 @@ rewrite delete META_1(x, a, v, u) ⟶  OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT
 
 predicate META_2            object(key oid, key a, key v, key u)
 rewrite META_2(x, a, v, u) ⟶
-                            (
+                            CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200) ⊗ (
                                 ES_META(x, m, a, v, u)  ⊕
                                 META(x, m, a, v, u)
-                            ) ⊗ CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200)
+                            )
 rewrite insert META_2(x, a, v, u) ⟶
-                            nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ eq(acc,1200) ⊗
+                            nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ ICAT.eq(acc,1200) ⊗
                             ([ ¬ Neo4j.USER_OBJ(user) ] ⊗ insert Neo4j.USER_OBJ(user) ⊗ 𝟎 ⊕ 𝟏) ⊗
                             ([ ¬ Neo4j.DATA_OBJ(x) ] ⊗ insert Neo4j.DATA_OBJ(x) ⊗ 𝟎 ⊕ 𝟏) ⊗
                             insert Neo4j.META_OBJ(m) Neo4j.META_ACCESS_OBJ(m, x, user, 1200) ⊗
                             (
-                                [ ¬ eq(a, "searchable") ] ⊗ insert OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) ⊕
-                                eq(a, "searchable") ⊗ insert ES_META(x, m, a, v, u)
+                                [ ¬ EqDB.eq(a, "searchable") ] ⊗ insert OBJT_METAMAP_OBJ(x, m) META_OBJ(m) META_ATTR_UNIT(m, u) META_ATTR_NAME(m, a) META_ATTR_VALUE(m, v) ⊕
+                                EqDB.eq(a, "searchable") ⊗ insert ES_META(x, m, a, v, u)
                             )
 
-rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ eq(acc, 1200) ⊗
-                            OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT(m, u) ⊗ META_ATTR_NAME(m, a) ⊗ META_ATTR_VALUE(m, v) ⊗
+rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200) ⊗
                             delete Neo4j.META_OBJ(m) Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗
                             (
-                                [ ¬ eq(a, "searchable") ] ⊗ delete OBJT_METAMAP_OBJ(x, m) ⊕
-                                eq(a, "searchable") ⊗ delete ES_META(x, m, a, v, u)
+                                [ ¬ EqDB.eq(a, "searchable") ] ⊗ delete OBJT_METAMAP_OBJ(x, m) ⊕
+                                EqDB.eq(a, "searchable") ⊗ delete ES_META(x, m, a, v, u)
                             )

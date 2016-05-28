@@ -73,11 +73,14 @@ import Control.Monad.Except
 import Serialization
 import Data.Aeson
 import qualified Data.Text as T
+import System.Log.Logger
+import Logging
 -- import Data.Serialize
 
 
 main::IO()
 main = do
+    setup
     args2 <- getArgs
     if null args2
         then do
@@ -94,12 +97,12 @@ main = do
 runzmq :: String -> TranslationInfo -> IO ()
 runzmq addr ps = do
     tdb@(TransDB _ dbs   preds (qr, qr2, ir, dr) ) <- transDB "tdb" ps
-    mapM_ print qr
-    mapM_ print ir
-    mapM_ print dr
-    putStrLn ("listening at " ++ addr)
+    mapM_ (debugM "QA" . show) qr
+    mapM_ (debugM "QA" . show) ir
+    mapM_ (debugM "QA" . show) dr
+    infoM "QA" ("listening at " ++ addr)
     let worker = do
-        liftIO $ putStrLn "new worker"
+        liftIO $ infoM "QA" "new worker"
         receiver <- socket Rep
         connect receiver "inproc://workers"
         forever $ do
@@ -107,7 +110,7 @@ runzmq addr ps = do
             t0 <- liftIO $ getCurrentTime
             ret <- liftIO $ try (do
                 let msg = CS.unpack qus
-                liftIO $ putStrLn ("received message " ++ msg)
+                liftIO $ infoM "QA" ("received message " ++ msg)
                 liftIO $ hFlush stdout
                 let colonx = fromJust (findIndex (== ':') msg)
                     uz = take colonx msg
@@ -121,7 +124,7 @@ runzmq addr ps = do
                         Right pp -> pp
             t1 <- liftIO $ getCurrentTime
             send receiver [] (B.toStrict (encode (resultSet rep vars)))
-            liftIO $ putStrLn (show (diffUTCTime t1 t0))
+            liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
             liftIO $ hFlush stdout
     runZMQ $ do
         server <- socket Router
@@ -145,11 +148,11 @@ run2 query ps = do
 
 printQuery (TransDB _ dbs  _ (qr, qr2, ir, dr) ) params qu = do
     let pqp qp = do
-            putStrLn ("query plan:")
-            putStrLn (drawTree (toTree  qp))
+            infoM "QA" ("query plan:")
+            infoM "QA" (drawTree (toTree  qp))
     let qu'@(Query vars f') = rewriteQuery (keys params) qr qr2 ir dr qu
-    putStrLn ("original query: " ++ show qu)
-    putStrLn ("rewritten query: " ++ show qu')
+    infoM "QA" ("original query: " ++ show qu)
+    infoM "QA" ("rewritten query: " ++ show qu')
     pqp (queryPlan2 dbs (keys params) vars qu')
 
 run3 :: String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])

@@ -20,7 +20,7 @@ import Data.Aeson.Types as A
 import Data.Int
 import Data.Scientific
 
-import Debug.Trace
+import System.Log.Logger
 
 
 -- connections
@@ -54,13 +54,20 @@ isUpdate (Cypher r m w s c d) = not (null s && c == mempty && null d)
 instance PreparedStatement_ Neo4jQueryStatement where
         execWithParams (Neo4jQueryStatement (host, port, username, password) (vars, stmt)) args = resultStream2 (do
                 resp <- withAuthConnection (pack host) port (pack username, pack password) $ do
-                    trace ("cypher: " ++ show stmt ++ " with " ++ show args) $ C.cypher (T.pack (show stmt)) (toCypherParams args)
+                    liftIO $ infoM "Cypher" (show stmt ++ " with " ++ show args)
+                    C.cypher (T.pack (show stmt)) (toCypherParams args)
                 case resp of
-                    Left t -> error (T.unpack t)
+                    Left t -> do
+                        liftIO $ errorM "Cypher" ("returns an error: " ++ T.unpack t)
+                        error (T.unpack t)
                     Right (C.Response cols rows) ->
-                        return (if isUpdate stmt
-                            then [mempty]
-                            else map (\row -> convert (vars, row)) rows)
+                        if isUpdate stmt
+                            then do
+                                liftIO $ infoM "Cypher" ("updated " ++  show cols ++ show rows)
+                                return [mempty]
+                            else do
+                                liftIO $ infoM "Cypher" ("query returns " ++  show cols ++ show rows)
+                                return (map (\row -> convert (vars, row)) rows)
                 ) (return ())
         closePreparedStatement _ = return ()
 

@@ -667,7 +667,8 @@ pureOrExecF  _ (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
     if isJust (updateKey ks)
         then lift $ Nothing
         else case lookup n predtablemap of
-                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
+                Nothing -> do
+                    trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
                 Just (OneTable tablename _, _) -> do
                     let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
@@ -738,7 +739,8 @@ pureOrExecF' (SQLTrans  _ predtablemap) (Atomic (Atom n args)) = do
     if isJust (updateKey ks)
         then lift $ Nothing
         else case lookup n predtablemap of
-                Nothing -> trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
+                Nothing -> do
+                    trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
                 Just (OneTable tablename _, _) -> do
                     let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
@@ -756,11 +758,10 @@ pureOrExecF' trans (CFalse) = return ()
 
 instance Translate SQLTrans MapResultRow SQLQuery where
     translateQueryWithParams trans query env =
-      trace ("translateQueryWithParams: translating " ++ show query ++ " with " ++ show env) $
         let (SQLTrans  builtin predtablemap) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
-            trace ("translateQueryWithParams: and the resulting query is " ++ show sql) $ (sql, params sql)
+            (sql, params sql)
     translateable trans form vars = isJust (evalStateT (pureOrExecF True trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
     translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))
 

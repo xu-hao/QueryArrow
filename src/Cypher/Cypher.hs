@@ -27,7 +27,7 @@ import qualified Data.Set as Set
 import Control.Applicative ((<$>), liftA2)
 import Control.Monad.Trans.Class
 import qualified Data.Text as T
-import Debug.Trace
+import System.Log.Logger
 
 -- basic definitions
 
@@ -651,13 +651,13 @@ addDependencies m = do
 mergeCreateAndSet :: Cypher -> Cypher
 mergeCreateAndSet (Cypher r m w s c d) =
     let (c', s') = mergeCreateAndSet2 c s in
-        trace ("mergeCreateAndSet: " ++ show (Cypher r m w s c d)) $ Cypher r m w s' c' d
+        Cypher r m w s' c' d
 
 mergeCreateAndSet2 :: GraphPattern -> [(CypherExpr, CypherExpr)] -> (GraphPattern, [(CypherExpr, CypherExpr)])
 mergeCreateAndSet2 cres sets  =
   let (map1, map2, map3) = createsToMap cres
       (sets', (map1', _, _)) = runState (doMergeCreateAndSet2 sets) (map1, map2, map3) in
-      trace ("createsToMap -> " ++ show map1) $ (GraphPattern (elems map1'), sets')
+      (GraphPattern (elems map1'), sets')
 
 doMergeCreateAndSet2 :: [(CypherExpr, CypherExpr)] -> State (Map CypherVar OneGraphPattern, Map CypherVar CypherVar, Map CypherVar CypherVar) [(CypherExpr, CypherExpr)]
 doMergeCreateAndSet2 = foldM doMergeCreateAndOneSet [] where
@@ -693,12 +693,12 @@ doMergeCreateAndSet2 = foldM doMergeCreateAndOneSet [] where
 mergeCreateAndCreate :: Cypher -> Cypher
 mergeCreateAndCreate (Cypher r m w s c d) =
     let c' = sortCreates c in
-        trace ("sortCreates: " ++ show (Cypher r m w s c d)) $ Cypher r m w s c' d
+        Cypher r m w s c' d
 
 mergeCreateAndWhere :: Cypher -> Cypher
 mergeCreateAndWhere cyp@(Cypher r m w s c d) =
     let (c', w') = mergeCreateAndWhere2 c w in
-        trace ("mergeCreateAndWhere: " ++ show cyp) $ Cypher r m w' s c' d
+        Cypher r m w' s c' d
 
 mergeCreateAndWhere2 :: GraphPattern -> CypherCond -> (GraphPattern, CypherCond)
 mergeCreateAndWhere2 cres sets  =
@@ -754,7 +754,7 @@ mergeDeleteAndSetNull2 vars = filter (\set-> case set of
 separateMatchFromWhere :: Cypher  -> Cypher
 separateMatchFromWhere (Cypher r m w s c d) =
     let (m', w') = separateMatchFromWhere2 w in
-        trace ("separateMatchFromWhere: " ++ show (Cypher r m w s c d)) $ Cypher r (fst m <> fst m', snd m <> snd m') w' s c d
+        Cypher r (fst m <> fst m', snd m <> snd m') w' s c d
 
 separateMatchFromWhere2 :: CypherCond -> ((GraphPattern, GraphPattern), CypherCond)
 separateMatchFromWhere2 (CypherAndCond a b) =
@@ -785,7 +785,7 @@ eliminateUnboundedVars :: Cypher -> Cypher
 eliminateUnboundedVars (Cypher r m w s c d) =
     let fvm = (fv m)
         (w', (varmap, cond)) = runState (eliminateUnboundedVars2 fvm w) (mempty, CypherTrueCond) in
-        trace ("eliminateUnboundedVars: " ++ show (Cypher r m w s c d)) $ subst varmap (Cypher r m (w' .&&. cond) s c d)
+        subst varmap (Cypher r m (w' .&&. cond) s c d)
 
 eliminateUnboundedVars2 :: [CypherVar] -> CypherCond -> State (CypherVarExprMap, CypherCond) CypherCond
 eliminateUnboundedVars2 vars (CypherAndCond a b) = (.&&.) <$> eliminateUnboundedVars2 vars a <*> eliminateUnboundedVars2 vars b
@@ -806,11 +806,9 @@ eliminateUnboundedVars2 vars c@(CypherCompCond op e1 e2 _) =
             then return c
             else do
                 addToVarMap (extractVarFromExpr e2) e1
-                trace ("add " ++ show e2 ++ " :=: " ++ show e1) $ return ()
                 return CypherTrueCond
         else do
             addToVarMap (extractVarFromExpr e1) e2
-            trace ("add " ++ show e1 ++ " :=: " ++ show e2) $ return ()
             return CypherTrueCond)
 
 addToVarMap :: CypherVar -> CypherExpr -> State (CypherVarExprMap, CypherCond) ()
@@ -854,7 +852,7 @@ eliminateUnboundedVars4 vars (Cypher r m w s c d) = do
     return (Cypher r m w' s c d)
 
 normalizeGraphPattern :: Cypher -> Cypher
-normalizeGraphPattern (Cypher r m w s c d) = trace ("normalizeGraphPattern: " ++ show (Cypher r m w s c d)) $ Cypher r m (normalizeGraphPatternCond w) s c d
+normalizeGraphPattern (Cypher r m w s c d) = Cypher r m (normalizeGraphPatternCond w) s c d
 
 normalizeGraphPatternCond :: CypherCond -> CypherCond
 normalizeGraphPatternCond a@(CypherAndCond _ _) =
@@ -875,7 +873,7 @@ normalizeGraphPatternCond c = c
 
 normalizeCond :: Cypher -> Cypher
 normalizeCond (Cypher r m w s c d) =
-    trace ("normalizeCond: " ++ show (Cypher r m w s c d)) $ Cypher r m (normalizeCond2 w) s c d
+    Cypher r m (normalizeCond2 w) s c d
 
 normalizeCond2 :: CypherCond -> CypherCond
 normalizeCond2 (CypherAndCond a b) =
@@ -883,7 +881,7 @@ normalizeCond2 (CypherAndCond a b) =
 normalizeCond2 c = c
 
 mergeAllPatternInWhere :: Cypher -> Cypher
-mergeAllPatternInWhere (Cypher r m w s c d) = trace ("mergeAllPatternInWhere: " ++ show (Cypher r m w s c d)) $ Cypher r m (mergeAllPatternInWhere2 w) s c d
+mergeAllPatternInWhere (Cypher r m w s c d) = Cypher r m (mergeAllPatternInWhere2 w) s c d
 
 mergeAllPatternInWhere2 :: CypherCond -> CypherCond
 mergeAllPatternInWhere2 a@(CypherAndCond _ _) =
@@ -898,7 +896,7 @@ mergeAllPatternInWhere2 c@(CypherPatternCond p) = c
 mergeAllPatternInWhere2 c = c
 
 mergeAllPatternInMatch :: Cypher -> Cypher
-mergeAllPatternInMatch (Cypher r m w s c d) = trace ("mergeAllPatternInMatch: " ++ show (Cypher r m w s c d)) $ Cypher r (mergeAllPatternInMatch2 m, mempty) w s c d
+mergeAllPatternInMatch (Cypher r m w s c d) = Cypher r (mergeAllPatternInMatch2 m, mempty) w s c d
 
 mergeAllPatternInMatch2 :: (GraphPattern, GraphPattern) -> GraphPattern
 mergeAllPatternInMatch2 (as, as2) = mappend as as2
@@ -911,7 +909,7 @@ translateQueryToCypher (Query vars conj) = do
     let exprsMaybe = map (`lookup` fovarcypherexprmap) vars
     let exprs = map (\(v, em) -> fromMaybe (error ("unbounded var " ++ show v ++ " in " ++ show conj)) em) (zip vars exprsMaybe)
     let cypher' = postprocess (cypher'0 <> creturn exprs)
-    trace "postprocess done" $ return (vars,  cypher')
+    return (vars,  cypher')
 
 translateFormulaToCypher :: Formula -> TransMonad Cypher
 translateFormulaToCypher (FSequencing form1 form2) = do
@@ -1055,7 +1053,6 @@ simplifyDependencies' cypher = do
                     let cypher' = subst varmap cypher
                     let fovarcypherexprmap' = Map.map (subst varmap) fovarcypherexprmap
                     put (a, b, dependencyGraph'', fovarcypherexprmap')
-                    trace (show varmap ++ " = " ++ show fovarcypherexprmap) $ return ()
                     simplifyDependencies' cypher'
             Nothing -> case getFunctionalRelation dependencyGraph of
                 Nothing -> return cypher
@@ -1066,7 +1063,6 @@ simplifyDependencies' cypher = do
                     let cypher' = subst varmap cypher
                     let fovarcypherexprmap' = Map.map (subst varmap) fovarcypherexprmap
                     put (a, b, dependencyGraph'', fovarcypherexprmap')
-                    trace (show varmap ++ " = " ++ show fovarcypherexprmap) $ return ()
                     simplifyDependencies' cypher'
 
 -- translate atom to cypher in a query
@@ -1075,14 +1071,14 @@ translateQueryAtomToCypher thesign atom = do
     (CypherBuiltIn builtin, predtablemap, _, params) <- get
     let (Atom pred1 args) = atom
     --try builtin first
-    trace (show atom) $ case lookup pred1 builtin of
+    case lookup pred1 builtin of
         Just builtinpred -> do
             exprs <- instantiateArgs args
             builtinpred thesign exprs
         Nothing -> case lookup pred1 predtablemap of
             Just (vars, matchpattern, pattern, dependencies) -> do
                 (matchpattern, pattern) <- instantiate vars matchpattern pattern dependencies args
-                trace (show matchpattern ++ " <-> " ++ show pattern)$ case thesign of
+                case thesign of
                     Pos -> return (cwhere (UnmergableCypherPatternCond matchpattern .&&. CypherPatternCond pattern))
                     Neg -> error "translateQueryAtomToCypher: unsupported negative literal"
             Nothing -> error (show pred1 ++ " is not defined")
@@ -1099,7 +1095,7 @@ translateDeleteAtomToCypher atom = do
             let mfvt = fvType Root matchpattern
             let fvt = fvType Root pattern
             let mfvt1 = map (\(x,_,_,_) -> x) mfvt
-            let (del, setnull) = trace ("translateDeleteAtomToCypher" ++ show fvt ++ show mfvt) $ partition (\(v, c, p, t) -> t == CypherNodeVar) (filter (\(x,_,_,_) -> not (elem x mfvt1)) fvt)
+            let (del, setnull) = partition (\(v, c, p, t) -> t == CypherNodeVar) (filter (\(x,_,_,_) -> not (elem x mfvt1)) fvt)
             return (cwhere (UnmergableCypherPatternCond matchpattern .&&. CypherPatternCond pattern) <> delete (map (\(a,_,_,_)->a) del)
                  <> set (map (\(_, Dot v prop, _, var) -> (CypherDotExpr (CypherVarExpr v) prop, CypherNullExpr)) setnull))
         Nothing -> error (show pred1 ++ " is not defined")

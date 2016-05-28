@@ -38,7 +38,7 @@ sqlToCypher tabletype colprop  mappings =
                         ([keyCol1], [keyCol2]) -> mappingPattern4prop keyCol1  keyCol2   (predNameToString2 key) keyprops propprops
                         _ -> mappingPattern5 edges edges propEdges propEdges (predNameToString2 key) keyprops propprops
         in
-            trace ("generating mapping for predicate " ++ show key ++ show keyprops ++ show propprops ++ " -> " ++ show mapping') $ insert predtype mapping' mappings') empty mappings
+             insert predtype mapping' mappings') empty mappings
 
 mappingPattern0 :: String -> String -> [String] -> CypherMapping
 mappingPattern0 id nodetype keyprops =

@@ -22,6 +22,8 @@ import qualified ElasticSearch.Query as ESQ
 import ElasticSearch.QueryResult
 import ElasticSearch.QueryResultHits
 
+import Debug.Trace
+
 data ElasticSearchQueryExpr =
     ElasticSearchQueryParam Var
     | ElasticSearchQueryVar Var
@@ -179,7 +181,7 @@ instance PreparedStatement_ ElasticSearchStatement where
                     case res of
                         Left res1 -> error ("execWithParams: cannot decode response " ++ res1)
                         Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> do
-                            mapM_ (\hit -> ESQ.deleteById esci (_id hit)) hits1
+                            trace ("ElasticSearch deleting " ++ show hits1) $ mapM_ (\hit -> ESQ.deleteById esci (_id hit)) hits1
                             return [mempty]
                             ) (return ())
         closePreparedStatement _ = return ()
@@ -246,7 +248,7 @@ instance Translate ESTrans MapResultRow ElasticSearchQuery where
     translateable' _ _ _ = False
 
 makeElasticSearchDBAdapter :: String -> ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
-makeElasticSearchDBAdapter ns conn = GenericDB conn "ElasticSearch" [Pred (QPredName ns "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])] ESTrans
+makeElasticSearchDBAdapter ns conn = GenericDB conn ns [Pred (QPredName ns "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])] ESTrans
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do

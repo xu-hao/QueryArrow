@@ -45,6 +45,7 @@ executable QueryArrow
                    async,
                    time,
                    cereal,
+                   hslogger,
                    exceptions,
                    utf8-string,
                    template-haskell

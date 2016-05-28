@@ -16,7 +16,7 @@ import Data.Monoid  ((<>))
 import Data.Tree
 import Data.Conduit
 import qualified Data.Text as T
-import Debug.Trace
+import System.Log.Logger
 
 -- result value
 data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Show)
@@ -299,8 +299,7 @@ optimizeQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
                 let dbs = dbs1 `intersect` dbs2
                     fse = fsequencing [form1, form2]
                     dbs' = filter (\x -> case dbsx !! x of (Database db) -> supported db (fse) (returnvs qpd)) dbs in
-                    trace ("optimizeQueryPlan: test merge " ++ show form1 ++ " at " ++ show dbs1 ++ ", " ++ show form2 ++ " at " ++ show dbs2) $
-                        if null dbs'
+                    if null dbs'
                             then (qpd, QPSequencing2 qp1' qp2')
                             else (qpd, Exec2 fse dbs')
             ((qpd1, Exec2  _ _), (_, QPSequencing2 qp21@(qpd3, _) qp22)) ->
@@ -609,7 +608,6 @@ prepareQueryPlan dbs (qpd, e@(Exec2  form (x : _))) =
                 qu = Query vars2 form
                 (stmtshow0, paramvars) = translateQuery db qu vars
                 stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
-            trace ("prepare " ++ stmtshow) $ return ()
             stmt <- prepareQuery db qu vars
             return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
 prepareQueryPlan dbs  (qpd, QPChoice2 qp1 qp2) = do
@@ -643,7 +641,6 @@ prepareQueryPlan' dbs  (qpd, e@(If2 form (x:_))) =
                 qu = Query vars2 (convert form)
                 (stmtshow0, paramvars) = translateQuery db qu vars
                 stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
-            trace ("prepare " ++ stmtshow) $ return ()
             stmt <- prepareQuery db qu vars
             return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
 prepareQueryPlan' dbs  (qpd, QPOr2 qp1 qp2) = do
@@ -688,16 +685,16 @@ scandb' (_, QPFalse2) = []
 addCleanupRS :: (Monad m) => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
 
-execQueryPlan :: (Monad m, ResultRow row) => ([Var], ResultStream m row) -> QueryPlan2 m row  -> ([Var], ResultStream m row     )
+execQueryPlan :: (MonadIO m, ResultRow row) => ([Var], ResultStream m row) -> QueryPlan2 m row  -> ([Var], ResultStream m row     )
 execQueryPlan (vars, rs) (qpd, Exec2 _ _) = do
     let [(stmt, stmtshow)] = fromJust (stmts qpd)
     case stmt of
         AbstractDBStatement stmt0 -> do
             (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                         row <- rs
-                        trace ("exec " ++ stmtshow) $ return ()
+                        liftIO $ infoM "QA" ("execute " ++ stmtshow)
                         row2 <- dbStmtExec stmt0 vars (pure row)
-                        trace ("result row") $ return ()
+                        liftIO $ infoM "QA" ("returns rows")
                         return (transform vars (combinedvs qpd) (row <> row2))))
 
 execQueryPlan  r (qpd, QPSequencing2 qp1 qp2) =
@@ -753,15 +750,16 @@ execQueryPlan (vars, rs) (qpd, QPTransaction2 qp) =
 execQueryPlan  r (_, QPOne2) = r
 execQueryPlan  (vars, rs) (_, QPZero2) = (vars, closeResultStream rs)
 
-execQueryPlan' :: (Monad m, ResultRow row) => ([Var], ResultStream m row) -> PureQueryPlan2 m row  -> ([Var], ResultStream m row     )
+execQueryPlan' :: (MonadIO m, ResultRow row) => ([Var], ResultStream m row) -> PureQueryPlan2 m row  -> ([Var], ResultStream m row     )
 execQueryPlan' (vars, rs) (qpd, If2 _ _) = do
     let [(stmt, stmtshow)] = fromJust (stmts qpd)
     case stmt of
         AbstractDBStatement stmt0 -> do
             (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                     row <- rs
-                    trace ("exec " ++ stmtshow) $ return ()
+                    liftIO $ infoM "QA" ("execute " ++ stmtshow)
                     row2 <- dbStmtExec stmt0 vars (pure row)
+                    liftIO $ infoM "QA" ("returns rows")
                     return (transform vars (combinedvs qpd) (row <> row2))))
 execQueryPlan'  (vars, rs) (qpd, QPOr2 qp1 qp2) =
     (inscopevs qpd, do

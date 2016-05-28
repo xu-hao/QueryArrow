@@ -16,7 +16,7 @@ import GHC.Generics
 import ElasticSearch.Record
 import ElasticSearch.QueryResult
 import HTTP.ElasticSearchUtils
-import Debug.Trace
+import System.Log.Logger
 import qualified Data.Text as Text
 
 data ElasticSearchConnInfo = ElasticSearchConnInfo {
@@ -68,9 +68,14 @@ postESRecord esci rec = postJSON (esConnInfoToUrl esci) rec
 
 queryBySearch :: ElasticSearchConnInfo -> ESQuery -> IO (Either String ESQueryResult)
 queryBySearch esci qu = do
-        resp <- trace ("queryBySearch: " ++ BL8.unpack (encode qu) ++ show qu) $ post (esConnInfoToUrl esci ++ "/" ++ "_search") (RequestBodyLBS (encode qu))
-        return (trace ("queryBySearch: resp " ++ BL8.unpack resp) $ eitherDecode resp)
+        infoM "ElasticSearch" ("queryBySearch: " ++ BL8.unpack (encode qu) ++ show qu)
+        resp <- post (esConnInfoToUrl esci ++ "/" ++ "_search") (RequestBodyLBS (encode qu))
+        infoM "ElasticSearch" ("resp: " ++ BL8.unpack resp)
+        return (eitherDecode resp)
 
 deleteById :: ElasticSearchConnInfo -> String -> IO BL.ByteString
-deleteById esci esid =
-        trace ("deleteById: " ++ esid) $ delete (esConnInfoToUrl esci) esid
+deleteById esci esid = do
+    infoM "ElasticSearch" ("deleteById: " ++ esid)
+    resp <- delete (esConnInfoToUrl esci) esid
+    infoM "ElasticSearch" ("resp: " ++ BL8.unpack resp)
+    return resp

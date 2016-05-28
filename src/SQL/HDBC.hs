@@ -12,7 +12,7 @@ import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
 import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert, (!), lookup)
-import Debug.Trace
+import System.Log.Logger
 
 data HDBCQueryStatement = HDBCQueryStatement Bool [Var] Statement [Var] -- return vars stmt param vars
 
@@ -39,16 +39,22 @@ class HDBCConnection conn where
 
 instance PreparedStatement_ HDBCQueryStatement where
         execWithParams (HDBCQueryStatement ret vars stmt params) args = resultStream2 (do
+                infoM "SQL" ("execute stmt")
                 rcode <- execute stmt (map (\v -> convertExprToSQL (case lookup v args of
                     Just e -> e
                     Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args))) params)
                 if rcode == -1
-                    then error ("execWithParams: error")
-                    else trace (show rcode ++ " rows changed") $ if ret
+                    then do
+                        infoM "SQL" ("execute stmt: error ")
+                        error ("execWithParams: error")
+                    else if ret
                         then do
                             rows <- fetchAllRows stmt
+                            infoM "SQL" ("returns " ++ show (length rows) ++ " rows")
                             return (map (convertSQLToResult vars) rows)
-                        else return [mempty]
+                        else do
+                            infoM "SQL" ("updates " ++ show rcode ++ " rows")
+                            return [mempty]
                 ) (finish stmt)
         closePreparedStatement _ = return ()
 
