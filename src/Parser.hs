@@ -50,7 +50,7 @@ whiteSpace = T.whiteSpace lexer
 dot = T.dot lexer
 
 -- parser
-type FOParser = GenParser Char PredMap
+type FOParser = GenParser Char (PredMap, PredMap)
 
 argp :: FOParser Expr
 argp =
@@ -67,7 +67,7 @@ atomp :: FOParser Atom
 atomp = do
     predname <- prednamep
     arglist <- arglistp
-    predmap <- getState
+    (predmap, _) <- getState
     let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ intercalate "\n" (map show (keys predmap)))) (lookup predname predmap)
     return (Atom thepred arglist)
 
@@ -180,7 +180,7 @@ predp = do
     name <- prednamep
     t <- predtypep
     let thepred = Pred name t
-    updateState (insert name thepred)
+    updateState (\(predmap, predmap2) -> (insert name thepred predmap, insert name thepred predmap2))
 
 varp :: FOParser Var
 varp = Var <$> identifier
@@ -195,7 +195,7 @@ progp = do
     qv <- reserved "return" *> (Query <$> varsp <*> return q)
       <|> (Query [] <$> return q)
     eof
-    predmap <- getState
+    (_, predmap) <- getState
     return (qv, predmap)
 
 
@@ -219,10 +219,11 @@ rulep = (do
 
 importp :: FOParser ()
 importp = do
-    predmap <- getState
+    (predmap, predmap2) <- getState
     reserved "import"
-    (ns, prednames) <-
-        (do
+    predmap' <- (do
+        reserved "qualified"
+        (ns, prednames) <- (do
             reserved "all"
             reserved "from"
             ns <- identifier
@@ -231,22 +232,48 @@ importp = do
                 preds <- many1 prednamep
                 return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)) \\ preds)
                 ) <|> (do
-                predmap <- getState
                 return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)))
                 )
-        ) <|> (do
-            prednames <- many1 prednamep
-            reserved "from"
-            ns <- identifier
-            return (ns, prednames)
-        )
-    let predmap' = foldr (\x predmap' ->
+            ) <|> (do
+                prednames <- many1 prednamep
+                reserved "from"
+                ns <- identifier
+                return (ns, prednames)
+                )
+        let predmap' = foldr (\x predmap' ->
                         let
                             predname = setNamespace ns x
                         in case lookup predname predmap of
                             Nothing -> error ("cannot import " ++ show x ++ " from " ++ ns)
-                            Just pred1 -> insert x pred1 predmap') predmap prednames
-    setState predmap'
+                            Just pred1 -> insert predname pred1 predmap') predmap2 prednames
+        return predmap'
+        ) <|> (do
+        (ns, prednames) <- (do
+            reserved "all"
+            reserved "from"
+            ns <- identifier
+            (do
+                reserved "except"
+                preds <- many1 prednamep
+                return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)) \\ preds)
+                ) <|> (do
+                return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)))
+                )
+                ) <|> (do
+                prednames <- many1 prednamep
+                reserved "from"
+                ns <- identifier
+                return (ns, prednames)
+                )
+        let predmap' = foldr (\x predmap' ->
+                        let
+                            predname = setNamespace ns x
+                        in case lookup predname predmap of
+                            Nothing -> error ("cannot import " ++ show x ++ " from " ++ ns)
+                            Just pred1 -> insert x pred1 predmap') predmap2 prednames
+        return predmap'
+        )
+    setState (predmap, predmap')
 
 
 importsp :: FOParser ()
@@ -257,7 +284,7 @@ importsp = do
 data Export = ExportQualified PredName | ExportUnqualified PredName | ExportAdd PredName deriving Show
 exportp :: FOParser [Export]
 exportp = do
-    predmap <- getState
+    (predmap, _) <- getState
     reserved "export"
     (do
         reserved "qualified"
@@ -270,7 +297,6 @@ exportp = do
                 preds <- many1 prednamep
                 return (map ExportQualified (filter (\x -> namespace x == Just ns) (keys predmap) \\ (map (setNamespace ns) preds)))
                 ) <|> (do
-                predmap <- getState
                 return (map ExportQualified (filter (\x -> namespace x == Just ns) (keys predmap)))
                 )
             ) <|> (do
@@ -288,7 +314,6 @@ exportp = do
             preds <- many1 prednamep
             return (map ExportUnqualified (filter (\x -> namespace x == Just ns) (keys predmap) \\ (map (setNamespace ns) preds)))
             ) <|> (do
-            predmap <- getState
             return (map ExportUnqualified (filter (\x -> namespace x == Just ns) (keys predmap)))
             )
         ) <|> (do
@@ -310,7 +335,7 @@ rulesp = do
     exports <- exportsp
     rules <- many rulep
     eof
-    st <- getState
+    (_, st) <- getState
     return (mconcat rules, st, exports)
 
 samePredAndKey :: Atom -> Atom -> Bool

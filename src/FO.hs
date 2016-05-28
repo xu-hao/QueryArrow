@@ -131,7 +131,7 @@ extractClassicalRule (InsertRewritingRule a form) = QueryRewritingRule a <$> saf
 getRewriting :: PredMap -> TranslationInfo -> IO (RewritingRuleSets, PredMap, [Export])
 getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
-    case runParser rulesp predmap "" d0 of
+    case runParser rulesp (predmap, empty) "" d0 of
         Left err -> error (show err)
         Right ((qr, ir, dr), predmap, exports) -> do
             return ((extractClassicalRules qr, qr, ir, dr), predmap, exports)

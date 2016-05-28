@@ -162,7 +162,7 @@ run3 query tdb user zone = do
 
 
     r <- runResourceT $ evalStateT (dbCatch $ do
-                case runParser progp predmap "" query of
+                case runParser progp (predmap, empty) "" query of
                             Left err -> error (show err)
                             Right (qu@(Query vars _), _) ->
                                 case runExcept (checkQuery qu) of

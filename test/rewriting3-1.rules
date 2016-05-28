@@ -2,6 +2,8 @@ import all from ICAT except META_ACCESS_OBJ
 import all from ES_META
 import all from NextID
 import all from EqDB
+import qualified all from EqDB
+import qualified META_ACCESS_OBJ eq lt le like like_regex from Neo4j
 export DATA_NAME_2 META_1 META_2
 export all from ICAT except DATA_NAME META_ATTR_NAME META_ATTR_VALUE META_ATTR_UNIT OBJT_METAMAP_OBJ META_ACCESS_OBJ
 export qualified all from ICAT except META_ACCESS_OBJ
