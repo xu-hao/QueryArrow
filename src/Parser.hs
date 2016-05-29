@@ -67,7 +67,7 @@ atomp :: FOParser Atom
 atomp = do
     predname <- prednamep
     arglist <- arglistp
-    (predmap, _) <- getState
+    (_, predmap) <- getState
     let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ intercalate "\n" (map show (keys predmap)))) (lookup predname predmap)
     return (Atom thepred arglist)
 
@@ -235,11 +235,11 @@ importp = do
                 return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)))
                 )
             ) <|> (do
-                prednames <- many1 prednamep
-                reserved "from"
-                ns <- identifier
-                return (ns, prednames)
-                )
+            prednames <- many1 prednamep
+            reserved "from"
+            ns <- identifier
+            return (ns, prednames)
+            )
         let predmap' = foldr (\x predmap' ->
                         let
                             predname = setNamespace ns x
@@ -259,18 +259,20 @@ importp = do
                 ) <|> (do
                 return (ns, map (\n -> UQPredName (name n)) (filter (\x -> namespace x == Just ns) (keys predmap)))
                 )
-                ) <|> (do
-                prednames <- many1 prednamep
-                reserved "from"
-                ns <- identifier
-                return (ns, prednames)
-                )
+            ) <|> (do
+            prednames <- many1 prednamep
+            reserved "from"
+            ns <- identifier
+            return (ns, prednames)
+            )
         let predmap' = foldr (\x predmap' ->
                         let
                             predname = setNamespace ns x
                         in case lookup predname predmap of
                             Nothing -> error ("cannot import " ++ show x ++ " from " ++ ns)
-                            Just pred1 -> insert x pred1 predmap') predmap2 prednames
+                            Just pred1 -> case lookup x predmap' of
+                                            Nothing -> insert x pred1 predmap'
+                                            Just pred0 -> error ("ambiguous import for predicate " ++ show x)) predmap2 prednames
         return predmap'
         )
     setState (predmap, predmap')

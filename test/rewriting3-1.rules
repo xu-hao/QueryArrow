@@ -1,9 +1,9 @@
+import qualified all from ICAT
 import all from ICAT except META_ACCESS_OBJ
 import all from ES_META
 import all from NextID
-import all from EqDB
 import qualified all from EqDB
-import qualified META_ACCESS_OBJ eq lt le like like_regex from Neo4j
+import qualified META_ACCESS_OBJ USER_OBJ META_OBJ DATA_OBJ eq lt le like like_regex from Neo4j
 export DATA_NAME_2 META_1 META_2
 export all from ICAT except DATA_NAME META_ATTR_NAME META_ATTR_VALUE META_ATTR_UNIT OBJT_METAMAP_OBJ META_ACCESS_OBJ
 export qualified all from ICAT except META_ACCESS_OBJ
@@ -39,10 +39,10 @@ rewrite delete META_1(x, a, v, u) ⟶  OBJT_METAMAP_OBJ(x, m) ⊗ META_ATTR_UNIT
 
 predicate META_2            object(key oid, key a, key v, key u)
 rewrite META_2(x, a, v, u) ⟶
-                            CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200) ⊗ (
+                            CLIENT_ID(user) ⊗ (
                                 ES_META(x, m, a, v, u)  ⊕
                                 META(x, m, a, v, u)
-                            )
+                            ) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200)
 rewrite insert META_2(x, a, v, u) ⟶
                             nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ ICAT.eq(acc,1200) ⊗
                             ([ ¬ Neo4j.USER_OBJ(user) ] ⊗ insert Neo4j.USER_OBJ(user) ⊗ 𝟎 ⊕ 𝟏) ⊗

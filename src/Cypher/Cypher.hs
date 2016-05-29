@@ -901,6 +901,39 @@ mergeAllPatternInMatch (Cypher r m w s c d) = Cypher r (mergeAllPatternInMatch2 
 mergeAllPatternInMatch2 :: (GraphPattern, GraphPattern) -> GraphPattern
 mergeAllPatternInMatch2 (as, as2) = mappend as as2
 
+extractPropertyVarInMatch :: Cypher -> Cypher
+extractPropertyVarInMatch (Cypher r (as, as2) w s c d) =
+    let (w1, as') = extractPropertyVarInMatch2 as
+        (w2, as2') = extractPropertyVarInMatch2 as2 in
+        Cypher r (as', as2') (w .&&. w1 .&&. w2) s c d
+
+extractPropertyVarInMatch2 :: GraphPattern -> (CypherCond, GraphPattern)
+extractPropertyVarInMatch2 as =
+    let onegraphs = splitGraphPattern as in
+        foldr (\(GraphPattern [p]) (cond', pat') -> case p of
+                    GraphNodePattern n ->
+                        let (cond'', n') = extractPropertyVarInNodePattern n in
+                            (cond' .&&. cond'', pat' <> GraphPattern [ (GraphNodePattern n')])
+                    GraphEdgePattern n1 n2 n3 ->
+                        let (cond1'', n1') = extractPropertyVarInNodePattern n1 in
+                        let (cond2'', n2') = extractPropertyVarInNodePattern n2 in
+                        let (cond3'', n3') = extractPropertyVarInNodePattern n3 in
+                            (cond' .&&. cond1'' .&&. cond2'' .&&. cond3'', pat' <> GraphPattern [ (GraphEdgePattern n1' n2' n3')])
+        ) (CypherTrueCond, mempty) onegraphs
+
+extractPropertyVarInNodePattern :: NodePattern -> (CypherCond, NodePattern)
+extractPropertyVarInNodePattern n@(NodePattern v l p) =
+    case v of
+        Nothing -> error ("extractPropertyVarInNodePattern: node with no variable " ++ show n)
+        Just var ->
+            let (cond', props') = foldl (\(cond', props) (prop, expr) ->
+                    case expr of
+                        CypherIntConstExpr _ -> (cond', props ++ [(prop, expr)])
+                        CypherStringConstExpr _ -> (cond', props ++ [(prop, expr)])
+                        _ -> (cond' .&&. (CypherDotExpr (CypherVarExpr var) prop .=. expr), props)
+                        ) (CypherTrueCond, []) p in
+                (cond', NodePattern v l props')
+
 translateQueryToCypher :: Query -> TransMonad CypherQuery
 translateQueryToCypher (Query vars conj) = do
     cypher <- translateFormulaToCypher conj
@@ -1121,6 +1154,7 @@ translateInsertAtomToCypher x@(Atom pred1 args) = do
 postprocess =
   normalizeCond
   . (eliminateUnboundedVars)
+  . (extractPropertyVarInMatch)
   . (normalizeGraphPattern) -- eliminate empty graph patterns
   . (mergeAllPatternInWhere)
   . (mergeAllPatternInMatch)
@@ -1171,7 +1205,8 @@ instance Convertible ResultValue CypherExpr where
     safeConvert (StringValue i) = Right (CypherStringConstExpr i)
 
 data CypherState = CypherState {
-    csUpdate  :: Bool
+    csUpdate  :: Bool,
+    csQuery :: Bool
 }
 
 translateableCypher :: CypherTrans -> Formula -> StateT CypherState Maybe ()
@@ -1183,11 +1218,16 @@ translateableCypher _ (FAtomic _) = do
     cs <- get
     if csUpdate cs
         then lift $ Nothing
-        else return ()
+        else do
+            put cs{csQuery = True}
+            return ()
 translateableCypher _ (FInsert lit) = do
     cs <- get
-    put cs{csUpdate = True}
-    return ()
+    if csQuery cs
+        then lift $ Nothing
+        else do
+            put cs{csUpdate = True}
+            return ()
 translateableCypher trans (FClassical formula) = do
     cs <- get
     if csUpdate cs
@@ -1228,9 +1268,9 @@ instance Translate CypherTrans MapResultRow CypherQuery where
             fovarcypherexprmap = foldMap (\v@(Var a) -> Map.singleton v (CypherParamExpr a)) env
             sql = runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, fovarcypherexprmap)) in
             (sql,  env)
-    translateable trans form vars = isJust (evalStateT (translateableCypher trans form) (CypherState False))
+    translateable trans form vars = isJust (evalStateT (translateableCypher trans form) (CypherState False False))
 
-    translateable' trans form _ = isJust (evalStateT (translateableCypher' trans form) (CypherState False))
+    translateable' trans form _ = isJust (evalStateT (translateableCypher' trans form) (CypherState False False))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

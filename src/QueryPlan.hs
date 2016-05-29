@@ -692,6 +692,7 @@ execQueryPlan (vars, rs) (qpd, Exec2 _ _) = do
         AbstractDBStatement stmt0 -> do
             (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                         row <- rs
+                        liftIO $ infoM "QA" ("current row  " ++ show row)
                         liftIO $ infoM "QA" ("execute " ++ stmtshow)
                         row2 <- dbStmtExec stmt0 vars (pure row)
                         liftIO $ infoM "QA" ("returns rows")
@@ -757,6 +758,7 @@ execQueryPlan' (vars, rs) (qpd, If2 _ _) = do
         AbstractDBStatement stmt0 -> do
             (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                     row <- rs
+                    liftIO $ infoM "QA" ("current row  " ++ show row)
                     liftIO $ infoM "QA" ("execute " ++ stmtshow)
                     row2 <- dbStmtExec stmt0 vars (pure row)
                     liftIO $ infoM "QA" ("returns rows")
