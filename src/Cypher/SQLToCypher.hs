@@ -38,7 +38,7 @@ sqlToCypher tabletype colprop  mappings =
                         ([keyCol1], [keyCol2]) -> mappingPattern4prop keyCol1  keyCol2   (predNameToString2 key) keyprops propprops
                         _ -> mappingPattern5 edges edges propEdges propEdges (predNameToString2 key) keyprops propprops
         in
-             insert predtype mapping' mappings') empty mappings
+            insert predtype mapping' mappings') empty mappings
 
 mappingPattern0 :: String -> String -> [String] -> CypherMapping
 mappingPattern0 id nodetype keyprops =
@@ -97,7 +97,7 @@ mappingPattern3 keyedges keyedgeids propedges propedgeids nodetype keyprops =
         edgeids = keyedgeids ++ propedgeids
         keyvars = map show [1..length keyedges]
         propedgevars = map show [length keyedges + 1.. length keyedges + length propedges]
-        keypropvars = map show [length keyedges + length propedges + 1..length keyedges + length propedges + length (keyprops) + 1]
+        keypropvars = map show [length keyedges + length propedges + 1..length keyedges + length propedges + length (keyprops)]
         vars = keyvars ++ propedgevars
         nodevars = map ("d" ++) vars
         edgevars = map ("e" ++) vars

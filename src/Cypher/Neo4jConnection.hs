@@ -48,11 +48,8 @@ instance Convertible ([Var], [A.Value]) MapResultRow where
 toCypherParams :: Map Var Expr -> M.HashMap T.Text C.ParamValue
 toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert v) m) M.empty
 
-isUpdate :: Cypher -> Bool
-isUpdate (Cypher r m w s c d) = not (null s && c == mempty && null d)
-
 instance PreparedStatement_ Neo4jQueryStatement where
-        execWithParams (Neo4jQueryStatement (host, port, username, password) (vars, stmt)) args = resultStream2 (do
+        execWithParams (Neo4jQueryStatement (host, port, username, password) stmt@(CypherQuery vars _ _)) args = resultStream2 (do
                 resp <- withAuthConnection (pack host) port (pack username, pack password) $ do
                     liftIO $ infoM "Cypher" (show stmt ++ " with " ++ show args)
                     C.cypher (T.pack (show stmt)) (toCypherParams args)
@@ -60,14 +57,9 @@ instance PreparedStatement_ Neo4jQueryStatement where
                     Left t -> do
                         liftIO $ errorM "Cypher" ("returns an error: " ++ T.unpack t)
                         error (T.unpack t)
-                    Right (C.Response cols rows) ->
-                        if isUpdate stmt
-                            then do
-                                liftIO $ infoM "Cypher" ("updated " ++  show cols ++ show rows)
-                                return [mempty]
-                            else do
-                                liftIO $ infoM "Cypher" ("query returns " ++  show cols ++ show rows)
-                                return (map (\row -> convert (vars, row)) rows)
+                    Right (C.Response cols rows) -> do
+                        liftIO $ infoM "Cypher" ("query returns " ++  show cols ++ show rows)
+                        return (map (\row -> convert (vars, row)) rows)
                 ) (return ())
         closePreparedStatement _ = return ()
 
