@@ -53,7 +53,7 @@ data PureFormula = Atomic Atom
              | Exists { boundvar :: Var, formula :: PureFormula }
              | CTrue
              | CFalse deriving (Eq, Ord)
-data Formula = FTransaction Formula
+data Formula = FTransaction
              | FAtomic Atom
              | FInsert Lit
              | FClassical PureFormula
@@ -77,7 +77,7 @@ instance Convertible Formula PureFormula where
     safeConvert (FChoice a b) = Disjunction <$> (safeConvert a) <*> (safeConvert b)
     safeConvert (FSequencing a b) = Conjunction <$> (safeConvert a) <*> (safeConvert b)
     safeConvert f@(FInsert _) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
-    safeConvert f@(FTransaction _) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
+    safeConvert f@(FTransaction) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
     safeConvert FOne = Right CTrue
     safeConvert FZero = Right CFalse
 
@@ -134,8 +134,8 @@ instance FreeVars Formula where
         freeVars lits
     freeVars (FClassical formula1) =
         freeVars formula1
-    freeVars (FTransaction formula1) =
-        freeVars formula1
+    freeVars (FTransaction ) =
+        []
     freeVars (FSequencing form1 form2) =
         freeVars form1 `union` freeVars form2
     freeVars (FChoice form1 form2) =
@@ -280,7 +280,7 @@ setPredNamespace ns (Pred name paramtypes) = Pred (setNamespace ns name) paramty
 setFormulaNamespace :: String -> Formula -> Formula
 setFormulaNamespace ns (FAtomic (Atom (Pred n pts) args)) = FAtomic (Atom (Pred (setNamespace ns n) pts) args)
 setFormulaNamespace ns (FInsert (Lit sign1 (Atom (Pred n pts) arg))) = (FInsert (Lit sign1 (Atom (Pred (setNamespace ns n) pts) arg)))
-setFormulaNamespace ns (FTransaction form) = FTransaction (setFormulaNamespace ns form)
+setFormulaNamespace ns (FTransaction ) = FTransaction
 setFormulaNamespace ns (FClassical form) = FClassical (setPureFormulaNamespace ns form)
 setFormulaNamespace ns (FChoice form1 form2) = FChoice (setFormulaNamespace ns form1) (setFormulaNamespace ns form2)
 setFormulaNamespace ns (FSequencing form1 form2) = FSequencing (setFormulaNamespace ns form1) (setFormulaNamespace ns form2)
@@ -337,7 +337,7 @@ instance Show Formula where
     show (FAtomic a) = show a
     show (FInsert lits) = "(insert " ++ show lits ++ ")"
     show (FClassical form) = "[" ++ show form ++ "]"
-    show (FTransaction form) = "{" ++ show form ++ "}"
+    show (FTransaction ) = "transactional"
     show form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map show (getFsequencings' form)) ++ ")"
     show form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map show (getFchoices' form)) ++ ")"
     show (FOne) = "𝟏"
@@ -444,7 +444,7 @@ instance Subst Formula where
     subst s (FAtomic a) = FAtomic (subst s a)
     subst s (FInsert lits) = FInsert (subst s lits)
     subst s (FClassical a) = FClassical (subst s a)
-    subst s (FTransaction a) = FTransaction (subst s a)
+    subst s (FTransaction ) = FTransaction
     subst s (FSequencing form1 form2) = FSequencing (subst s form1) (subst s form2)
     subst s (FChoice form1 form2) = FChoice (subst s form1) (subst s form2)
     subst _ form = form
@@ -498,8 +498,8 @@ instance FreeVars a => FreeVars (Set a) where
 
 pureF :: Formula -> Bool
 pureF (FAtomic _) = True
-pureF (FClassical _) = True
-pureF (FTransaction form) = pureF form
+pureF (FClassical _) = False
+pureF (FTransaction ) = True
 pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
 pureF (FInsert _) = False
@@ -611,7 +611,7 @@ instance SubstPred PureFormula where
 instance SubstPred Formula where
     substPred pmap (FAtomic a) = FAtomic (substPred pmap a)
     substPred pmap (FClassical a) = FClassical (substPred pmap a)
-    substPred pmap (FTransaction a) = FTransaction (substPred pmap a)
+    substPred pmap (FTransaction) = FTransaction
     substPred pmap (FSequencing form1 form2) = FSequencing (substPred pmap form1) (substPred pmap form2)
     substPred pmap (FChoice form1 form2) = FChoice (substPred pmap form1) (substPred pmap form2)
     substPred pmap (FInsert lits) = FInsert (substPred pmap lits)
@@ -647,7 +647,7 @@ checkFormula' _ = return ()
 checkFormula :: Formula -> Except String ()
 checkFormula (FAtomic a) = checkAtom a
 checkFormula (FClassical a) = checkFormula' a
-checkFormula (FTransaction a) = checkFormula a
+checkFormula (FTransaction) = return ()
 checkFormula (FSequencing form1 form2) = do
     checkFormula form1
     checkFormula form2

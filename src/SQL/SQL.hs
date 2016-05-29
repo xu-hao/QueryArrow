@@ -661,8 +661,8 @@ data KeyState = KeyState {
     ksChoice :: Bool
 }
 
-pureOrExecF :: Bool -> SQLTrans -> Formula -> StateT KeyState Maybe ()
-pureOrExecF  _ (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
+pureOrExecF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
+pureOrExecF  (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
@@ -672,24 +672,22 @@ pureOrExecF  _ (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
                 Just (OneTable tablename _, _) -> do
                     let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
-pureOrExecF  _ trans (FClassical form) = pureOrExecF' trans form
-pureOrExecF  top trans (FTransaction form) =  if top
-    then           pureOrExecF False trans form
-    else       lift $ Nothing
+pureOrExecF  trans (FClassical form) = pureOrExecF' trans form
+pureOrExecF  trans (FTransaction ) =  lift $ Nothing
 
-pureOrExecF  _ trans (FSequencing form1 form2) = do
-    pureOrExecF False trans form1
-    pureOrExecF False trans form2
+pureOrExecF  trans (FSequencing form1 form2) = do
+    pureOrExecF  trans form1
+    pureOrExecF  trans form2
 
-pureOrExecF  _ trans (FChoice form1 form2) = do
+pureOrExecF  trans (FChoice form1 form2) = do
     ks <- get
     if isJust (updateKey ks)
         then lift $ Nothing
         else do
             put ks {ksChoice = True}
-            pureOrExecF False trans form1
-            pureOrExecF False trans form2
-pureOrExecF  _ (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
+            pureOrExecF  trans form1
+            pureOrExecF  trans form2
+pureOrExecF  (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
             if ksChoice ks
                 then lift $ Nothing
@@ -730,8 +728,8 @@ pureOrExecF  _ (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 
                                         then lift $ Nothing
                                         else put ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
 
-pureOrExecF  _ _ FOne = return ()
-pureOrExecF  _ _ FZero = return ()
+pureOrExecF  _ FOne = return ()
+pureOrExecF  _ FZero = return ()
 
 pureOrExecF' :: SQLTrans -> PureFormula -> StateT KeyState Maybe ()
 pureOrExecF' (SQLTrans  _ predtablemap) (Atomic (Atom n args)) = do
@@ -762,7 +760,7 @@ instance Translate SQLTrans MapResultRow SQLQuery where
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             (sql, params sql)
-    translateable trans form vars = isJust (evalStateT (pureOrExecF True trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
+    translateable trans form vars = isJust (evalStateT (pureOrExecF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
     translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))
 
 instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQLTrans where

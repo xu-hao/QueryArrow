@@ -55,7 +55,8 @@ queryPlan2 dbs vars vars2 qu@(Query vars0 formula) =
 
 prepareQuery' :: (ResultRow row, Monad m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> [Var] -> m (QueryPlan2 m row)
 prepareQuery' dbs qr qr2 ir dr qu0 vars = do
-    let qu@(Query rvars _) = rewriteQuery vars qr qr2 ir dr qu0
+    let (Query rvars form) = rewriteQuery vars qr qr2 ir dr qu0
+    let qu = Query rvars (snd (addTransaction form))
     let insp = queryPlan dbs qu
     let qp2 = calculateVars vars rvars insp
     effective <- (runExceptT (checkQueryPlan dbs qp2))
@@ -63,8 +64,8 @@ prepareQuery' dbs qr qr2 ir dr qu0 vars = do
         Left (errmsg, formula) -> error (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu ++ show formula)
         Right _ -> do
             let qp3 = optimizeQueryPlan dbs qp2
-                qp4 = addTransaction qp3 in
-                prepareQueryPlan dbs qp4
+            qp4 <- prepareTransaction dbs [] qp3
+            prepareQueryPlan dbs (snd qp4)
 
 
 defaultRewritingLimit :: Int

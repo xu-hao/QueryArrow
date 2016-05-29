@@ -99,7 +99,7 @@ data Database m row = forall db stmt. (Database_ db m row stmt) => Database { un
 
 data QueryPlan = Exec Formula [Int]
                 | QPClassical PureQueryPlan
-                | QPTransaction QueryPlan
+                | QPTransaction
                 | QPChoice QueryPlan QueryPlan
                 | QPSequencing QueryPlan QueryPlan
                 | QPZero
@@ -133,7 +133,7 @@ dqdb = QueryPlanData [] [] [] [] [] [] [] Nothing Nothing
 
 data QueryPlanNode2 m row  = Exec2 Formula [Int]
                 | QPClassical2 (PureQueryPlan2 m row )
-                | QPTransaction2 (QueryPlan2 m row )
+                | QPTransaction2
                 | QPChoice2 (QueryPlan2 m row ) (QueryPlan2 m row )
                 | QPSequencing2 (QueryPlan2 m row ) (QueryPlan2 m row )
                 | QPZero2
@@ -159,7 +159,7 @@ instance ToTree (QueryPlan2 m row ) where
     toTree (qpd, QPSequencing2 qp1 qp2) = Node ("sequencing"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPChoice2 qp1 qp2) = Node ("choice"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPClassical2 qp1) = Node ("where" ++ show qpd) [toTree qp1]
-    toTree (qpd, QPTransaction2 qp1) = Node ("transaction" ++ show qpd) [toTree qp1]
+    toTree (qpd, QPTransaction2 ) = Node ("transaction" ++ show qpd) []
     toTree (qpd, QPZero2) = Node ("zero"++ show qpd ) []
     toTree (qpd, QPOne2) = Node ("one"++ show qpd ) []
 instance ToTree (PureQueryPlan2 m row ) where
@@ -180,7 +180,7 @@ formulaToQueryPlan dbs  form@(FAtomic (Atom pred0  _)) =
 formulaToQueryPlan _ FOne = QPOne
 formulaToQueryPlan _ FZero = QPZero
 formulaToQueryPlan dbs  (FClassical form) = QPClassical (formulaToQueryPlan' dbs  form)
-formulaToQueryPlan dbs  (FTransaction form) = QPTransaction (formulaToQueryPlan dbs  form)
+formulaToQueryPlan dbs  (FTransaction ) = QPTransaction
 formulaToQueryPlan dbs  (FChoice form1 form2) = QPChoice (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (FSequencing form1 form2) = QPSequencing (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  ins@(FInsert (Lit _ (Atom pred1 _))) =
@@ -223,8 +223,8 @@ simplifyQueryPlan  (QPSequencing qp1 qp2) =
             (_, _) -> QPSequencing qp1' qp2'
 simplifyQueryPlan  (QPClassical qp1) =
     QPClassical (simplifyPureQueryPlan  qp1)
-simplifyQueryPlan  (QPTransaction qp1) =
-    QPTransaction (simplifyQueryPlan  qp1)
+simplifyQueryPlan  (QPTransaction ) =
+    QPTransaction
 simplifyQueryPlan  qp = qp
 
 simplifyPureQueryPlan :: PureQueryPlan -> PureQueryPlan
@@ -330,8 +330,8 @@ optimizeQueryPlan dbsx (qpd, QPChoice2 qp1 qp2) =
             _ -> (qpd, QPChoice2 qp1' qp2')
 optimizeQueryPlan dbsx (qpd, QPClassical2 qp) =
     (qpd, QPClassical2 (optimizePureQueryPlan dbsx qp))
-optimizeQueryPlan dbsx (qpd, QPTransaction2 qp) =
-    (qpd, QPTransaction2 (optimizeQueryPlan dbsx qp))
+optimizeQueryPlan _ qp@(_, QPTransaction2) =
+    qp
 optimizeQueryPlan _ qp@(_, QPOne2) = qp
 optimizeQueryPlan _ qp@(_, QPZero2) = qp
 
@@ -439,8 +439,8 @@ checkQueryPlan _ (_, QPZero2) = do
 checkQueryPlan dbs (_, QPClassical2 qp) = do
     checkQueryPlan' dbs Pos qp
 
-checkQueryPlan dbs (_, QPTransaction2 qp) = do
-    checkQueryPlan dbs qp
+checkQueryPlan dbs (_, QPTransaction2) =
+    return ()
 
 
 checkQueryPlan' :: (Monad m) => [Database m row] -> Sign -> PureQueryPlan2 m row -> ExceptT (String, Formula) m ()
@@ -515,9 +515,8 @@ calculateVars1 rvars  (QPZero) = (dqdb{freevs = [], determinevs = [], inscopevs 
 calculateVars1 rvars  (QPClassical qp1) =
     let qp1'@(qpd1, _) = calculateVars1' rvars qp1 in
         (dqdb{freevs = freevs qpd1, determinevs = [], inscopevs = rvars} , QPClassical2 qp1')
-calculateVars1 rvars  (QPTransaction qp1) =
-    let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
-        (dqdb{freevs = freevs qpd1, determinevs = [], inscopevs = rvars} , QPTransaction2 qp1')
+calculateVars1 rvars  (QPTransaction) =
+        (dqdb{freevs = [], determinevs = [], inscopevs = rvars} , QPTransaction2)
 
 calculateVars1' :: [Var] -> PureQueryPlan -> PureQueryPlan2 m row
 calculateVars1' rvars  (QPOr qp1 qp2) =
@@ -559,9 +558,8 @@ calculateVars2 lvars  (qpd, QPZero2) = ( qpd{availablevs = lvars, paramvs = [], 
 calculateVars2 lvars  (qpd, QPClassical2 qp1) =
                 let qp1' = calculateVars2' lvars qp1 in
                     (qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = [],combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , QPClassical2 qp1')
-calculateVars2 lvars  (qpd, QPTransaction2 qp1) =
-                let qp1' = calculateVars2 lvars qp1 in
-                    (qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = [],combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , QPTransaction2 qp1')
+calculateVars2 lvars  (qpd, QPTransaction2) =
+    (qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars} , QPTransaction2)
 
 calculateVars2' :: [Var] -> PureQueryPlan2 m row  -> PureQueryPlan2 m row
 calculateVars2'  lvars (qpd, If2 form dbs)  =
@@ -589,11 +587,67 @@ calculateVars2' lvars  (qpd, QPTrue2) =
 calculateVars2' lvars  (qpd, QPFalse2) =
             ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars } , (QPFalse2))
 
-addTransaction :: QueryPlan2 m row -> QueryPlan2 m row
-addTransaction qp@(qpd, (Exec2 _ _)) = (qpd, QPTransaction2 qp)
-addTransaction (qpd, (QPSequencing2 qp1 qp2)) = (qpd, QPSequencing2 (addTransaction qp1) (addTransaction qp2))
-addTransaction (qpd, (QPChoice2 qp1 qp2)) = (qpd, QPChoice2 (addTransaction qp1) (addTransaction qp2))
-addTransaction qp = qp
+addTransaction :: Formula -> (Bool, Formula)
+addTransaction form@(FAtomic _) = (False, form)
+addTransaction form@(FInsert _) = (True, FSequencing FTransaction form)
+addTransaction (FSequencing form1 form2) =
+    case addTransaction form1 of
+        (False, form1') ->
+            let (b, form2') = addTransaction form2 in
+                (b, FSequencing form1' form2')
+        (True, form1') ->
+            (True, FSequencing form1' form2)
+addTransaction (FChoice form1 form2) =
+    let (b1, form1') = addTransaction form1
+        (b2, form2') = addTransaction form2 in
+        (b1 && b2, FChoice form1' form2')
+addTransaction form@(FTransaction) = (True, form)
+addTransaction form@(FZero) = (False, form)
+addTransaction form@(FOne) = (False, form)
+addTransaction form@(FClassical _) = (False, form)
+
+
+prepareTransaction :: (Monad m, ResultRow row) => [Database m row] -> [Int] -> QueryPlan2 m row  -> m ([Int], QueryPlan2 m row )
+prepareTransaction  _ _ (_, (Exec2  form [])) = error ("prepareQueryPlan: Exec2: no database" ++ show form)
+prepareTransaction _ rdbxs qp@(_, (Exec2 _ (x : _))) =
+    return (x : rdbxs, qp)
+prepareTransaction dbs rdbxs (qpd, QPChoice2 qp1 qp2) = do
+    (dbxs1, qp1') <- prepareTransaction dbs rdbxs qp1
+    (dbxs2, qp2') <- prepareTransaction dbs rdbxs qp2
+    return (dbxs1 `union` dbxs2, (qpd, QPChoice2 qp1' qp2'))
+prepareTransaction dbs rdbxs (qpd, QPSequencing2 qp1 qp2) = do
+    (dbxs2, qp2') <- prepareTransaction dbs rdbxs qp2
+    (dbxs1, qp1') <- prepareTransaction dbs dbxs2 qp1
+    return (dbxs1, (qpd, QPSequencing2 qp1' qp2'))
+prepareTransaction dbs rdbxs qp@(_, QPOne2) = return (rdbxs, qp)
+prepareTransaction dbs _ qp@(_, QPZero2) = return ([], qp)
+prepareTransaction dbs rdbxs (qpd, QPClassical2 qp) = do
+    (dbxs, qp') <- prepareTransaction' dbs rdbxs qp
+    return (dbxs, (qpd, QPClassical2 qp'))
+prepareTransaction dbs rdbxs qp@(qpd, QPTransaction2) =
+    return (rdbxs, (qpd{tdb = Just (map (dbs !!) rdbxs) }, QPTransaction2))
+
+prepareTransaction' :: (Monad m, ResultRow row) => [Database m row] -> [Int] -> PureQueryPlan2 m row  -> m ([Int], PureQueryPlan2 m row )
+prepareTransaction' _  _ (_, (If2 form [])) = error ("prepareQueryPlan': If2: no database" ++ show form)
+prepareTransaction' dbs rdbxs qp@(_, (If2 _ (x:_))) =
+            return (x:rdbxs, qp)
+prepareTransaction' dbs rdbxs (qpd, QPOr2 qp1 qp2) = do
+    (dbxs1, qp1') <- prepareTransaction' dbs rdbxs qp1
+    (dbxs2, qp2') <- prepareTransaction' dbs rdbxs qp2
+    return (dbxs1 `union` dbxs2, (qpd, QPOr2 qp1' qp2'))
+prepareTransaction' dbs rdbxs (qpd, QPAnd2 qp1 qp2) = do
+    (dbxs2, qp2') <- prepareTransaction' dbs rdbxs qp2
+    (dbxs1, qp1') <- prepareTransaction' dbs dbxs2 qp1
+    return (dbxs1, (qpd, QPAnd2 qp1' qp2'))
+prepareTransaction' dbs rdbxs (qpd, QPNot2 qp1) = do
+    (dbxs, qp1') <- prepareTransaction' dbs rdbxs qp1
+    return (dbxs, (qpd, QPNot2 qp1'))
+prepareTransaction' dbs rdbxs (qpd, QPExists2 v qp1) = do
+    (dbxs, qp1') <- prepareTransaction' dbs rdbxs qp1
+    return (dbxs, (qpd, QPExists2 v qp1'))
+prepareTransaction' _ rdbxs qp@(_, QPTrue2) = return (rdbxs, qp)
+prepareTransaction' _ _ qp@(_, QPFalse2) = return ([], qp)
+
 
 
 prepareQueryPlan :: (Monad m, ResultRow row) => [Database m row] -> QueryPlan2 m row  -> m (QueryPlan2 m row )
@@ -623,11 +677,8 @@ prepareQueryPlan _ qp@(_, QPZero2) = return qp
 prepareQueryPlan dbs (qpd, QPClassical2 qp) = do
     qp' <- prepareQueryPlan' dbs qp
     return (qpd, QPClassical2 qp')
-prepareQueryPlan dbs (qpd, QPTransaction2 qp) = do
-    qp' <- prepareQueryPlan dbs qp
-    let dbxs = scandb qp'
-    return (qpd{tdb = Just (map (dbs !!) dbxs) }, QPTransaction2 qp')
-
+prepareQueryPlan dbs qp@(_, QPTransaction2) =
+    return qp
 
 prepareQueryPlan' :: (Monad m, ResultRow row) => [Database m row] -> PureQueryPlan2 m row  -> m (PureQueryPlan2 m row )
 prepareQueryPlan' _  (_, (If2 form [])) = error ("prepareQueryPlan': If2: no database" ++ show form)
@@ -662,25 +713,6 @@ prepareQueryPlan' _ qp@(_, QPTrue2) = return qp
 prepareQueryPlan' _ qp@(_, QPFalse2) = return qp
 
 
-scandb :: QueryPlan2 m row  -> [Int]
-scandb (_, Exec2 _ []) = []
-scandb (_, Exec2 _ (x : _)) = [x]
-scandb (_, QPChoice2 qp1 qp2) = scandb qp1 `union` scandb qp2
-scandb (_, QPSequencing2 qp1 qp2) = scandb qp1 `union` scandb qp2
-scandb (_, QPOne2) = []
-scandb (_, QPZero2) = []
-scandb (_, QPClassical2 qp) = scandb' qp
-scandb (_, QPTransaction2 qp) = scandb qp
-
-scandb' :: PureQueryPlan2 m row  -> [Int]
-scandb' (_, (If2 _ [])) = []
-scandb' (_, (If2 _ (x:_))) = [x]
-scandb' (_, QPOr2 qp1 qp2) = scandb'  qp1 `union` scandb'  qp2
-scandb' (_, QPAnd2 qp1 qp2) = scandb'   qp1 `union` scandb'   qp2
-scandb' (_, QPNot2 qp1) = scandb'   qp1
-scandb' (_, QPExists2 _ qp1) = scandb'   qp1
-scandb' (_, QPTrue2) = []
-scandb' (_, QPFalse2) = []
 
 addCleanupRS :: (Monad m) => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
@@ -692,10 +724,10 @@ execQueryPlan (vars, rs) (qpd, Exec2 _ _) = do
         AbstractDBStatement stmt0 -> do
             (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                         row <- rs
-                        liftIO $ infoM "QA" ("current row  " ++ show row)
+                        liftIO $ infoM "QA" ("current row " ++ show row)
                         liftIO $ infoM "QA" ("execute " ++ stmtshow)
                         row2 <- dbStmtExec stmt0 vars (pure row)
-                        liftIO $ infoM "QA" ("returns rows")
+                        liftIO $ infoM "QA" ("returns row")
                         return (transform vars (combinedvs qpd) (row <> row2))))
 
 execQueryPlan  r (qpd, QPSequencing2 qp1 qp2) =
@@ -716,7 +748,7 @@ execQueryPlan (vars, rs) (qpd, QPClassical2 qp) =
             let (_, rs2) = execQueryPlan' (vars, (pure row)) qp
             emp <- isResultStreamEmpty rs2
             return (not emp)))
-execQueryPlan (vars, rs) (qpd, QPTransaction2 qp) =
+execQueryPlan (vars, rs) (qpd, QPTransaction2 ) =
     (inscopevs qpd, do
         let (begin, prepare, commit, rollback) = case tdb qpd of
                 Nothing -> error "execQueryPlan: tranaction without db"
@@ -730,23 +762,25 @@ execQueryPlan (vars, rs) (qpd, QPTransaction2 qp) =
                     mapM_ (\db -> case db of
                         Database db' -> dbRollback db') dbs)
         row <- rs
-        lift $ begin
-        addCleanupRS (\b ->
-                if b
+        let commitCleanup = do
+                b' <- prepare
+                if and b'
                     then do
-                        b' <- prepare
-                        if and b'
-                            then do
-                                b'' <- commit
-                                if and b''
-                                    then return ()
-                                    else error ("execQueryPlan: commit failed " ++ show b'' ++ " " ++ show (toTree qp))
+                        b'' <- commit
+                        if and b''
+                            then return ()
                             else do
-                                rollback
-                                error ("execQueryPlan: prepare failed rollback " ++ show b' ++ " " ++ show (toTree qp))
+                                liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
                     else do
                         rollback
-                        error ("execQueryPlan: stream terminated rollback " ++ show (toTree qp))) (snd (execQueryPlan (vars, (pure row)) qp)))
+                        liftIO $ errorM "QA" ("execQueryPlan: prepare failed rollback " ++ show b')
+        let rollbackCleanup = do
+                rollback
+                liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")
+        lift $ begin
+        ResultStream (do
+            yieldOr row rollbackCleanup
+            lift $ commitCleanup))
 
 execQueryPlan  r (_, QPOne2) = r
 execQueryPlan  (vars, rs) (_, QPZero2) = (vars, closeResultStream rs)
@@ -758,10 +792,10 @@ execQueryPlan' (vars, rs) (qpd, If2 _ _) = do
         AbstractDBStatement stmt0 -> do
             (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                     row <- rs
-                    liftIO $ infoM "QA" ("current row  " ++ show row)
+                    liftIO $ infoM "QA" ("current row " ++ show row)
                     liftIO $ infoM "QA" ("execute " ++ stmtshow)
                     row2 <- dbStmtExec stmt0 vars (pure row)
-                    liftIO $ infoM "QA" ("returns rows")
+                    liftIO $ infoM "QA" ("returns row")
                     return (transform vars (combinedvs qpd) (row <> row2))))
 execQueryPlan'  (vars, rs) (qpd, QPOr2 qp1 qp2) =
     (inscopevs qpd, do

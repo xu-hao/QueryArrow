@@ -70,7 +70,7 @@ instance DeterminedVars Formula where
     determinedVars dsp  (FAtomic atom0) = determinedVars dsp  atom0
     determinedVars _  (FInsert _) = return empty
     determinedVars _  (FClassical _) = return empty
-    determinedVars dsp  (FTransaction form) = determinedVars dsp  form
+    determinedVars dsp  (FTransaction ) = return empty
     determinedVars dsp  (FSequencing form1 form2) = do
         map1 <- determinedVars dsp form1
         map2 <- determinedVars dsp form2

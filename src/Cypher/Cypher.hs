@@ -1206,7 +1206,8 @@ instance Convertible ResultValue CypherExpr where
 
 data CypherState = CypherState {
     csUpdate  :: Bool,
-    csQuery :: Bool
+    csQuery :: Bool,
+    csReturn :: [Var]
 }
 
 translateableCypher :: CypherTrans -> Formula -> StateT CypherState Maybe ()
@@ -1223,7 +1224,7 @@ translateableCypher _ (FAtomic _) = do
             return ()
 translateableCypher _ (FInsert lit) = do
     cs <- get
-    if csQuery cs
+    if csQuery cs && not (null (csReturn cs `union` freeVars lit))
         then lift $ Nothing
         else do
             put cs{csUpdate = True}
@@ -1233,7 +1234,7 @@ translateableCypher trans (FClassical formula) = do
     if csUpdate cs
         then lift $ Nothing
         else translateableCypher' trans formula
-translateableCypher trans (FTransaction form) = translateableCypher trans form
+translateableCypher trans (FTransaction) = lift $ Nothing
 
 translateableCypher' :: CypherTrans -> PureFormula -> StateT CypherState Maybe ()
 translateableCypher' (CypherTrans builtin positiverequired predtablemap) (Not formula)  = lift $ Nothing
@@ -1268,9 +1269,9 @@ instance Translate CypherTrans MapResultRow CypherQuery where
             fovarcypherexprmap = foldMap (\v@(Var a) -> Map.singleton v (CypherParamExpr a)) env
             sql = runNew (evalStateT (translateQueryToCypher query) (builtin, predtablemap, empty, fovarcypherexprmap)) in
             (sql,  env)
-    translateable trans form vars = isJust (evalStateT (translateableCypher trans form) (CypherState False False))
+    translateable trans form vars = isJust (evalStateT (translateableCypher trans form ) (CypherState False False vars))
 
-    translateable' trans form _ = isJust (evalStateT (translateableCypher' trans form) (CypherState False False))
+    translateable' trans form vars = isJust (evalStateT (translateableCypher' trans form) (CypherState False False vars))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

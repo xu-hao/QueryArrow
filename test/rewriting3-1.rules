@@ -44,7 +44,7 @@ rewrite META_2(x, a, v, u) ⟶
                                 META(x, m, a, v, u)
                             ) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200)
 rewrite insert META_2(x, a, v, u) ⟶
-                            nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ ICAT.eq(acc,1200) ⊗
+                            transactional ⊗ nextid(m) ⊗ CLIENT_ID(user) ⊗ META_ATTR_ACCESS_OBJ(x, user, acc) ⊗ ICAT.eq(acc,1200) ⊗
                             ([ ¬ Neo4j.USER_OBJ(user) ] ⊗ insert Neo4j.USER_OBJ(user) ⊗ 𝟎 ⊕ 𝟏) ⊗
                             ([ ¬ Neo4j.DATA_OBJ(x) ] ⊗ insert Neo4j.DATA_OBJ(x) ⊗ 𝟎 ⊕ 𝟏) ⊗
                             insert Neo4j.META_OBJ(m) Neo4j.META_ACCESS_OBJ(m, x, user, 1200) ⊗
@@ -53,8 +53,12 @@ rewrite insert META_2(x, a, v, u) ⟶
                                 EqDB.eq(a, "searchable") ⊗ insert ES_META(x, m, a, v, u)
                             )
 
-rewrite delete META_2(x, a, v, u) ⟶  CLIENT_ID(user) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200) ⊗
-                            delete Neo4j.META_OBJ(m) Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗
+rewrite delete META_2(x, a, v, u) ⟶  transactional ⊗ CLIENT_ID(user) ⊗ (
+                                ES_META(x, m, a, v, u)  ⊕
+                                META(x, m, a, v, u)
+                            ) ⊗ Neo4j.META_ACCESS_OBJ(m, x, user, acc) ⊗ Neo4j.eq(acc, 1200) ⊗
+                            (Neo4j.META_ACCESS_OBJ(m, x, user2, acc2) ⊗ delete Neo4j.META_ACCESS_OBJ(m, x, user2, acc2) ⊗ 𝟎 ⊕ 𝟏) ⊗
+                            delete Neo4j.META_OBJ(m) ⊗
                             (
                                 [ ¬ EqDB.eq(a, "searchable") ] ⊗ delete OBJT_METAMAP_OBJ(x, m) ⊕
                                 EqDB.eq(a, "searchable") ⊗ delete ES_META(x, m, a, v, u)

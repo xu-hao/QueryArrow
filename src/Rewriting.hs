@@ -89,8 +89,8 @@ rewrite1 ext  qr qr2 ir dr form0 =
 
         (FClassical form) ->
             (FClassical <$> rewrite1' ext  qr  form)
-        (FTransaction form) ->
-            FTransaction <$> rewrite1 ext qr qr2 ir dr form
+        (FTransaction ) ->
+            return FTransaction
 
 rewrite1' :: [Var] -> [QueryRewritingRule] -> PureFormula -> NewEnv PureFormula
 rewrite1' ext  qr form0 =

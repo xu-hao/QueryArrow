@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "true", "false", "one", "zero"],
+    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "true", "false", "one", "zero"],
     T.reservedOpNames = ["~", "|", "⊗", "⊕", "∧", "∨", "∀", "∃", "¬", "⟶","𝟏","𝟎", "⊤", "⊥"],
     T.caseSensitive = True
 }
@@ -110,6 +110,9 @@ litp = Lit <$> (negp *> return Neg <|> return Pos) <*> atomp
 litsp :: FOParser [Lit]
 litsp = many1 litp
 
+transactionp :: FOParser ()
+transactionp = reserved "transactional"
+
 neg :: Lit -> Lit
 neg (Lit Pos a) = Lit Neg a
 neg (Lit Neg a) = Lit Pos a
@@ -117,7 +120,7 @@ neg (Lit Neg a) = Lit Pos a
 formula1p :: FOParser Formula
 formula1p = try (parens formulap)
        <|> (FAtomic <$> try atomp)
-       <|> (FTransaction <$> try (braces formulap))
+       <|> transactionp *> pure FTransaction
        <|> (FClassical <$> try (brackets formulap'))
        <|> onep *> pure FOne
        <|> zerop *> pure FZero
