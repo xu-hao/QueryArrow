@@ -13,7 +13,7 @@ import DBQuery
 import QueryPlan
 
 import Prelude hiding (lookup)
-import Data.List (intercalate, (\\), union , partition)
+import Data.List (intercalate, (\\), union , partition, intersect)
 import Control.Monad.Trans.State.Strict (State, StateT, get, put, evalState, runState, evalStateT, runStateT)
 import Control.Monad (foldM, guard)
 import Control.Arrow ((***))
@@ -1224,7 +1224,7 @@ translateableCypher _ (FAtomic _) = do
             return ()
 translateableCypher _ (FInsert lit) = do
     cs <- get
-    if csQuery cs && not (null (csReturn cs `union` freeVars lit))
+    if csQuery cs && not (null (csReturn cs `intersect` freeVars lit))
         then lift $ Nothing
         else do
             put cs{csUpdate = True}

@@ -146,15 +146,6 @@ run2 query ps = do
     pp <- run3 query tdb "rods" "tempZone"
     putStr (pprint pp)
 
-printQuery (TransDB _ dbs  _ (qr, qr2, ir, dr) ) params qu = do
-    let pqp qp = do
-            infoM "QA" ("query plan:")
-            infoM "QA" (drawTree (toTree  qp))
-    let qu'@(Query vars f') = rewriteQuery (keys params) qr qr2 ir dr qu
-    infoM "QA" ("original query: " ++ show qu)
-    infoM "QA" ("rewritten query: " ++ show qu')
-    pqp (queryPlan2 dbs (keys params) vars qu')
-
 run3 :: String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
 run3 query tdb user zone = do
     let predmap = constructDBPredMap [Database tdb]
@@ -167,7 +158,6 @@ run3 query tdb user zone = do
                             Right (qu@(Query vars _), _) ->
                                 case runExcept (checkQuery qu) of
                                     Right _ -> do
-                                        liftIO $ printQuery tdb params qu
                                         rows <- getAllResultsInStream ( doQuery tdb qu (keys params) (pure params))
                                         return (vars, rows)
                                     Left e -> error e) (DBAdapterState Nothing)

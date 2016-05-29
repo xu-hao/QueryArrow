@@ -31,6 +31,7 @@ import Data.Maybe
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
 import System.Log.Logger
+import Data.Tree
 
 -- exec query from dbname
 
@@ -53,10 +54,11 @@ queryPlan2 dbs vars vars2 qu@(Query vars0 formula) =
         qp2 = calculateVars vars vars2 qp1 in
         optimizeQueryPlan dbs qp2
 
-prepareQuery' :: (ResultRow row, Monad m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> [Var] -> m (QueryPlan2 m row)
+prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> [Var] -> m (QueryPlan2 m row)
 prepareQuery' dbs qr qr2 ir dr qu0 vars = do
-    let (Query rvars form) = rewriteQuery vars qr qr2 ir dr qu0
-    let qu = Query rvars (snd (addTransaction form))
+    liftIO $ infoM "QA" ("original query: " ++ show qu0)
+    let qu@(Query rvars form) = rewriteQuery vars qr qr2 ir dr qu0
+    liftIO $ infoM "QA" ("rewritten query: " ++ show qu)
     let insp = queryPlan dbs qu
     let qp2 = calculateVars vars rvars insp
     effective <- (runExceptT (checkQueryPlan dbs qp2))
@@ -64,9 +66,14 @@ prepareQuery' dbs qr qr2 ir dr qu0 vars = do
         Left (errmsg, formula) -> error (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu ++ show formula)
         Right _ -> do
             let qp3 = optimizeQueryPlan dbs qp2
-            qp4 <- prepareTransaction dbs [] qp3
+            let qp3' = addTransaction' qp3
+            liftIO $ printQueryPlan qp3'
+            qp4 <- prepareTransaction dbs [] qp3'
             prepareQueryPlan dbs (snd qp4)
 
+printQueryPlan qp = do
+    infoM "QA" ("query plan:")
+    infoM "QA" (drawTree (toTree  qp))
 
 defaultRewritingLimit :: Int
 defaultRewritingLimit = 100

@@ -587,24 +587,37 @@ calculateVars2' lvars  (qpd, QPTrue2) =
 calculateVars2' lvars  (qpd, QPFalse2) =
             ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars } , (QPFalse2))
 
-addTransaction :: Formula -> (Bool, Formula)
-addTransaction form@(FAtomic _) = (False, form)
-addTransaction form@(FInsert _) = (True, FSequencing FTransaction form)
-addTransaction (FSequencing form1 form2) =
-    case addTransaction form1 of
-        (False, form1') ->
-            let (b, form2') = addTransaction form2 in
-                (b, FSequencing form1' form2')
-        (True, form1') ->
-            (True, FSequencing form1' form2)
-addTransaction (FChoice form1 form2) =
-    let (b1, form1') = addTransaction form1
-        (b2, form2') = addTransaction form2 in
-        (b1 && b2, FChoice form1' form2')
-addTransaction form@(FTransaction) = (True, form)
-addTransaction form@(FZero) = (False, form)
-addTransaction form@(FOne) = (False, form)
-addTransaction form@(FClassical _) = (False, form)
+addTransaction' :: QueryPlan2 m row -> QueryPlan2 m row
+addTransaction' = snd . addTransaction
+
+addTransaction :: QueryPlan2 m row -> (Bool, QueryPlan2 m row )
+addTransaction qp@(qpd, Exec2 form _) | pureF form = (False, qp)
+                                    | otherwise = (True, (qpd, QPSequencing2 (QueryPlanData{
+                                        availablevs = availablevs qpd,
+                                        paramvs = [],
+                                        returnvs = [],
+                                        combinedvs = combinedvs qpd,
+                                        inscopevs = inscopevs qpd,
+                                        determinevs = [],
+                                        freevs = [],
+                                        stmts = Nothing,
+                                        tdb = Nothing
+                                    }, QPTransaction2) qp))
+addTransaction (qpd, QPSequencing2 qp1 qp2) =
+    case addTransaction qp1 of
+        (False, qp1') ->
+            let (b, qp2') = addTransaction qp2 in
+                (b, (qpd, QPSequencing2 qp1' qp2'))
+        (True, qp1') ->
+            (True, (qpd, QPSequencing2 qp1' qp2))
+addTransaction (qpd, (QPChoice2 qp1 qp2)) =
+    let (b1, qp1') = addTransaction qp1
+        (b2, qp2') = addTransaction qp2 in
+        (b1 && b2, (qpd, QPChoice2 qp1' qp2'))
+addTransaction qp@(_, QPTransaction2) = (True, qp)
+addTransaction qp@(_, QPZero2) = (False, qp)
+addTransaction qp@(_, QPOne2) = (False, qp)
+addTransaction qp@(_, QPClassical2 _) = (False, qp)
 
 
 prepareTransaction :: (Monad m, ResultRow row) => [Database m row] -> [Int] -> QueryPlan2 m row  -> m ([Int], QueryPlan2 m row )

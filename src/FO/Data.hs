@@ -499,7 +499,7 @@ instance FreeVars a => FreeVars (Set a) where
 pureF :: Formula -> Bool
 pureF (FAtomic _) = True
 pureF (FClassical _) = False
-pureF (FTransaction ) = True
+pureF (FTransaction ) = False
 pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
 pureF (FInsert _) = False
