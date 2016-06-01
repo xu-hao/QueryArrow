@@ -1,0 +1,15 @@
+{
+    "db_plugins": [{
+        "db_info" : {
+            "db_port" : 26257,
+            "db_name" : ["CR"],
+            "db_path" : [],
+            "db_password" : "",
+            "db_host" : "localhost",
+            "db_username" : "root",
+            "db_odbc_type" : "unix",
+            "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+        }
+    }],
+    "rewriting_file_path" : ""
+}

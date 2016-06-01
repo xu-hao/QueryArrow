@@ -33,6 +33,16 @@
         }
     }, {
         "db_info" : {
+            "db_port" : 26257,
+            "db_name" : ["CR"],
+            "db_path" : [],
+            "db_password" : "",
+            "db_host" : "localhost",
+            "db_username" : "root",
+            "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+        }
+    }, {
+        "db_info" : {
             "db_port" : 9200,
             "db_name" : ["ES_META"],
             "db_path" : ["ES_META", "ES_META"],

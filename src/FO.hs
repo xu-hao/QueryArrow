@@ -13,6 +13,7 @@ import DBQuery
 import Utils
 -- import Plugins
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
+import qualified SQL.HDBC.CockroachDB as CockroachDB
 import qualified Cypher.Neo4j as Neo4j
 import qualified InMemory as InMemory
 import qualified ElasticSearch.ElasticSearch as ElasticSearch
@@ -147,6 +148,7 @@ getRewriting predmap ps = do
 dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])
 dbMap = fromList [
     ("SQL/HDBC/PostgreSQL", PostgreSQL.getDB),
+    ("SQL/HDBC/CockroachDB", CockroachDB.getDB),
     ("Cypher/Neo4j", Neo4j.getDB),
     ("InMemory/EqDB", \ps -> return [Database (InMemory.EqDB (db_name ps !! 0))]),
     ("ElasticSearch/ElasticSearch", ElasticSearch.getDB)

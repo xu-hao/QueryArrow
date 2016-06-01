@@ -22,9 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Convertible.Base
 import Data.Monoid
 import Data.Maybe
-import Data.Set ()
-import qualified Data.Set as Set
-import Control.Applicative ((<$>), liftA2)
+import Control.Applicative ((<$>))
 import Control.Monad.Trans.Class
 import qualified Data.Text as T
 import System.Log.Logger
@@ -732,6 +730,8 @@ translateableCypher trans (FClassical formula) = do
         then lift $ Nothing
         else translateableCypher' trans formula
 translateableCypher trans (FTransaction) = lift $ Nothing
+translateableCypher trans (FOne) = return ()
+translateableCypher trans (FZero) = lift $ Nothing
 
 translateableCypher' :: CypherTrans -> PureFormula -> StateT CypherState Maybe ()
 translateableCypher' (CypherTrans builtin positiverequired predtablemap) (Not formula)  = lift $ Nothing
@@ -741,6 +741,8 @@ translateableCypher' trans (Conjunction form1 form2)  = do
     translateableCypher' trans form2
 translateableCypher' trans (Disjunction form1 form2)  = lift $ Nothing
 translateableCypher' _ (Atomic _)  = return ()
+translateableCypher' trans (CTrue) = return ()
+translateableCypher' trans (CFalse) = lift $ Nothing
 
 instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
     extractDomainSize conn trans varDomainSize (Atom name args) =
