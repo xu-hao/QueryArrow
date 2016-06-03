@@ -48,6 +48,7 @@ executable QueryArrow
                    hslogger,
                    exceptions,
                    utf8-string,
+                   regex-tdfa,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

@@ -25,6 +25,8 @@ import Data.Maybe
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as B8
 import Text.ParserCombinators.Parsec hiding (State)
+import Text.Regex.TDFA ((=~))
+import Data.Text (Text, unpack)
 import Debug.Trace
 
 
@@ -156,6 +158,58 @@ mapDBFilterResults rows  results (FAtomic (Atom thepred args)) = do
             guard False
             return mempty
 
+
+-- example RegexDB
+
+data RegexDB (m :: * -> *) = RegexDB String
+
+pattern RegexPred ns = Pred (QPredName ns "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"])
+
+data RegexDBStmt = RegexDBStmt Query
+instance (Monad m) => Database_ (RegexDB m) m MapResultRow RegexDBStmt where
+    dbBegin _ = return ()
+    dbPrepare _ = return True
+    dbCommit _ = return True
+    dbRollback _ = return ()
+    getName (RegexDB name) = name
+    getPreds db = [ RegexPred (getName db)]
+    domainSize _ _ _ = return empty
+    prepareQuery _ qu _ = return (RegexDBStmt qu)
+    translateQuery _ qu vars = (show qu, vars)
+
+    supported _ (FAtomic (Atom (RegexPred _) _)) _ = True
+    supported _ _ _ = False
+    supported' _ (Atomic (Atom (RegexPred _) _)) _ = True
+    supported' _ (Not (Atomic (Atom (RegexPred _) _))) _ = True
+    supported' _ _ _ = False
+
+instance (Monad m) => DBStatementClose m (RegexDBStmt) where
+    dbStmtClose _ = return ()
+
+extractStringFromExpr :: ResultValue -> String
+extractStringFromExpr (StringValue s) = unpack s
+extractStringFromExpr a = error "cannot extract string from nonstring"
+
+instance (Monad m) => DBStatementExec m MapResultRow (RegexDBStmt) where
+    dbStmtExec (RegexDBStmt (Query _ (FAtomic (Atom _ [a, b])))) rsvars stream = do
+        row <- stream
+        if extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b)
+            then return mempty
+            else emptyResultStream
+
+    dbStmtExec (RegexDBStmt (Query _ (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
+        row <- stream
+        if extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b)
+            then return mempty
+            else emptyResultStream
+
+    dbStmtExec (RegexDBStmt (Query _ (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
+        row <- stream
+        if not (extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b))
+            then return mempty
+            else emptyResultStream
+
+    dbStmtExec (RegexDBStmt qu) rsvars stream = error ("dqdb: unsupported query " ++ show qu)
 
 -- example EqDB
 
