@@ -40,7 +40,7 @@ limitvarsInRow vars row = transform (keys row) vars row
 
 data MapDB (m :: * -> * )= MapDB String String [(ResultValue, ResultValue)] deriving Show
 
-data MapDBStmt m = MapDBStmt (MapDB m) Query
+data MapDBStmt m = MapDBStmt (MapDB m) [Var] Query
 instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m) where
     dbBegin _ = return ()
     dbCommit _ = return True
@@ -54,18 +54,18 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
                     mmins (map (exprDomainSizeMap varDomainSize (Bounded (length rows))) args))
              -- this just look up each var from the varDomainSize
     domainSize _ _ _ = return empty
-    prepareQuery db qu _ = return (MapDBStmt db qu)
+    prepareQuery db vars qu _ = return (MapDBStmt db vars qu)
     supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
     supported _ _ _ = False
     supported' (MapDB name predname _) (Atomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
     supported' _ _ _ = False
-    translateQuery _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, vars)
 
 instance (Monad m) => DBStatementClose m (MapDBStmt m) where
     dbStmtClose _ = return ()
 
 instance (Monad m) => DBStatementExec m MapResultRow (MapDBStmt m) where
-    dbStmtExec  (MapDBStmt (MapDB _ _ rows) (Query vars form@(FAtomic _))) _ stream  = do
+    dbStmtExec  (MapDBStmt (MapDB _ _ rows) vars (Query  form@(FAtomic _))) _ stream  = do
         row2 <- mapDBFilterResults rows stream form
         return (limitvarsInRow vars row2)
 
@@ -74,7 +74,7 @@ instance (Monad m) => DBStatementExec m MapResultRow (MapDBStmt m) where
 
 data StateMapDB (m :: * -> * )= StateMapDB String String deriving Show
 
-data StateMapDBStmt m = StateMapDBStmt (StateMapDB m) Query
+data StateMapDBStmt m = StateMapDBStmt (StateMapDB m) [Var] Query
 
 instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue, ResultValue)]) m) MapResultRow (StateMapDBStmt m) where
     dbBegin _ = return ()
@@ -89,24 +89,24 @@ instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue
                 return (mmins (map (exprDomainSizeMap varDomainSize (Bounded (length rows))) args))
             -- this just look up each var from the varDomainSize
     domainSize _ _ _ = return empty
-    prepareQuery db qu _ = return (StateMapDBStmt db qu)
+    prepareQuery db vars2 qu _ = return (StateMapDBStmt db vars2 qu)
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
     supported _ _ _ = False
     supported' _ (Atomic _) _ = True
     supported' _ _ _ = False
-    translateQuery _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, vars)
 
 instance (Monad m) => DBStatementClose (StateT (Map String [(ResultValue, ResultValue)]) m) (StateMapDBStmt m) where
     dbStmtClose _ = return ()
 
 instance (Monad m) => DBStatementExec (StateT (Map String [(ResultValue, ResultValue)]) m) MapResultRow (StateMapDBStmt m) where
-    dbStmtExec (StateMapDBStmt (StateMapDB name _) (Query vars form@(FAtomic _))) _ stream  = do
+    dbStmtExec (StateMapDBStmt (StateMapDB name _) vars (Query  form@(FAtomic _))) _ stream  = do
         rowsmap <- lift get
         let rows = rowsmap ! name
         row2 <- mapDBFilterResults rows stream form
         return (limitvarsInRow vars row2)
-    dbStmtExec (StateMapDBStmt (StateMapDB name _) (Query vars (FInsert lit@(Lit thesign _))))  rsvars stream = do
+    dbStmtExec (StateMapDBStmt (StateMapDB name _) vars (Query  (FInsert lit@(Lit thesign _))))  rsvars stream = do
         rowsmap <- lift get
         let rows = rowsmap ! name
         let freevars = freeVars lit
@@ -174,8 +174,8 @@ instance (Monad m) => Database_ (RegexDB m) m MapResultRow RegexDBStmt where
     getName (RegexDB name) = name
     getPreds db = [ RegexPred (getName db)]
     domainSize _ _ _ = return empty
-    prepareQuery _ qu _ = return (RegexDBStmt qu)
-    translateQuery _ qu vars = (show qu, vars)
+    prepareQuery _ _ qu _ = return (RegexDBStmt qu)
+    translateQuery _ _ qu vars = (show qu, vars)
 
     supported _ (FAtomic (Atom (RegexPred _) _)) _ = True
     supported _ _ _ = False
@@ -191,19 +191,19 @@ extractStringFromExpr (StringValue s) = unpack s
 extractStringFromExpr a = error "cannot extract string from nonstring"
 
 instance (Monad m) => DBStatementExec m MapResultRow (RegexDBStmt) where
-    dbStmtExec (RegexDBStmt (Query _ (FAtomic (Atom _ [a, b])))) rsvars stream = do
+    dbStmtExec (RegexDBStmt (Query (FAtomic (Atom _ [a, b])))) rsvars stream = do
         row <- stream
         if extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b)
             then return mempty
             else emptyResultStream
 
-    dbStmtExec (RegexDBStmt (Query _ (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
+    dbStmtExec (RegexDBStmt (Query (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
         row <- stream
         if extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b)
             then return mempty
             else emptyResultStream
 
-    dbStmtExec (RegexDBStmt (Query _ (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
+    dbStmtExec (RegexDBStmt (Query (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
         row <- stream
         if not (extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b))
             then return mempty
@@ -226,8 +226,8 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     getName (EqDB name) = name
     getPreds db = [ EqPred (getName db)]
     domainSize _ _ _ = return empty
-    prepareQuery _ qu _ = return (EqDBStmt qu)
-    translateQuery _ qu vars = (show qu, vars)
+    prepareQuery _ _ qu _ = return (EqDBStmt qu)
+    translateQuery _ _ qu vars = (show qu, vars)
 
     supported _ (FAtomic (Atom (EqPred _) _)) _ = True
     supported _ _ _ = False
@@ -246,19 +246,19 @@ evalExpr row (VarExpr v) = case lookup v row of
     Just r -> r
 
 instance (Monad m) => DBStatementExec m MapResultRow (EqDBStmt) where
-    dbStmtExec (EqDBStmt (Query _ (FAtomic (Atom _ [a, b])))) rsvars stream = do
+    dbStmtExec (EqDBStmt (Query (FAtomic (Atom _ [a, b])))) rsvars stream = do
         row <- stream
         if evalExpr row a == evalExpr row b
             then return mempty
             else emptyResultStream
 
-    dbStmtExec (EqDBStmt (Query _ (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
+    dbStmtExec (EqDBStmt (Query (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
         row <- stream
         if evalExpr row a == evalExpr row b
             then return mempty
             else emptyResultStream
 
-    dbStmtExec (EqDBStmt (Query _ (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
+    dbStmtExec (EqDBStmt (Query (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
         row <- stream
         if evalExpr row a /= evalExpr row b
             then return mempty

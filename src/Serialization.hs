@@ -12,11 +12,20 @@ data ResultSet = ResultSet {
     results :: [[String]]
 } deriving (Generic, Show)
 
+data QuerySet = QuerySet {
+    qsheaders :: [String],
+    qsquery :: String,
+    qsuser :: String,
+    qszone :: String
+} deriving (Generic, Show)
+
 instance FromJSON ResultSet
 instance ToJSON ResultSet
+instance FromJSON QuerySet
+instance ToJSON QuerySet
 
-resultSet :: [Map String String] -> [String] -> ResultSet
-resultSet rows vars =
+resultSet :: [String] -> [Map String String] -> ResultSet
+resultSet vars rows =
     ResultSet vars (map (\ row -> map (\var -> case lookup var row of
                                                     Nothing -> "null"
                                                     Just v -> v) vars) rows)

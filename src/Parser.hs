@@ -23,8 +23,8 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "true", "false", "one", "zero"],
-    T.reservedOpNames = ["~", "|", "⊗", "⊕", "∧", "∨", "∀", "∃", "¬", "⟶","𝟏","𝟎", "⊤", "⊥"],
+    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero"],
+    T.reservedOpNames = ["~", "|", "⊗", "⊕", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
 
@@ -80,12 +80,6 @@ andp = optional (reservedOp "∧")
 orp :: FOParser ()
 orp = reservedOp "|" <|> reservedOp "∨"
 
-truep :: FOParser ()
-truep = reserved "true" <|> reservedOp "⊤"
-
-falsep :: FOParser ()
-falsep = reserved "false" <|> reservedOp "⊥"
-
 existsp :: FOParser ()
 existsp = reserved "exists" <|> reservedOp "∃"
 
@@ -117,11 +111,24 @@ neg :: Lit -> Lit
 neg (Lit Pos a) = Lit Neg a
 neg (Lit Neg a) = Lit Pos a
 
+notexistsp :: FOParser PureFormula
+notexistsp = (Not <$> (negp >> formula1p'))
+        <|> (do
+            existsp
+            vars <- varsp
+            _ <- dot
+            form <- formulap'
+            return (foldr Exists form vars))
+
+returnp :: FOParser [Var]
+returnp = reserved "return" *> varsp
+
 formula1p :: FOParser Formula
 formula1p = try (parens formulap)
+       <|> (FReturn <$> returnp)
        <|> (FAtomic <$> try atomp)
        <|> transactionp *> pure FTransaction
-       <|> (FClassical <$> try (brackets formulap'))
+       <|> (FClassical <$> notexistsp)
        <|> onep *> pure FOne
        <|> zerop *> pure FZero
        <|> (fsequencing . map FInsert) <$> (reserved "insert" >> litsp)
@@ -129,16 +136,11 @@ formula1p = try (parens formulap)
 
 formula1p' :: FOParser PureFormula
 formula1p' = try (parens formulap')
-      <|> (Not <$> (negp >> formula1p'))
-      <|> (do
-          existsp
-          vars <- varsp
-          _ <- dot
-          form <- formulap'
-          return (foldr Exists form vars))
+      <|> notexistsp
+      <|> (Return <$> returnp)
       <|> (Atomic <$> try atomp)
-      <|> truep *> pure CTrue
-      <|> falsep *> pure CFalse
+      <|> onep *> pure CTrue
+      <|> zerop *> pure CFalse
 
 formulap :: FOParser Formula
 formulap = do
@@ -152,12 +154,12 @@ formulaSequencingp = do
 
 formulaConjp :: FOParser PureFormula
 formulaConjp = do
-    formula1s <- sepBy formula1p' andp
+    formula1s <- sepBy formula1p' timesp
     return (conj formula1s)
 
 formulap' :: FOParser PureFormula
 formulap' = do
-    formulaConjs <- sepBy formulaConjp orp
+    formulaConjs <- sepBy formulaConjp plusp
     return (disj formulaConjs)
 
 
@@ -194,12 +196,10 @@ varsp = many1 varp
 progp :: FOParser (Query, PredMap)
 progp = do
     whiteSpace
-    q <- formulap
-    qv <- reserved "return" *> (Query <$> varsp <*> return q)
-      <|> (Query [] <$> return q)
+    q <- Query <$> formulap
     eof
     (_, predmap) <- getState
-    return (qv, predmap)
+    return (q, predmap)
 
 
 rulep :: FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])

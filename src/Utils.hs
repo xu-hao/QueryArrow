@@ -68,8 +68,8 @@ dbCatch action =
             return (Right r)) (\e ->
                 return (Left e))
 
-pprint :: ([String], [Map String String]) -> String
-pprint (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+pprint :: [String] -> [Map String String] -> String
+pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
     join = intercalate " " . map (uncurry pad) . zip collen
     rowstrs = map join m2
     m2 = transpose m

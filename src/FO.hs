@@ -36,29 +36,29 @@ import Data.Tree
 
 -- exec query from dbname
 
-getAllResults2 :: (MonadIO m, ResultRow row) => [Database m row] -> Query -> m [row]
-getAllResults2 dbs query = do
-    qp <- prepareQuery' dbs  [] [] [] [] query []
+getAllResults2 :: (MonadIO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
+getAllResults2 dbs rvars query = do
+    qp <- prepareQuery' dbs  [] [] [] [] rvars query []
     let (_, stream) = execQueryPlan ([], pure mempty) qp
     getAllResultsInStream stream
 
 queryPlan :: (ResultRow row, Monad m) => [Database m row ] -> Query ->  QueryPlan
-queryPlan dbs qu@(Query vars formula) =
+queryPlan dbs qu@(Query  formula) =
     let qp = formulaToQueryPlan dbs formula
         qp1 = simplifyQueryPlan qp in
         qp1
 
-queryPlan2 :: (ResultRow row, Monad m) => [Database m row ] -> [Var] -> [Var] -> Query -> QueryPlan2 m row
-queryPlan2 dbs vars vars2 qu@(Query vars0 formula) =
+queryPlan2 :: (ResultRow row, Monad m) => [Database m row ] -> [Var] -> MSet Var -> Query -> QueryPlan2 m row
+queryPlan2 dbs vars vars2 qu@(Query  formula) =
     let qp = formulaToQueryPlan dbs formula
         qp1 = simplifyQueryPlan qp
         qp2 = calculateVars vars vars2 qp1 in
         optimizeQueryPlan dbs qp2
 
-prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> [Var] -> m (QueryPlan2 m row)
-prepareQuery' dbs qr qr2 ir dr qu0 vars = do
+prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> m (QueryPlan2 m row)
+prepareQuery' dbs qr qr2 ir dr rvars qu0 vars = do
     liftIO $ infoM "QA" ("original query: " ++ show qu0)
-    let qu@(Query rvars form) = rewriteQuery vars qr qr2 ir dr qu0
+    let qu@(Query form) = rewriteQuery  qr qr2 ir dr rvars qu0 vars
     liftIO $ infoM "QA" ("rewritten query: " ++ show qu)
     let insp = queryPlan dbs qu
     let qp2 = calculateVars vars rvars insp
@@ -82,9 +82,11 @@ defaultRewritingLimit = 100
 type RewritingRuleSets = ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
 data TransDB m row = TransDB String [Database m row ]  [Pred] RewritingRuleSets
 
-rewriteQuery :: [Var] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Query -> Query
-rewriteQuery ext qr qr2 ir dr (Query vars form) = Query vars (runNew (do
-    registerVars (vars `union` freeVars form)
+rewriteQuery :: [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> Query
+rewriteQuery  qr qr2 ir dr vars (Query form) ext = Query (runNew (do
+    registerVars ((case vars of
+        Include vars -> vars
+        Exclude vars -> vars)  `union` freeVars form)
     rewrites defaultRewritingLimit ext   qr qr2 ir dr form))
 
 instance (Monad m, ResultRow row) => DBStatementClose m (QueryPlan2 m row) where
@@ -108,8 +110,8 @@ instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPla
                 else
                     return []) dbs
         return (foldl1 (intersectionWith (+)) (concat mps))
-    prepareQuery (TransDB _ dbs _ (qr, qr2, ir, dr) ) qu =
-        prepareQuery' dbs  qr qr2 ir dr qu
+    prepareQuery (TransDB _ dbs _ (qr, qr2, ir, dr) ) vars2 qu =
+        prepareQuery' dbs  qr qr2 ir dr (Include vars2) qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
     supported _ _ _ = True
     supported' _ _ _ = True
@@ -125,10 +127,10 @@ instance (MonadIO m, ResultRow row, DBStatementExec m row stmt, DBStatementClose
     getName (RestrictDB _ _ db ) = "RestrictDB " ++ getName db
     getPreds (RestrictDB preds _ _) = preds
     domainSize (RestrictDB _ pmap db) domainsizemap form = domainSize db domainsizemap (substPred pmap form)
-    prepareQuery (RestrictDB _ pmap db) (Query vars form) = prepareQuery db (Query vars (substPred pmap form))
+    prepareQuery (RestrictDB _ pmap db) vars (Query  form) = prepareQuery db vars (Query  (substPred pmap form))
     supported (RestrictDB _ pmap db) form = supported db (substPred pmap form)
     supported' (RestrictDB _ pmap db) form = supported' db (substPred pmap form)
-    translateQuery (RestrictDB _ pmap db) (Query vars form) = translateQuery db (Query vars (substPred pmap form))
+    translateQuery (RestrictDB _ pmap db) vars (Query  form) = translateQuery db vars (Query  (substPred pmap form))
 
 extractClassicalRules rules = concatMap (\r -> case extractClassicalRule r of
                                                     Left _ -> []

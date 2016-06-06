@@ -502,8 +502,8 @@ extractPropertyVarInNodePattern env n@(NodePattern v l p) (CypherVarExprMap vmap
                         ) (CypherTrueCond, [], vmap) p in
                 (cond', NodePattern v l props', CypherVarExprMap vmap')
 
-translateQueryToCypher :: Query -> [Var] -> TransMonad CypherQuery
-translateQueryToCypher (Query vars conj) env = do
+translateQueryToCypher :: [Var] -> Query -> [Var] -> TransMonad CypherQuery
+translateQueryToCypher vars (Query  conj) env = do
     lift $ registerVars env
     cypher <- translateFormulaToCypher vars conj env
     return (CypherQuery vars cypher env)
@@ -755,9 +755,9 @@ instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn
             (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
 instance Translate CypherTrans MapResultRow CypherQuery where
-    translateQueryWithParams trans query@(Query vars _) env =
+    translateQueryWithParams trans vars query env =
         let (CypherTrans builtin _ predtablemap) = trans
-            sql = runNew (evalStateT (translateQueryToCypher query env) (builtin, predtablemap)) in
+            sql = runNew (evalStateT (translateQueryToCypher vars query env) (builtin, predtablemap)) in
             (sql,  env)
     translateable trans form vars = isJust (evalStateT (translateableCypher trans form ) (CypherState False False vars))
 

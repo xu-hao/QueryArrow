@@ -57,13 +57,13 @@ instance SubstituteResultValue Lit where
 
 
 -- query
-data Query = Query { select :: [Var], cond :: Formula }
+newtype Query = Query Formula
 
 checkQuery :: Query -> Except String ()
-checkQuery (Query _ form) = checkFormula form
+checkQuery (Query form) = checkFormula form
 
 instance Show Query where
-    show (Query vars disjs) = show disjs ++ (if (null vars) then "" else " return " ++ intercalate " " (map show vars))
+    show (Query  disjs) = show disjs
 
 
 class DBStatementExec m row stmt where
@@ -83,14 +83,14 @@ class (Monad m, DBStatementClose m stmt, DBStatementExec m row stmt) => Database
     -- domainSize function is a function from arguments to domain size
     -- it is used to compute the optimal query plan
     domainSize :: db -> DomainSizeMap -> DomainSizeFunction (m) Atom
-    prepareQuery :: db -> Query -> [Var] -> m stmt
+    prepareQuery :: db -> [Var] -> Query -> [Var] -> m stmt
     supported :: db -> Formula -> [Var] -> Bool
     supported' :: db -> PureFormula -> [Var] -> Bool
-    translateQuery :: db -> Query -> [Var] -> (String, [Var])
+    translateQuery :: db -> [Var] -> Query -> [Var] -> (String, [Var])
 
-doQuery :: Database_ db m row stmt => db -> Query -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
-doQuery db qu vars rs = do
-        stmt <- lift $ prepareQuery db qu vars
+doQuery :: Database_ db m row stmt => db -> [Var] -> Query -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
+doQuery db vars2 qu vars rs = do
+        stmt <- lift $ prepareQuery db vars2 qu vars
         dbStmtExec stmt vars rs
 
 
@@ -98,6 +98,7 @@ doQuery db qu vars rs = do
 data Database m row = forall db stmt. (Database_ db m row stmt) => Database { unDatabase :: db }
 
 data QueryPlan = Exec Formula [Int]
+                | QPReturn [Var]
                 | QPClassical PureQueryPlan
                 | QPTransaction
                 | QPChoice QueryPlan QueryPlan
@@ -106,6 +107,7 @@ data QueryPlan = Exec Formula [Int]
                 | QPOne
 
 data PureQueryPlan = If PureFormula [Int]
+                | QPRestrict [Var]
                 | QPAnd (PureQueryPlan) (PureQueryPlan)
                 | QPOr (PureQueryPlan) (PureQueryPlan)
                 | QPTrue
@@ -117,7 +119,8 @@ data PureQueryPlan = If PureFormula [Int]
 data AbstractDBStatement m row = forall stmt. (DBStatementClose m stmt, DBStatementExec m row stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
 
 data QueryPlanData m row  = QueryPlanData {
-    inscopevs :: [Var],
+    linscopevs :: MSet Var,
+    rinscopevs :: MSet Var,
     freevs :: [Var],
     determinevs :: [Var], -- determined vars
     paramvs :: [Var], -- parameter vars
@@ -129,9 +132,10 @@ data QueryPlanData m row  = QueryPlanData {
 }
 
 dqdb :: QueryPlanData m row
-dqdb = QueryPlanData [] [] [] [] [] [] [] Nothing Nothing
+dqdb = QueryPlanData (Exclude []) (Exclude []) [] [] [] [] [] [] Nothing Nothing
 
 data QueryPlanNode2 m row  = Exec2 Formula [Int]
+                | QPReturn2 [Var]
                 | QPClassical2 (PureQueryPlan2 m row )
                 | QPTransaction2
                 | QPChoice2 (QueryPlan2 m row ) (QueryPlan2 m row )
@@ -140,6 +144,7 @@ data QueryPlanNode2 m row  = Exec2 Formula [Int]
                 | QPOne2
 
 data PureQueryPlanNode2 m row  = If2 PureFormula [Int]
+                | QPRestrict2 [Var]
                 | QPAnd2 (PureQueryPlan2 m row ) (PureQueryPlan2 m row )
                 | QPOr2 (PureQueryPlan2 m row ) (PureQueryPlan2 m row )
                 | QPTrue2
@@ -153,9 +158,10 @@ type PureQueryPlan2 m row  =  (QueryPlanData m row , PureQueryPlanNode2 m row )
 class ToTree a where
     toTree :: a -> Tree String
 instance Show (QueryPlanData m row ) where
-    show qp = "[" ++ show (availablevs qp) ++ "|" ++ show (paramvs qp) ++ "|" ++ show (freevs qp) ++ "|" ++ show (determinevs qp) ++ "|"++ show (returnvs qp) ++ "|" ++ show (combinedvs qp) ++ "|" ++ show (inscopevs qp) ++ "]"
+    show qp = "[" ++ show (availablevs qp) ++ "|" ++ show (linscopevs qp) ++ "|" ++ show (paramvs qp) ++ "|" ++ show (freevs qp) ++ "|" ++ show (determinevs qp) ++ "|"++ show (returnvs qp) ++ "|" ++ show (combinedvs qp) ++ "|" ++ show (rinscopevs qp) ++ "]"
 instance ToTree (QueryPlan2 m row ) where
     toTree (qpd, Exec2 f  dbs) = Node ("exec " ++ show f ++ " at " ++ show dbs ++ show qpd ) []
+    toTree (qpd, QPReturn2 vars) = Node ("return "++ unwords (map show vars) ) []
     toTree (qpd, QPSequencing2 qp1 qp2) = Node ("sequencing"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPChoice2 qp1 qp2) = Node ("choice"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPClassical2 qp1) = Node ("where" ++ show qpd) [toTree qp1]
@@ -164,6 +170,7 @@ instance ToTree (QueryPlan2 m row ) where
     toTree (qpd, QPOne2) = Node ("one"++ show qpd ) []
 instance ToTree (PureQueryPlan2 m row ) where
     toTree (qpd, If2 f  dbs) = Node ("if " ++ show f ++ " at " ++ show dbs ++ show qpd ) []
+    toTree (qpd, QPRestrict2 vars) = Node ("restrict " ++ unwords (map show vars) ) []
     toTree (qpd, QPAnd2 qp1 qp2) = Node ("and"  ++ show qpd) [toTree qp1, toTree qp2]
     toTree (qpd, QPOr2 qp1 qp2) = Node ("union"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPNot2 qp1) = Node ("not" ++ show qpd) [toTree qp1]
@@ -177,6 +184,8 @@ findDB pred0 dbs = filter (\x -> case dbs !! x of
 formulaToQueryPlan :: (Monad m)=> [Database m row] -> Formula -> QueryPlan
 formulaToQueryPlan dbs  form@(FAtomic (Atom pred0  _)) =
     Exec form  (findDB pred0 dbs)
+formulaToQueryPlan _  (FReturn vars) =
+    QPReturn vars
 formulaToQueryPlan _ FOne = QPOne
 formulaToQueryPlan _ FZero = QPZero
 formulaToQueryPlan dbs  (FClassical form) = QPClassical (formulaToQueryPlan' dbs  form)
@@ -194,6 +203,7 @@ formulaToQueryPlan dbs  ins@(FInsert (Lit _ (Atom pred1 _))) =
 
 formulaToQueryPlan' :: (Monad m)=> [Database m row] -> PureFormula -> PureQueryPlan
 formulaToQueryPlan' dbs  form@(Atomic (Atom pred0 _)) = If form (findDB pred0 dbs)
+formulaToQueryPlan' _  (Return vars) = QPRestrict vars
 formulaToQueryPlan' dbs  (Not form) = QPNot (formulaToQueryPlan' dbs  form)
 formulaToQueryPlan' dbs  (Disjunction form1 form2) = QPOr  (formulaToQueryPlan' dbs form1) (formulaToQueryPlan' dbs form2)
 formulaToQueryPlan' dbs  (Conjunction form1 form2) = QPAnd  (formulaToQueryPlan' dbs form1) (formulaToQueryPlan' dbs form2)
@@ -225,6 +235,7 @@ simplifyQueryPlan  (QPClassical qp1) =
     QPClassical (simplifyPureQueryPlan  qp1)
 simplifyQueryPlan  (QPTransaction ) =
     QPTransaction
+simplifyQueryPlan qp@(QPReturn _) = qp
 simplifyQueryPlan  qp = qp
 
 simplifyPureQueryPlan :: PureQueryPlan -> PureQueryPlan
@@ -258,6 +269,7 @@ simplifyPureQueryPlan  (QPNot qp1) =
             _ -> QPNot qp1'
 simplifyPureQueryPlan (QPTrue) = QPTrue
 simplifyPureQueryPlan (QPFalse) = QPFalse
+simplifyPureQueryPlan qp@(QPRestrict _) = qp
 
 
 combineQPSequencingData :: QueryPlanData  m row -> QueryPlanData m row -> QueryPlanData m row
@@ -267,9 +279,10 @@ combineQPSequencingData qp1 qp2 =
         freevs = freevs qp1 `union` freevs qp2,
         determinevs = determinevs qp1 `union` determinevs qp2,
         paramvs = paramvs qp1 `union` (paramvs qp2 \\ returnvs qp1),
-        returnvs = (returnvs qp1 `union` returnvs qp2) `intersect` inscopevs qp2,
-        inscopevs = inscopevs qp2,
-        combinedvs = (combinedvs qp1 `union` combinedvs qp2) `intersect` inscopevs qp2,
+        returnvs = (returnvs qp1 `union` returnvs qp2) `rmintersect` rinscopevs qp2,
+        rinscopevs = rinscopevs qp2,
+        linscopevs = linscopevs qp1,
+        combinedvs = (combinedvs qp1 `union` combinedvs qp2) `rmintersect` rinscopevs qp2,
         stmts = Nothing,
         tdb = Nothing
     }
@@ -282,7 +295,8 @@ combineQPChoiceData qp1 qp2 =
         determinevs = determinevs qp1 `intersect` determinevs qp2,
         paramvs = paramvs qp1 `union` paramvs qp2,
         returnvs = returnvs qp1 `union` returnvs qp2,
-        inscopevs = inscopevs qp1,
+        rinscopevs = rinscopevs qp1 `munion` linscopevs qp2,
+        linscopevs = linscopevs qp1 `munion` linscopevs qp2,
         combinedvs = combinedvs qp2 `union` combinedvs qp2,
         stmts = Nothing,
         tdb = Nothing
@@ -334,6 +348,7 @@ optimizeQueryPlan _ qp@(_, QPTransaction2) =
     qp
 optimizeQueryPlan _ qp@(_, QPOne2) = qp
 optimizeQueryPlan _ qp@(_, QPZero2) = qp
+optimizeQueryPlan _ qp@(_, QPReturn2 _) = qp
 
 optimizePureQueryPlan :: (Monad m ) => [Database m row] -> PureQueryPlan2 m row -> PureQueryPlan2 m row
 
@@ -400,6 +415,7 @@ optimizePureQueryPlan dbsx (qpd, QPNot2 qp1) =
             _ -> (qpd, QPNot2 qp1')
 optimizePureQueryPlan _ qp@(_, QPTrue2) = qp
 optimizePureQueryPlan _ qp@(_, QPFalse2) = qp
+optimizePureQueryPlan _ qp@(_, QPRestrict2 _) = qp
 
 
 domainSizeFormula :: (Monad m) => DomainSizeMap -> Database m row -> Formula -> m DomainSizeMap
@@ -435,6 +451,13 @@ checkQueryPlan _ (_, QPOne2) = do
 
 checkQueryPlan _ (_, QPZero2) = do
     return ()
+
+checkQueryPlan _ (qpd, QPReturn2 vars) = do
+    let par0 = availablevs qpd
+    if null (vars \\ par0)
+        then return ()
+        else throwError ("checkQueryPlan': unbounded vars: " ++ show (vars \\ par0),  FReturn vars)
+
 
 checkQueryPlan dbs (_, QPClassical2 qp) = do
     checkQueryPlan' dbs Pos qp
@@ -487,105 +510,171 @@ checkQueryPlan' _ _  (_, QPTrue2) = do
 checkQueryPlan' _ _  (_, QPFalse2) = do
     return ()
 
+checkQueryPlan' _ _  (qpd, QPRestrict2 vars) = do
+    let par0 = availablevs qpd
+    if null (vars \\ par0)
+        then return ()
+        else throwError ("checkQueryPlan': unbounded vars: " ++ show (vars \\ par0), FClassical (Return vars))
+
 checkQueryPlan' dbs _  (_, QPNot2 qp) = do
     checkQueryPlan' dbs Neg  qp
 
 checkQueryPlan' dbs _ (_, QPExists2 _ qp) = do
     checkQueryPlan' dbs Pos qp
 
-calculateVars :: [Var] -> [Var] -> QueryPlan -> QueryPlan2 m row
+calculateVars :: [Var] -> MSet Var -> QueryPlan -> QueryPlan2 m row
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
 
-calculateVars1 :: [Var] -> QueryPlan -> QueryPlan2 m row
+data MSet a = Include [a] | Exclude [a] deriving Show
+
+munion :: Eq a => MSet a -> MSet a -> MSet a
+munion (Include vars) (Include vars2) = Include (vars `union` vars2)
+munion (Include vars) (Exclude vars2) = Exclude (vars2 \\ vars)
+munion (Exclude vars) (Include vars2) = Exclude (vars \\ vars2)
+munion (Exclude vars) (Exclude vars2) = Exclude (vars2 `intersect` vars)
+
+mcomplement :: Eq a => MSet a -> MSet a
+mcomplement (Include vars) = Exclude vars
+mcomplement (Exclude vars) = Include vars
+
+mintersect :: Eq a => MSet a -> MSet a -> MSet a
+mintersect (Include vars) (Include vars2) = Include (vars `intersect` vars2)
+mintersect (Exclude vars) (Include vars2) = Include (vars2 \\ vars)
+mintersect (Include vars) (Exclude vars2) = Include (vars \\ vars2)
+mintersect (Exclude vars) (Exclude vars2) = Exclude (vars `union` vars2)
+
+mdiff :: Eq a => MSet a -> MSet a -> MSet a
+mdiff s1 s2 = s1 `mintersect` (mcomplement s2)
+
+rmintersect :: Eq a => [a] -> MSet a -> [a]
+rmintersect vars (Include vars2) = vars `intersect` vars2
+rmintersect vars (Exclude vars2) = vars \\ vars2
+
+
+lmintersect :: Eq a => MSet a -> [a] -> [a]
+lmintersect (Include vars2) vars = vars `intersect` vars2
+lmintersect (Exclude vars2) vars = vars \\ vars2
+
+calculateVars1 :: MSet Var -> QueryPlan -> QueryPlan2 m row
 calculateVars1  rvars (Exec form dbxs) =
     let fvs = freeVars form in
-        ( dqdb{freevs = fvs, determinevs = fvs, inscopevs = rvars}, (Exec2  form dbxs))
+        ( dqdb{freevs = fvs, determinevs = fvs, linscopevs = Include fvs `munion` rvars, rinscopevs = rvars}, (Exec2  form dbxs))
 
 calculateVars1  rvars (QPSequencing qp1 qp2) =
     let qp2'@(qpd2, _) = calculateVars1 rvars qp2
-        qp1'@(qpd1, _) = calculateVars1 (freevs qpd2 `union` rvars) qp1 in
-        ( dqdb{freevs = freevs qpd1 `union` freevs qpd2, determinevs = determinevs qpd1 `union` determinevs qpd2, inscopevs = rvars} , (QPSequencing2  qp1' qp2'))
+        qp1'@(qpd1, _) = calculateVars1 (linscopevs qpd2) qp1 in
+        ( dqdb{
+            freevs = freevs qpd1 `union` freevs qpd2,
+            determinevs = determinevs qpd1 `union` determinevs qpd2,
+            linscopevs = linscopevs qpd1,
+            rinscopevs = rinscopevs qpd2
+            } , (QPSequencing2  qp1' qp2'))
 
 calculateVars1 rvars  (QPChoice qp1 qp2) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1
         qp2'@(qpd2, _) = calculateVars1 rvars qp2 in
-        ( dqdb{freevs = freevs qpd1 `union` freevs qpd2, determinevs = determinevs qpd1 `intersect` determinevs qpd2, inscopevs = rvars} , (QPChoice2  qp1' qp2'))
-calculateVars1 rvars  (QPOne) = (dqdb{freevs = [], determinevs = [], inscopevs = rvars} , QPOne2)
-calculateVars1 rvars  (QPZero) = (dqdb{freevs = [], determinevs = [], inscopevs = rvars} , QPZero2)
+        ( dqdb{
+            freevs = freevs qpd1 `union` freevs qpd2,
+            determinevs = determinevs qpd1 `intersect` determinevs qpd2,
+            linscopevs = linscopevs qpd1 `munion` linscopevs qpd2,
+            rinscopevs = rinscopevs qpd1 `munion` rinscopevs qpd2
+            } , (QPChoice2  qp1' qp2'))
+calculateVars1 rvars  (QPOne) = (dqdb{freevs = [], determinevs = [], linscopevs = rvars, rinscopevs = rvars} , QPOne2)
+calculateVars1 rvars  (QPZero) = (dqdb{freevs = [], determinevs = [], linscopevs = rvars, rinscopevs = rvars} , QPZero2)
+calculateVars1 rvars  (QPReturn vars) =
+    (dqdb{
+        freevs = vars,
+        determinevs = [],
+        linscopevs = rvars `mintersect` Include vars,
+        rinscopevs = rvars `mintersect` Include vars
+        } , QPReturn2 vars)
 calculateVars1 rvars  (QPClassical qp1) =
     let qp1'@(qpd1, _) = calculateVars1' rvars qp1 in
-        (dqdb{freevs = freevs qpd1, determinevs = [], inscopevs = rvars} , QPClassical2 qp1')
+        (dqdb{freevs = freevs qpd1, determinevs = [], linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1} , QPClassical2 qp1')
 calculateVars1 rvars  (QPTransaction) =
-        (dqdb{freevs = [], determinevs = [], inscopevs = rvars} , QPTransaction2)
+        (dqdb{freevs = [], determinevs = [], linscopevs = rvars, rinscopevs = rvars} , QPTransaction2)
 
-calculateVars1' :: [Var] -> PureQueryPlan -> PureQueryPlan2 m row
+calculateVars1' :: MSet Var -> PureQueryPlan -> PureQueryPlan2 m row
 calculateVars1' rvars  (QPOr qp1 qp2) =
     let qp1'@(qpd1, _) = calculateVars1' rvars qp1
         qp2'@(qpd2, _) = calculateVars1' rvars qp2 in
-        ( dqdb{freevs = freevs qpd1 `union` freevs qpd2, determinevs = determinevs qpd1 `intersect` determinevs qpd2, inscopevs = rvars} , (QPOr2  qp1' qp2'))
+        ( dqdb{
+            freevs = freevs qpd1 `union` freevs qpd2, determinevs = determinevs qpd1 `intersect` determinevs qpd2,
+            linscopevs = linscopevs qpd1 `munion` linscopevs qpd2,
+            rinscopevs = rinscopevs qpd1 `munion` rinscopevs qpd2} , (QPOr2  qp1' qp2'))
 
 calculateVars1'  rvars (QPAnd qp1 qp2) =
     let qp2'@(qpd2, _) = calculateVars1' rvars qp2
-        qp1'@(qpd1, _) = calculateVars1' (freevs qpd2 `union` rvars) qp1 in
-        ( dqdb{freevs = freevs qpd1 `union` freevs qpd2, determinevs = determinevs qpd1 `union` determinevs qpd2, inscopevs = rvars} , (QPAnd2  qp1' qp2'))
+        qp1'@(qpd1, _) = calculateVars1' (Include (freevs qpd2) `munion` rvars) qp1 in
+        ( dqdb{
+            freevs = freevs qpd1 `union` freevs qpd2, determinevs = determinevs qpd1 `union` determinevs qpd2,
+            linscopevs = linscopevs qpd1,
+            rinscopevs = rinscopevs qpd2} , (QPAnd2  qp1' qp2'))
 
 calculateVars1' rvars  (QPExists v qp1) =
     let qp1'@(qpd1, _) = calculateVars1' rvars qp1 in
-        ( dqdb{freevs = freevs qpd1 \\ [v], determinevs = determinevs qpd1 \\ [v], inscopevs = rvars} , (QPExists2 v qp1'))
+        ( dqdb{freevs = freevs qpd1 \\ [v], determinevs = determinevs qpd1 \\ [v], linscopevs = linscopevs qpd1 `mdiff` Include [v], rinscopevs = rinscopevs qpd1} , (QPExists2 v qp1'))
 
 calculateVars1' rvars  (QPNot qp1) =
     let qp1'@(qpd1, _) = calculateVars1' rvars qp1 in
-        ( dqdb{freevs = freevs qpd1, determinevs = [], inscopevs = rvars} , (QPNot2  qp1'))
-calculateVars1' rvars  (QPTrue) = (dqdb{freevs = [], determinevs = [], inscopevs = rvars} , QPTrue2)
-calculateVars1' rvars  (QPFalse) = (dqdb{freevs = [], determinevs = [], inscopevs = rvars} , QPFalse2)
+        ( dqdb{freevs = freevs qpd1, determinevs = [], linscopevs = rvars, rinscopevs = rvars} , (QPNot2  qp1'))
+calculateVars1' rvars  (QPTrue) = (dqdb{freevs = [], determinevs = [], linscopevs = rvars, rinscopevs = rvars} , QPTrue2)
+calculateVars1' rvars  (QPFalse) = (dqdb{freevs = [], determinevs = [], linscopevs = rvars, rinscopevs = rvars} , QPFalse2)
+calculateVars1' rvars  (QPRestrict vars) = (dqdb{freevs = vars, determinevs = [], linscopevs = rvars `mintersect` Include vars, rinscopevs = rvars `mintersect` Include vars} , QPRestrict2 vars)
 calculateVars1' rvars  (If form dbs) =
-        (dqdb{freevs = freeVars form, determinevs = [], inscopevs = rvars} , If2 form dbs)
+    let fvs = freeVars form in
+        (dqdb{freevs = fvs, determinevs = fvs, linscopevs = Include fvs `munion` rvars, rinscopevs = rvars} , If2 form dbs)
 
 calculateVars2 :: [Var] -> QueryPlan2 m row  -> QueryPlan2 m row
 calculateVars2  lvars (qpd, Exec2 form dbxs) =
-            ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd \\ lvars), combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars) }, (Exec2  form dbxs))
+            ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd \\ lvars), combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars) }, (Exec2  form dbxs))
 calculateVars2  lvars (qpd, QPChoice2 qp1 qp2) =
             let qp1' = calculateVars2 lvars qp1
                 qp2' = calculateVars2 lvars qp2 in
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd \\ lvars), combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , (QPChoice2  qp1' qp2'))
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd \\ lvars), combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , (QPChoice2  qp1' qp2'))
 calculateVars2  lvars (qpd, QPSequencing2 qp1 qp2) =
             let qp1'@(qpd1, _) = calculateVars2 lvars qp1
                 qp2' = calculateVars2 (lvars `union` freevs qpd1) qp2 in
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd \\ lvars), combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , (QPSequencing2  qp1' qp2'))
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd \\ lvars), combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , (QPSequencing2  qp1' qp2'))
 
-calculateVars2 lvars  (qpd, QPOne2) = ( qpd{availablevs = lvars, paramvs = [], returnvs = [], combinedvs = inscopevs qpd `intersect` lvars} , QPOne2)
-calculateVars2 lvars  (qpd, QPZero2) = ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars} , QPZero2)
+calculateVars2 lvars  (qpd, QPOne2) = ( qpd{availablevs = lvars, paramvs = [], returnvs = [], combinedvs = rinscopevs qpd `lmintersect` lvars} , QPOne2)
+calculateVars2 lvars  (qpd, QPZero2) = ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = rinscopevs qpd `lmintersect` lvars} , QPZero2)
+calculateVars2 lvars  (qpd, QPReturn2 vars) = (dqdb{availablevs = lvars, paramvs = lvars `intersect` vars, returnvs = rinscopevs qpd `lmintersect` (lvars `intersect` vars), combinedvs = rinscopevs qpd `lmintersect` (lvars `intersect` vars)} , QPReturn2 vars)
 calculateVars2 lvars  (qpd, QPClassical2 qp1) =
                 let qp1' = calculateVars2' lvars qp1 in
-                    (qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = [],combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , QPClassical2 qp1')
+                    (qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = [],combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , QPClassical2 qp1')
 calculateVars2 lvars  (qpd, QPTransaction2) =
-    (qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars} , QPTransaction2)
+    (qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = rinscopevs qpd `lmintersect` lvars} , QPTransaction2)
 
 calculateVars2' :: [Var] -> PureQueryPlan2 m row  -> PureQueryPlan2 m row
 calculateVars2'  lvars (qpd, If2 form dbs)  =
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd) \\ lvars,combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , If2 form dbs)
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd) \\ lvars,combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , If2 form dbs)
 calculateVars2'  lvars (qpd, QPOr2 qp1 qp2) =
             let qp1' = calculateVars2' lvars qp1
                 qp2' = calculateVars2' lvars qp2 in
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd) \\ lvars,combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , (QPOr2  qp1' qp2'))
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd) \\ lvars,combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , (QPOr2  qp1' qp2'))
 
 calculateVars2'  lvars (qpd, QPAnd2 qp1 qp2) =
             let qp1'@(qpd1, _) = calculateVars2' lvars qp1
                 qp2' = calculateVars2' (lvars `union` freevs qpd1) qp2 in
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd) \\ lvars,combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , (QPAnd2  qp1' qp2'))
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd) \\ lvars,combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , (QPAnd2  qp1' qp2'))
 
 calculateVars2' lvars  (qpd, QPExists2 v qp1) =
             let qp1' = calculateVars2' (lvars \\ [v]) qp1 in
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd) \\ lvars,combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , (QPExists2 v qp1'))
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd) \\ lvars,combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , (QPExists2 v qp1'))
 
 calculateVars2' lvars  (qpd, QPNot2 qp1) =
             let qp1' = calculateVars2' lvars qp1 in
-                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (inscopevs qpd `intersect` determinevs qpd) \\ lvars,combinedvs = inscopevs qpd `intersect` (determinevs qpd `union` lvars)} , (QPNot2  qp1'))
+                ( qpd{availablevs = lvars, paramvs = lvars `intersect` (freevs qpd), returnvs = (rinscopevs qpd `lmintersect` determinevs qpd) \\ lvars,combinedvs = rinscopevs qpd `lmintersect` (determinevs qpd `union` lvars)} , (QPNot2  qp1'))
 calculateVars2' lvars  (qpd, QPTrue2) =
-            ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars } , (QPTrue2))
+            ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = rinscopevs qpd `lmintersect` lvars } , (QPTrue2))
 
 calculateVars2' lvars  (qpd, QPFalse2) =
-            ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = inscopevs qpd `intersect` lvars } , (QPFalse2))
+            ( qpd{availablevs = lvars, paramvs = [], returnvs = [],combinedvs = rinscopevs qpd `lmintersect` lvars } , (QPFalse2))
+
+calculateVars2' lvars  (qpd, QPRestrict2 vars) =
+    (dqdb{availablevs = lvars, paramvs = lvars `intersect` vars, returnvs = rinscopevs qpd `lmintersect` (lvars `intersect` vars), combinedvs = rinscopevs qpd `lmintersect` (lvars `intersect` vars)} , QPRestrict2 vars)
+
 
 addTransaction' :: QueryPlan2 m row -> QueryPlan2 m row
 addTransaction' = snd . addTransaction
@@ -597,7 +686,8 @@ addTransaction qp@(qpd, Exec2 form _) | pureF form = (False, qp)
                                         paramvs = [],
                                         returnvs = [],
                                         combinedvs = combinedvs qpd,
-                                        inscopevs = inscopevs qpd,
+                                        linscopevs = linscopevs qpd,
+                                        rinscopevs = rinscopevs qpd,
                                         determinevs = [],
                                         freevs = [],
                                         stmts = Nothing,
@@ -618,6 +708,7 @@ addTransaction qp@(_, QPTransaction2) = (True, qp)
 addTransaction qp@(_, QPZero2) = (False, qp)
 addTransaction qp@(_, QPOne2) = (False, qp)
 addTransaction qp@(_, QPClassical2 _) = (False, qp)
+addTransaction qp@(_, QPReturn2 _) = (False, qp)
 
 
 prepareTransaction :: (Monad m, ResultRow row) => [Database m row] -> [Int] -> QueryPlan2 m row  -> m ([Int], QueryPlan2 m row )
@@ -639,6 +730,7 @@ prepareTransaction dbs rdbxs (qpd, QPClassical2 qp) = do
     return (dbxs, (qpd, QPClassical2 qp'))
 prepareTransaction dbs rdbxs qp@(qpd, QPTransaction2) =
     return (rdbxs, (qpd{tdb = Just (map (dbs !!) rdbxs) }, QPTransaction2))
+prepareTransaction dbs rdbxs qp@(_, QPReturn2 _) = return (rdbxs, qp)
 
 prepareTransaction' :: (Monad m, ResultRow row) => [Database m row] -> [Int] -> PureQueryPlan2 m row  -> m ([Int], PureQueryPlan2 m row )
 prepareTransaction' _  _ (_, (If2 form [])) = error ("prepareQueryPlan': If2: no database" ++ show form)
@@ -660,6 +752,7 @@ prepareTransaction' dbs rdbxs (qpd, QPExists2 v qp1) = do
     return (dbxs, (qpd, QPExists2 v qp1'))
 prepareTransaction' _ rdbxs qp@(_, QPTrue2) = return (rdbxs, qp)
 prepareTransaction' _ _ qp@(_, QPFalse2) = return ([], qp)
+prepareTransaction' _ rdbxs qp@(_, QPRestrict2 _) = return (rdbxs, qp)
 
 
 
@@ -672,10 +765,10 @@ prepareQueryPlan dbs (qpd, e@(Exec2  form (x : _))) =
         Database db -> do
             let vars = paramvs qpd
                 vars2 = returnvs qpd
-                qu = Query vars2 form
-                (stmtshow0, paramvars) = translateQuery db qu vars
+                qu = Query form
+                (stmtshow0, paramvars) = translateQuery db vars2 qu vars
                 stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
-            stmt <- prepareQuery db qu vars
+            stmt <- prepareQuery db vars2 qu vars
             return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
 prepareQueryPlan dbs  (qpd, QPChoice2 qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1
@@ -687,6 +780,7 @@ prepareQueryPlan dbs  (qpd, QPSequencing2 qp1 qp2) = do
     return (qpd, QPSequencing2 qp1' qp2')
 prepareQueryPlan _ qp@(_, QPOne2) = return qp
 prepareQueryPlan _ qp@(_, QPZero2) = return qp
+prepareQueryPlan _ qp@(_, QPReturn2 _) = return qp
 prepareQueryPlan dbs (qpd, QPClassical2 qp) = do
     qp' <- prepareQueryPlan' dbs qp
     return (qpd, QPClassical2 qp')
@@ -702,10 +796,10 @@ prepareQueryPlan' dbs  (qpd, e@(If2 form (x:_))) =
         Database db -> do
             let vars = paramvs qpd
                 vars2 = returnvs qpd
-                qu = Query vars2 (convert form)
-                (stmtshow0, paramvars) = translateQuery db qu vars
+                qu = Query (convert form)
+                (stmtshow0, paramvars) = translateQuery db vars2 qu vars
                 stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
-            stmt <- prepareQuery db qu vars
+            stmt <- prepareQuery db vars2 qu vars
             return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
 prepareQueryPlan' dbs  (qpd, QPOr2 qp1 qp2) = do
     qp1' <- prepareQueryPlan' dbs  qp1
@@ -724,6 +818,7 @@ prepareQueryPlan' dbs  (qpd, QPExists2 v qp1) = do
 
 prepareQueryPlan' _ qp@(_, QPTrue2) = return qp
 prepareQueryPlan' _ qp@(_, QPFalse2) = return qp
+prepareQueryPlan' _ qp@(_, QPRestrict2 _) = return qp
 
 
 
@@ -735,7 +830,7 @@ execQueryPlan (vars, rs) (qpd, Exec2 _ _) = do
     let [(stmt, stmtshow)] = fromJust (stmts qpd)
     case stmt of
         AbstractDBStatement stmt0 -> do
-            (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
+            (combinedvs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                         row <- rs
                         liftIO $ infoM "QA" ("current row " ++ show row)
                         liftIO $ infoM "QA" ("execute " ++ stmtshow)
@@ -744,25 +839,25 @@ execQueryPlan (vars, rs) (qpd, Exec2 _ _) = do
                         return (transform vars (combinedvs qpd) (row <> row2))))
 
 execQueryPlan  r (qpd, QPSequencing2 qp1 qp2) =
-    (inscopevs qpd, do
+    (combinedvs qpd, do
         let r1 = execQueryPlan  r qp1
             (vars2, rs2) = execQueryPlan r1 qp2 in
             transformResultStream vars2 (combinedvs qpd) rs2)
 
 execQueryPlan  (vars, rs) (qpd, QPChoice2 qp1 qp2) =
-    (inscopevs qpd, do
+    (combinedvs qpd, do
         row <- rs
         let (vars1, rs1) = execQueryPlan  (vars, pure row) qp1
             (vars2, rs2) = execQueryPlan  (vars, pure row) qp2 in
             transformResultStream vars1 (combinedvs qpd) rs1 <|> transformResultStream vars2 (combinedvs qpd) rs2)
 
 execQueryPlan (vars, rs) (qpd, QPClassical2 qp) =
-        (inscopevs qpd, filterResultStream rs (\row -> do
+        (combinedvs qpd, filterResultStream rs (\row -> do
             let (_, rs2) = execQueryPlan' (vars, (pure row)) qp
             emp <- isResultStreamEmpty rs2
             return (not emp)))
 execQueryPlan (vars, rs) (qpd, QPTransaction2 ) =
-    (inscopevs qpd, do
+    (combinedvs qpd, do
         let (begin, prepare, commit, rollback) = case tdb qpd of
                 Nothing -> error "execQueryPlan: tranaction without db"
                 Just dbs ->
@@ -796,6 +891,7 @@ execQueryPlan (vars, rs) (qpd, QPTransaction2 ) =
             lift $ commitCleanup))
 
 execQueryPlan  r (_, QPOne2) = r
+execQueryPlan  (vars', rs) (_, QPReturn2 vars) = (vars, transformResultStream vars' vars rs)
 execQueryPlan  (vars, rs) (_, QPZero2) = (vars, closeResultStream rs)
 
 execQueryPlan' :: (MonadIO m, ResultRow row) => ([Var], ResultStream m row) -> PureQueryPlan2 m row  -> ([Var], ResultStream m row     )
@@ -803,7 +899,7 @@ execQueryPlan' (vars, rs) (qpd, If2 _ _) = do
     let [(stmt, stmtshow)] = fromJust (stmts qpd)
     case stmt of
         AbstractDBStatement stmt0 -> do
-            (inscopevs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
+            (combinedvs qpd, addCleanupRS (\_ -> dbStmtClose stmt0) (do
                     row <- rs
                     liftIO $ infoM "QA" ("current row " ++ show row)
                     liftIO $ infoM "QA" ("execute " ++ stmtshow)
@@ -811,13 +907,13 @@ execQueryPlan' (vars, rs) (qpd, If2 _ _) = do
                     liftIO $ infoM "QA" ("returns row")
                     return (transform vars (combinedvs qpd) (row <> row2))))
 execQueryPlan'  (vars, rs) (qpd, QPOr2 qp1 qp2) =
-    (inscopevs qpd, do
+    (combinedvs qpd, do
         row <- rs
         let (vars1, rs1) = execQueryPlan'  (vars, pure row) qp1
             (vars2, rs2) = execQueryPlan'  (vars, pure row) qp2
         transformResultStream vars1 (combinedvs qpd) rs1 <|> transformResultStream vars2 (combinedvs qpd) rs2)
 execQueryPlan'  r (qpd, QPAnd2 qp1 qp2) =
-    (inscopevs qpd, do
+    (combinedvs qpd, do
         let r1 = execQueryPlan' r qp1
             (vars2, rs2) = execQueryPlan'  r1 qp2
         transformResultStream vars2 (combinedvs qpd) rs2)
@@ -833,3 +929,4 @@ execQueryPlan'  (vars, rs) (_, QPExists2 _ qp) = -- assume no unbounded vars und
                 return (not emp)))
 execQueryPlan' r (_, QPTrue2) = r
 execQueryPlan' (vars, rs) (_, QPFalse2) = (vars, closeResultStream rs)
+execQueryPlan' (vars', rs) (_, QPRestrict2 vars) = (vars, transformResultStream vars' vars rs)

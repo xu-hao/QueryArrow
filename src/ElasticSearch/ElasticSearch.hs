@@ -215,8 +215,8 @@ translateQueryArg _ _  =
 
 
 
-translateQueryToElasticSearch :: Pred -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
-translateQueryToElasticSearch _ args env =
+translateQueryToElasticSearch :: [Var] -> Pred -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
+translateQueryToElasticSearch _ _ args env =
     let (args2, params) = mconcat (map (translateQueryArg env) args) in
     (ElasticSearchQuery (args2 !! 0) (args2 !! 1) (args2 !! 2) (args2 !! 3) (args2 !! 4), params)
 
@@ -231,13 +231,13 @@ translateDeleteToElasticSearch _ args env =
     (ElasticSearchDelete (args2 !! 0) (args2 !! 1) (args2 !! 2) (args2 !! 3) (args2 !! 4), params)
 
 instance Translate ESTrans MapResultRow ElasticSearchQuery where
-    translateQueryWithParams _ (Query _ (FAtomic (Atom pred1 args))) env =
-        translateQueryToElasticSearch pred1 args env
-    translateQueryWithParams _ (Query _ (FInsert (Lit Pos (Atom pred1 args)))) env =
+    translateQueryWithParams _ vars (Query  (FAtomic (Atom pred1 args))) env =
+        translateQueryToElasticSearch vars pred1 args env
+    translateQueryWithParams _ vars (Query  (FInsert (Lit Pos (Atom pred1 args)))) env =
         translateInsertToElasticSearch pred1 args env
-    translateQueryWithParams _ (Query _ (FInsert (Lit Neg (Atom pred1 args)))) env =
+    translateQueryWithParams _ vars (Query  (FInsert (Lit Neg (Atom pred1 args)))) env =
         translateDeleteToElasticSearch pred1 args env
-    translateQueryWithParams _ _ _ =
+    translateQueryWithParams _ _ _ _ =
         error "unsupported"
 
     translateable _ (FAtomic _) _ = True

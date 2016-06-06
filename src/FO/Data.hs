@@ -5,7 +5,7 @@ module FO.Data where
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, delete)
-import Data.List ((\\), intercalate, union)
+import Data.List ((\\), intercalate, union, unwords)
 import Control.Monad.Trans.State.Strict (evalState,get, put, State)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -46,7 +46,8 @@ data Sign = Pos | Neg deriving (Eq, Ord)
 -- literals
 data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord)
 
-data PureFormula = Atomic Atom
+data PureFormula = Return [Var]
+             | Atomic Atom
              | Disjunction PureFormula PureFormula
              | Conjunction PureFormula PureFormula
              | Not PureFormula
@@ -54,6 +55,7 @@ data PureFormula = Atomic Atom
              | CTrue
              | CFalse deriving (Eq, Ord)
 data Formula = FTransaction
+             | FReturn [Var]
              | FAtomic Atom
              | FInsert Lit
              | FClassical PureFormula
@@ -63,6 +65,7 @@ data Formula = FTransaction
              | FZero deriving (Eq, Ord)
 
 instance Convertible PureFormula Formula where
+    safeConvert (Return a) = Right (FReturn a)
     safeConvert (Atomic a) = Right (FAtomic a)
     safeConvert (Disjunction a b) = Right (FChoice  (convert a) (convert b))
     safeConvert (Conjunction a b) = Right (FSequencing (convert a)  (convert b))
@@ -72,6 +75,7 @@ instance Convertible PureFormula Formula where
     safeConvert CFalse = Right FZero
 
 instance Convertible Formula PureFormula where
+    safeConvert (FReturn a) = Right (Return a)
     safeConvert (FAtomic a) = Right (Atomic a)
     safeConvert (FClassical a) = Right a
     safeConvert (FChoice a b) = Disjunction <$> (safeConvert a) <*> (safeConvert b)
@@ -116,6 +120,8 @@ instance FreeVars Lit where
     freeVars (Lit _ theatom) = freeVars theatom
 
 instance FreeVars PureFormula where
+    freeVars (Return _) =
+        []
     freeVars (Atomic atom1) = freeVars atom1
     freeVars (Conjunction form1 form2) =
         freeVars form1 `union` freeVars form2
@@ -128,6 +134,8 @@ instance FreeVars PureFormula where
     freeVars _ = []
 
 instance FreeVars Formula where
+    freeVars (FReturn _) =
+        []
     freeVars (FAtomic atom1) =
         freeVars atom1
     freeVars (FInsert lits) =
@@ -277,7 +285,7 @@ setNamespace ns1 n@(QPredName ns2 _) | ns1 == ns2 = n
 setPredNamespace :: String -> Pred -> Pred
 setPredNamespace ns (Pred name paramtypes) = Pred (setNamespace ns name) paramtypes
 
-setFormulaNamespace :: String -> Formula -> Formula
+{- setFormulaNamespace :: String -> Formula -> Formula
 setFormulaNamespace ns (FAtomic (Atom (Pred n pts) args)) = FAtomic (Atom (Pred (setNamespace ns n) pts) args)
 setFormulaNamespace ns (FInsert (Lit sign1 (Atom (Pred n pts) arg))) = (FInsert (Lit sign1 (Atom (Pred (setNamespace ns n) pts) arg)))
 setFormulaNamespace ns (FTransaction ) = FTransaction
@@ -294,7 +302,7 @@ setPureFormulaNamespace ns (Disjunction form1 form2) = Disjunction (setPureFormu
 setPureFormulaNamespace ns (Not form) = Not (setPureFormulaNamespace ns form)
 setPureFormulaNamespace ns (Exists var form) = Exists var (setPureFormulaNamespace ns form)
 setPureFormulaNamespace ns CTrue = CTrue
-setPureFormulaNamespace ns CFalse = CFalse
+setPureFormulaNamespace ns CFalse = CFalse -}
 
 -- instance Show Pred where
 --     show (Pred name t) = name ++ show t
@@ -325,18 +333,20 @@ instance Show Lit where
         Neg -> "¬" ++ show theatom
 
 instance Show PureFormula where
+    show (Return vars) = "(return " ++ unwords (map show vars) ++ ")"
     show (Atomic a) = show a
-    show form@(Conjunction _ _) = "(" ++ intercalate " ∧ " (map show (getConjuncts' form)) ++ ")"
-    show form@(Disjunction _ _) = "(" ++ intercalate " ∨ " (map show (getDisjuncts' form)) ++ ")"
+    show form@(Conjunction _ _) = "(" ++ intercalate " ⊗ " (map show (getConjuncts' form)) ++ ")"
+    show form@(Disjunction _ _) = "(" ++ intercalate " ⊕ " (map show (getDisjuncts' form)) ++ ")"
     show (Exists var form) = "(∃ " ++ show var ++ "." ++ show form ++ ")"
-    show (Not form) = "¬" ++ show form
-    show (CTrue) = "⊤"
-    show (CFalse) = "⊥"
+    show (Not form) = "¬(" ++ show form ++ ")"
+    show (CTrue) = "𝟏"
+    show (CFalse) = "𝟎"
 
 instance Show Formula where
+    show (FReturn vars) = "(return " ++ unwords (map show vars) ++ ")"
     show (FAtomic a) = show a
     show (FInsert lits) = "(insert " ++ show lits ++ ")"
-    show (FClassical form) = "[" ++ show form ++ "]"
+    show (FClassical form) = "(" ++ show form ++ ")"
     show (FTransaction ) = "transactional"
     show form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map show (getFsequencings' form)) ++ ")"
     show form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map show (getFchoices' form)) ++ ")"
@@ -433,6 +443,7 @@ instance Subst Atom where
     subst s (Atom pred' args) = Atom pred' (subst s args)
 
 instance Subst PureFormula where
+    subst s form@(Return _) = form
     subst s (Atomic a) = Atomic (subst s a)
     subst s (Disjunction a b) = Disjunction (subst s a) (subst s b)
     subst s (Conjunction a b) = Conjunction (subst s a) (subst s b)
@@ -441,6 +452,7 @@ instance Subst PureFormula where
     subst _ form = form
 
 instance Subst Formula where
+    subst s form@(FReturn _) = form
     subst s (FAtomic a) = FAtomic (subst s a)
     subst s (FInsert lits) = FInsert (subst s lits)
     subst s (FClassical a) = FClassical (subst s a)
@@ -497,6 +509,7 @@ instance FreeVars a => FreeVars (Set a) where
     freeVars sa = unions (map freeVars (Set.toList sa))
 
 pureF :: Formula -> Bool
+pureF (FReturn _) = True
 pureF (FAtomic _) = True
 pureF (FClassical _) = False
 pureF (FTransaction ) = False
@@ -601,6 +614,7 @@ class SubstPred a where
     substPred :: Map Pred Pred -> a -> a
 
 instance SubstPred PureFormula where
+    substPred _ form@(Return _) = form
     substPred pmap (Atomic a) = Atomic (substPred pmap a)
     substPred pmap (Conjunction form1 form2) = Conjunction ( substPred pmap form1) ( substPred pmap form2)
     substPred pmap (Disjunction form1 form2) = Disjunction (substPred pmap form1) (substPred pmap form2)
@@ -609,6 +623,7 @@ instance SubstPred PureFormula where
     substPred _ form = form
 
 instance SubstPred Formula where
+    substPred _ form@(FReturn _) = form
     substPred pmap (FAtomic a) = FAtomic (substPred pmap a)
     substPred pmap (FClassical a) = FClassical (substPred pmap a)
     substPred pmap (FTransaction) = FTransaction
@@ -633,6 +648,7 @@ instance SubstPred a => SubstPred [a] where
 type PredMap = Map PredName Pred
 
 checkFormula' :: PureFormula -> Except String ()
+checkFormula' (Return _) = return ()
 checkFormula' (Atomic a) = checkAtom a
 checkFormula' (Disjunction form1 form2) = do
     checkFormula' form1
@@ -645,6 +661,7 @@ checkFormula' (Exists _ a) = checkFormula' a
 checkFormula' _ = return ()
 
 checkFormula :: Formula -> Except String ()
+checkFormula (FReturn _) = return ()
 checkFormula (FAtomic a) = checkAtom a
 checkFormula (FClassical a) = checkFormula' a
 checkFormula (FTransaction) = return ()

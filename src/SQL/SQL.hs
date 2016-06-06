@@ -322,8 +322,8 @@ instance Params SQL0 where
 instance Params SQLQuery where
     params (_, _, params) = params
 
-translateQueryToSQL :: Query -> TransMonad SQLQuery
-translateQueryToSQL qu@(Query vars formula) = do
+translateQueryToSQL :: [Var] -> Query -> TransMonad SQLQuery
+translateQueryToSQL vars qu@(Query formula) = do
     (vars, sql, vars2) <- if pureF formula
         then do
             (SQL0 _ tablelist cond1) <-  translateFormulaToSQL formula
@@ -755,10 +755,10 @@ pureOrExecF' trans (CFalse) = return ()
 
 
 instance Translate SQLTrans MapResultRow SQLQuery where
-    translateQueryWithParams trans query env =
+    translateQueryWithParams trans ret query env =
         let (SQLTrans  builtin predtablemap) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql, ts') = runNew (runStateT (translateQueryToSQL query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
+            (sql, ts') = runNew (runStateT (translateQueryToSQL ret query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             (sql, params sql)
     translateable trans form vars = isJust (evalStateT (pureOrExecF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
     translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))

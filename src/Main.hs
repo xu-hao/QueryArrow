@@ -86,12 +86,12 @@ main = do
         then do
             print "no arguments"
         else do
-            ps <- getConfig (args2 !! 1)
-            if head args2 == "zmq"
+            ps <- getConfig (args2 !! 0)
+            if (args2 !! 1) == "zmq"
                 then
                     runzmq (args2 !! 2) ps
                 else
-                    run2 (head args2) ps
+                    run2 (words (args2 !! 2)) (args2 !! 1) ps
 
 
 runzmq :: String -> TranslationInfo -> IO ()
@@ -108,24 +108,23 @@ runzmq addr ps = do
         forever $ do
             qus <- receive receiver
             t0 <- liftIO $ getCurrentTime
-            ret <- liftIO $ try (do
-                let msg = CS.unpack qus
-                liftIO $ infoM "QA" ("received message " ++ msg)
-                liftIO $ hFlush stdout
-                let colonx = fromJust (findIndex (== ':') msg)
-                    uz = take colonx msg
-                    hashx = fromJust (findIndex (== '#') uz)
-                    user = take hashx uz
-                    zone = drop (hashx + 1) uz
-                    qu = drop (colonx + 1) msg
-                liftIO $ run3 qu tdb user zone)
-            let (vars, rep) = case ret of
+            let msg = CS.unpack qus
+            liftIO $ infoM "QA" ("received message " ++ msg)
+            let qs = decode (B.fromStrict qus)
+            (hdr, rep) <- case qs of
+                Nothing -> return (["error"], [singleton "error" "cannot decode message"])
+                Just qs -> do
+                    let user = qsuser qs
+                        zone = qszone qs
+                        qu = qsquery qs
+                        hdr = qsheaders qs
+                    ret <- liftIO $ try (liftIO $ run3 hdr qu tdb user zone)
+                    return (case ret of
                         Left e -> (["error"], [singleton "error" (show (e :: SomeException))])
-                        Right pp -> pp
+                        Right pp -> pp)
             t1 <- liftIO $ getCurrentTime
-            send receiver [] (B.toStrict (encode (resultSet rep vars)))
             liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
-            liftIO $ hFlush stdout
+            send receiver [] (B.toStrict (encode (resultSet hdr rep)))
     runZMQ $ do
         server <- socket Router
         bind server addr
@@ -137,17 +136,17 @@ runzmq addr ps = do
         proxy server workers Nothing
 
 
-run2 :: String -> TranslationInfo -> IO ()
-run2 query ps = do
+run2 :: [String] -> String -> TranslationInfo -> IO ()
+run2 hdr query ps = do
     tdb@(TransDB _ dbs preds (qr, qr2, ir, dr) ) <- transDB "tdb" ps
     mapM_ print qr
     mapM_ print ir
     mapM_ print dr
-    pp <- run3 query tdb "rods" "tempZone"
-    putStr (pprint pp)
+    (hdr, pp) <- run3 hdr query tdb "rods" "tempZone"
+    putStr (pprint hdr pp)
 
-run3 :: String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
-run3 query tdb user zone = do
+run3 :: [String] -> String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
+run3 hdr query tdb user zone = do
     let predmap = constructDBPredMap [Database tdb]
     let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
 
@@ -155,12 +154,12 @@ run3 query tdb user zone = do
     r <- runResourceT $ evalStateT (dbCatch $ do
                 case runParser progp (empty, predmap) "" query of
                             Left err -> error (show err)
-                            Right (qu@(Query vars _), _) ->
+                            Right (qu@(Query form), _) ->
                                 case runExcept (checkQuery qu) of
                                     Right _ -> do
-                                        rows <- getAllResultsInStream ( doQuery tdb qu (keys params) (pure params))
-                                        return (vars, rows)
+                                        rows <- getAllResultsInStream ( doQuery tdb (map Var hdr) qu (keys params) (pure params))
+                                        return rows
                                     Left e -> error e) (DBAdapterState Nothing)
-    case r of
-        Right (vars, rows) -> return (map unVar vars, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
-        Left e -> return (["error"], [singleton "error" (show e)])
+    return (case r of
+        Right rows ->  (hdr, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
+        Left e ->  (["error"], [singleton "error" (show e)]))

@@ -58,7 +58,7 @@ class ExtractDomainSize m conn trans | conn -> m  where
     extractDomainSize :: conn -> trans -> DomainSizeMap -> Atom -> m DomainSizeMap
 
 class (Show query) => Translate trans row query  | trans -> row query  where
-    translateQueryWithParams :: trans -> Query -> [Var] -> (query, [Var])
+    translateQueryWithParams :: trans -> [Var] -> Query -> [Var] -> (query, [Var])
     translateable :: trans -> Formula -> [Var] -> Bool
     translateable' :: trans -> PureFormula -> [Var] -> Bool
 
@@ -84,15 +84,15 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedS
     getName (GenericDB _ name _ _)= name
     getPreds (GenericDB _ _ preds _)= preds
     domainSize (GenericDB conn _  _ trans) = extractDomainSize conn trans
-    prepareQuery (GenericDB conn _ _ trans) query vars  = do
-        let (sqlquery, params) = translateQueryWithParams trans query vars
+    prepareQuery (GenericDB conn _ _ trans) vars2 query vars  = do
+        let (sqlquery, params) = translateQueryWithParams trans vars2 query vars
         stmt <- prepareQueryStatement conn sqlquery
         return (stmt, params)
 
 
     supported (GenericDB _ _ _ trans) formula vars = translateable trans formula vars
     supported' (GenericDB _ _ _ trans) formula vars = translateable' trans formula vars
-    translateQuery (GenericDB _ _ _ trans) qu vars  = first show (translateQueryWithParams trans qu vars)
+    translateQuery (GenericDB _ _ _ trans) vars2 qu vars  = first show (translateQueryWithParams trans vars2 qu vars)
 
 data PreparedSequenceStatement conn trans where
     PreparedSequenceStatement :: (DBConnection conn query , TranslateSequence trans query) =>  conn -> trans -> [Var] -> Var -> PreparedSequenceStatement conn trans
@@ -129,12 +129,12 @@ instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (Prepared
         getName (SequenceDB _ name _ _)= name
         getPreds (SequenceDB _ name predname _)= [Pred (PredName (Just name) predname) (PredType ObjectPred [Key "Any"])]
         domainSize (SequenceDB _ _ _ _)= \ _ (Atom _ [VarExpr v]) -> return (singleton v (Bounded 1))
-        prepareQuery (SequenceDB conn _ _ trans) (Query vars (FAtomic (Atom _ [VarExpr v]))) _ =
+        prepareQuery (SequenceDB conn _ _ trans) vars (Query  (FAtomic (Atom _ [VarExpr v]))) _ =
             return (PreparedSequenceStatement conn trans vars v)
-        prepareQuery _ _ _ = error "not supported"
+        prepareQuery _ _ _ _ = error "not supported"
 
         supported (SequenceDB _ name predname _) (FAtomic (Atom (Pred predname2 _) [VarExpr _])) [_] =
             predNameMatches (PredName (Just name) predname) predname2
         supported _ _ _ = False
         supported' _ _ _ = False
-        translateQuery (SequenceDB _ _ _ trans) _ _ = ( show (fst (translateSequenceQuery trans )), [])
+        translateQuery (SequenceDB _ _ _ trans) _ _ _ = ( show (fst (translateSequenceQuery trans )), [])
