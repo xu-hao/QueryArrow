@@ -630,9 +630,9 @@ translateDeleteAtomToCypher rvars atom env = do
             let fvt = fvType Root pattern
             let mfvt1 = map (\(x,_,_,_) -> x) mfvt
             let (del, setnull) = partition (\(v, c, p, t) -> t == CypherNodeVar) (filter (\(x,_,_,_) -> not (elem x mfvt1)) fvt)
-            return (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch (matchpattern <> pattern) <> delete (nub (map (\(a,_,_,_)->a) del))
+            return (mergeDeleteAndSetNull (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch (matchpattern <> pattern) <> delete (nub (map (\(a,_,_,_)->a) del))
                  <> set (map (\(_, Dot v prop, _, var) -> (CypherDotExpr (CypherVarExpr v) prop, CypherNullExpr)) setnull)
-                 <> creturn (map (\(Var var )-> (CypherVarExpr (CypherVar var), CypherVar var)) rvars)))
+                 <> creturn (map (\(Var var )-> (CypherVarExpr (CypherVar var), CypherVar var)) rvars))))
         Nothing -> error (show pred1 ++ " is not defined")
 
 translateInsertAtomToCypher :: [Var] -> Atom -> [Var] -> TransMonad Cypher
@@ -646,12 +646,12 @@ translateInsertAtomToCypher rvars x@(Atom pred1 args) env = do
             let mfvt = fvType Root matchpattern
             let fvt = fvType Root pattern
             let (cre, setexpr) = partition (\(v, c, p, t) ->  t == CypherNodeVar) (fvt \\ mfvt)
-            return (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch matchpattern <> create (map (\(var, p, nonvarprops, t) -> case p of
+            return (mergeCreateAndSet (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch matchpattern <> create (map (\(var, p, nonvarprops, t) -> case p of
                       Edge srcv tgtv l -> edgevlp' (nodev' srcv) var l nonvarprops (nodev' tgtv)
                       Node l -> nodevlp' var l nonvarprops
                       ) cre)
                  <> set (map (\(var, Dot v prop, _, _) -> (CypherDotExpr (CypherVarExpr v) prop, CypherVarExpr var)) setexpr)
-                 <> creturn (map (\(Var var) -> (CypherVarExpr (CypherVar var), CypherVar var)) rvars)))
+                 <> creturn (map (\(Var var) -> (CypherVarExpr (CypherVar var), CypherVar var)) rvars))))
         Nothing -> error (show pred1 ++ " is not defined")
 
 data CypherTrans = CypherTrans CypherBuiltIn [String] CypherPredTableMap
@@ -765,3 +765,66 @@ instance Translate CypherTrans MapResultRow CypherQuery where
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")
+
+insertMaybe :: Ord a => Maybe a -> b -> Map a b -> Map a b
+insertMaybe l0 v m =
+    case l0 of
+        Just l -> insert l v m
+        Nothing -> m
+
+createsToMap :: GraphPattern -> (Map CypherVar OneGraphPattern, Map CypherVar CypherVar, Map CypherVar CypherVar)
+createsToMap (GraphPattern cres ) = foldl oneCreateToMap (empty, empty, empty) (cres) where
+    oneCreateToMap (map1, map2, map3) p@(GraphNodePattern (NodePattern (Just v) _ _)) = (insert v p map1, map2, map3)
+    oneCreateToMap (map1, map2, map3) p@(GraphEdgePattern ( (NodePattern l1 _ _)) (NodePattern (Just v) _ _ ) ( (NodePattern l2 _ _))) =
+        (insert v p map1, insertMaybe l1 v map2, insertMaybe l2 v map3)
+    oneCreateToMap map1 _ = map1
+
+mergeCreateAndSet :: Cypher -> Cypher
+mergeCreateAndSet (Cypher r m w s c d) =
+    let (c', s') = mergeCreateAndSet2 c s in
+        Cypher r m w s' c' d
+
+mergeCreateAndSet2 :: GraphPattern -> [(CypherExpr, CypherExpr)] -> (GraphPattern, [(CypherExpr, CypherExpr)])
+mergeCreateAndSet2 cres sets  =
+  let (map1, map2, map3) = createsToMap cres
+      (sets', (map1', _, _)) = runState (doMergeCreateAndSet2 sets) (map1, map2, map3) in
+      (GraphPattern (elems map1'), sets')
+
+doMergeCreateAndSet2 :: [(CypherExpr, CypherExpr)] -> State (Map CypherVar OneGraphPattern, Map CypherVar CypherVar, Map CypherVar CypherVar) [(CypherExpr, CypherExpr)]
+doMergeCreateAndSet2 = foldM doMergeCreateAndOneSet [] where
+    doMergeCreateAndOneSet sets set@(CypherDotExpr (CypherVarExpr v) p, r) = do
+        (map1, map2, map3) <- get
+        case lookup v map1 of
+            Nothing ->
+                case lookup v map2 of
+                    Just v1 -> do
+                        case lookup v1 map1 of
+                            Just n -> do
+                                let n' = addPropToPattern2 n p r
+                                put (insert v n' map1, map2, map3)
+                                return sets
+                            Nothing -> case lookup v map2 of
+                                Just v1 -> do
+                                    case lookup v1 map1 of
+                                        Just n -> do
+                                            let n' = addPropToPattern3 n p r
+                                            put (insert v n' map1, map2, map3)
+                                            return sets
+                                        Nothing -> error ("mergeCreateAndSet: node to edge map is incorrectly constructed: " ++ show v ++ " maps to " ++ show v1 ++ " but edge is not in map")
+                    Nothing -> return (sets ++ [set])
+            Just n -> do
+                let n' = addPropToPattern n p r
+                put (insert v n' map1, map2, map3)
+                return sets
+    addPropToPattern (GraphNodePattern (NodePattern v l ps)) p r = GraphNodePattern (NodePattern v l (ps `union` [(p, r)]))
+    addPropToPattern (GraphEdgePattern n1 (NodePattern v l ps) n2) p r = GraphEdgePattern n1 (NodePattern v l (ps `union` [(p,r)])) n2
+    addPropToPattern2 (GraphEdgePattern ( (NodePattern v l ps)) n1  n2) p r = GraphEdgePattern ( (NodePattern v l (ps `union` [(p,r)]))) n1  n2
+    addPropToPattern3 (GraphEdgePattern n1  n2 ( (NodePattern v l ps))) p r = GraphEdgePattern n1  n2 ( (NodePattern v l (ps `union` [(p,r)])))
+
+mergeDeleteAndSetNull :: Cypher->Cypher
+mergeDeleteAndSetNull (Cypher r m w s c d) = Cypher r m w (mergeDeleteAndSetNull2 d s) c d
+
+mergeDeleteAndSetNull2 :: [CypherVar] ->[(CypherExpr, CypherExpr)] ->[(CypherExpr, CypherExpr)]
+mergeDeleteAndSetNull2 vars = filter (\set-> case set of
+    (CypherDotExpr (CypherVarExpr v) _,CypherNullExpr) -> v `notElem` vars
+    _ -> True)
