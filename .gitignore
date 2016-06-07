@@ -1,4 +1,6 @@
 /dist/
+/gen/
+/.stack-work/
 /obs/
 /coverage/
 /build/
