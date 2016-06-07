@@ -32,14 +32,7 @@ import qualified Data.Text as T
 import Control.Monad.IO.Class
 import System.IO.Unsafe
 
-{- validateInsert :: TheoremProver_ p => p -> [PureFormula] -> Query -> IO (Maybe Bool)
-validateInsert = FO.validateInsert . TheoremProver
-
-validate :: TheoremProver_ p => p -> Query -> IO (Maybe Lit)
-validate p qu@(Query _ (FInsert lits)) = FO.validate ( TheoremProver p) lits (Disjunction [])
--- validate p qu@(Query _ (FSequencing [cond, FInsert lits])) = FO.validate ( TheoremProver p) lits cond
--}
-newtype Char2 = Char2 {unChar2 :: Char}
+{- newtype Char2 = Char2 {unChar2 :: Char}
 
 instance Arbitrary Char2 where
     arbitrary = Char2 <$> choose ('a', 'z')
@@ -200,10 +193,10 @@ testsFunc ::(Show a, Arbitrary a)=>(a-> Bool)->IO ()
 testsFunc = quickCheckWith stdArgs {maxSize = 5}
 
 translateQuery2 trans qu = fst (translateQueryWithParams trans qu mempty)
-translateInsert trans qu = fst (translateQueryWithParams trans qu mempty)
+translateInsert trans qu = fst (translateQueryWithParams trans qu mempty) -}
 main :: IO ()
 main = hspec $ do
-    describe "tests" $ do
+{-    describe "tests" $ do
         it "test0" $ do
             property $ test0
         it "test1" $ do
@@ -215,7 +208,7 @@ main = hspec $ do
         it "test4" $ do
             property $ test4
         it "test5" $ do
-            property $ test5
+            property $ test5 -}
         it "test that freshSQLVar generates fresh SQL vars" $ do
             (v1, v2) <- return (runNew (evalStateT (do
                 v1 <- freshSQLVar "t"
@@ -223,7 +216,7 @@ main = hspec $ do
                 return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty)))
             v1 `shouldBe` SQLVar "t"
             v2 `shouldBe` SQLVar "t0"
-        it "test parse query 0" $ do
+        {- it "test parse query 0" $ do
             let (Query vars formula) = parseStandardQuery "DATA_NAME(x, y) return x y"
             vars `shouldBe` [Var "x", Var "y"]
             formula `shouldBe` FAtomic (Atom (standardPredMap ! UQPredName "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y")])
@@ -653,3 +646,4 @@ main = hspec $ do
         it "schema 3" $ do
             let CypherTrans _ _ mappings = cypherTrans ""
             show (mappings ! Pred (QPredName "" "USER_GROUP_CREATE_TS") (PredType PropertyPred [Key "Number", Key "Number", Property "Text"])) `shouldBe` "([1,2,3],GraphPattern [(d{group_user_id:1}),(c{user_id:2}),(d)-[e:USER_GROUP_CREATE_TS]->(c)],GraphPattern [(e{create_ts:3})],[(d,[1]),(e,[1,2]),(c,[2])])"
+-}
