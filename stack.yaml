@@ -37,6 +37,9 @@ resolver: lts-6.2
 # will not be run. This is useful for tweaking upstream packages.
 packages:
     - .
+    - location:
+        git: https://github.com/xu-hao/hdbc-postgresql.git
+        commit : 89d134986894342cf41938be00c595c7b0335604
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.

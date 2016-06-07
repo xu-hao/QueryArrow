@@ -6,10 +6,8 @@ import SQL.SQL
 import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map, (!))
 import Data.List (partition)
 import FO.Data
+import Utils
 import Debug.Trace
-
-endswith :: Eq a => [a] -> [a] -> Bool
-endswith a b = drop (length b - length a) b == a
 
 sqlToCypher :: Map String String -> Map String String -> PredTableMap -> CypherPredTableMap
 sqlToCypher tabletype colprop  mappings =

@@ -8,8 +8,8 @@ import Control.Applicative ((*>), (<*), (<$>), (<*>))
 import Language.Haskell.TH
 import FO.Data
 import SQL.SQL
+import Utils
 import System.IO.Unsafe
-import Data.String.Utils
 import Data.List (partition)
 import Data.Char
 
