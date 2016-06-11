@@ -46,44 +46,16 @@ data Sign = Pos | Neg deriving (Eq, Ord)
 -- literals
 data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord)
 
-data PureFormula = Return [Var]
-             | Atomic Atom
-             | Disjunction PureFormula PureFormula
-             | Conjunction PureFormula PureFormula
-             | Not PureFormula
-             | Exists { boundvar :: Var, formula :: PureFormula }
-             | CTrue
-             | CFalse deriving (Eq, Ord)
 data Formula = FTransaction
              | FReturn [Var]
              | FAtomic Atom
              | FInsert Lit
-             | FClassical PureFormula
              | FChoice Formula Formula
              | FSequencing Formula Formula
              | FOne
-             | FZero deriving (Eq, Ord)
-
-instance Convertible PureFormula Formula where
-    safeConvert (Return a) = Right (FReturn a)
-    safeConvert (Atomic a) = Right (FAtomic a)
-    safeConvert (Disjunction a b) = Right (FChoice  (convert a) (convert b))
-    safeConvert (Conjunction a b) = Right (FSequencing (convert a)  (convert b))
-    safeConvert f@(Not _) = Right (FClassical f)
-    safeConvert f@(Exists _ _) = Right (FClassical f)
-    safeConvert CTrue = Right FOne
-    safeConvert CFalse = Right FZero
-
-instance Convertible Formula PureFormula where
-    safeConvert (FReturn a) = Right (Return a)
-    safeConvert (FAtomic a) = Right (Atomic a)
-    safeConvert (FClassical a) = Right a
-    safeConvert (FChoice a b) = Disjunction <$> (safeConvert a) <*> (safeConvert b)
-    safeConvert (FSequencing a b) = Conjunction <$> (safeConvert a) <*> (safeConvert b)
-    safeConvert f@(FInsert _) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
-    safeConvert f@(FTransaction) = Left (ConvertError "Formula" "PureFormula" (show f) "cannot convert")
-    safeConvert FOne = Right CTrue
-    safeConvert FZero = Right CFalse
+             | FZero
+             | Not Formula
+             | Exists { boundvar :: Var, formula :: Formula } deriving (Eq, Ord)
 
 intersects :: Eq a => [[a]] -> [a]
 intersects [] = error "can't intersect zero lists"
@@ -119,20 +91,6 @@ instance FreeVars Atom where
 instance FreeVars Lit where
     freeVars (Lit _ theatom) = freeVars theatom
 
-instance FreeVars PureFormula where
-    freeVars (Return _) =
-        []
-    freeVars (Atomic atom1) = freeVars atom1
-    freeVars (Conjunction form1 form2) =
-        freeVars form1 `union` freeVars form2
-    freeVars (Disjunction form1 form2) =
-        freeVars form1 `union` freeVars form2
-    freeVars (Not formula1) =
-        freeVars formula1
-    freeVars (Exists var formula1) =
-        freeVars formula1 \\ [var]
-    freeVars _ = []
-
 instance FreeVars Formula where
     freeVars (FReturn _) =
         []
@@ -140,14 +98,16 @@ instance FreeVars Formula where
         freeVars atom1
     freeVars (FInsert lits) =
         freeVars lits
-    freeVars (FClassical formula1) =
-        freeVars formula1
     freeVars (FTransaction ) =
         []
     freeVars (FSequencing form1 form2) =
         freeVars form1 `union` freeVars form2
     freeVars (FChoice form1 form2) =
         freeVars form1 `union` freeVars form2
+    freeVars (Not formula1) =
+        freeVars formula1
+    freeVars (Exists var formula1) =
+        freeVars formula1 \\ [var]
     freeVars _ = []
 
 instance FreeVars a => FreeVars [a] where
@@ -332,26 +292,17 @@ instance Show Lit where
         Pos -> show theatom
         Neg -> "¬" ++ show theatom
 
-instance Show PureFormula where
-    show (Return vars) = "(return " ++ unwords (map show vars) ++ ")"
-    show (Atomic a) = show a
-    show form@(Conjunction _ _) = "(" ++ intercalate " ⊗ " (map show (getConjuncts' form)) ++ ")"
-    show form@(Disjunction _ _) = "(" ++ intercalate " ⊕ " (map show (getDisjuncts' form)) ++ ")"
-    show (Exists var form) = "(∃ " ++ show var ++ "." ++ show form ++ ")"
-    show (Not form) = "¬(" ++ show form ++ ")"
-    show (CTrue) = "𝟏"
-    show (CFalse) = "𝟎"
-
 instance Show Formula where
     show (FReturn vars) = "(return " ++ unwords (map show vars) ++ ")"
     show (FAtomic a) = show a
     show (FInsert lits) = "(insert " ++ show lits ++ ")"
-    show (FClassical form) = "(" ++ show form ++ ")"
     show (FTransaction ) = "transactional"
     show form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map show (getFsequencings' form)) ++ ")"
     show form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map show (getFchoices' form)) ++ ")"
     show (FOne) = "𝟏"
     show (FZero) = "𝟎"
+    show (Exists var form) = "(∃ " ++ show var ++ "." ++ show form ++ ")"
+    show (Not form) = "¬(" ++ show form ++ ")"
 
 -- rule
 
@@ -442,23 +393,15 @@ instance Subst Lit where
 instance Subst Atom where
     subst s (Atom pred' args) = Atom pred' (subst s args)
 
-instance Subst PureFormula where
-    subst s form@(Return _) = form
-    subst s (Atomic a) = Atomic (subst s a)
-    subst s (Disjunction a b) = Disjunction (subst s a) (subst s b)
-    subst s (Conjunction a b) = Conjunction (subst s a) (subst s b)
-    subst s (Not a) = Not (subst s a)
-    subst s (Exists var a) = Exists var (subst (delete var s) a)
-    subst _ form = form
-
 instance Subst Formula where
     subst s form@(FReturn _) = form
     subst s (FAtomic a) = FAtomic (subst s a)
     subst s (FInsert lits) = FInsert (subst s lits)
-    subst s (FClassical a) = FClassical (subst s a)
     subst s (FTransaction ) = FTransaction
     subst s (FSequencing form1 form2) = FSequencing (subst s form1) (subst s form2)
     subst s (FChoice form1 form2) = FChoice (subst s form1) (subst s form2)
+    subst s (Not a) = Not (subst s a)
+    subst s (Exists var a) = Exists var (subst (delete var s) a)
     subst _ form = form
 
 instance Subst a => Subst [a] where
@@ -511,13 +454,26 @@ instance FreeVars a => FreeVars (Set a) where
 pureF :: Formula -> Bool
 pureF (FReturn _) = True
 pureF (FAtomic _) = True
-pureF (FClassical _) = False
 pureF (FTransaction ) = False
 pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
 pureF (FInsert _) = False
+pureF (Exists _ form) =  pureF form
+pureF (Not form) =  pureF form
 pureF FOne = True
 pureF FZero = True
+
+layeredF :: Formula -> Bool
+layeredF (FReturn _) = True
+layeredF (FAtomic _) = True
+layeredF (FTransaction ) = True
+layeredF (FSequencing form1 form2) =  layeredF form1 &&  layeredF form2
+layeredF (FChoice form1 form2) = layeredF form1 && layeredF form2
+layeredF (FInsert _) = True
+layeredF (Exists _ form) =  pureF form
+layeredF (Not form) =  pureF form
+layeredF FOne = True
+layeredF FZero = True
 
 instantiate :: (Subst a, FreeVars a, Monad m) => m Expr -> a -> m a
 instantiate es rule = do
@@ -526,30 +482,7 @@ instantiate es rule = do
     let s = fromList (zip fv choose)
     return (subst s rule)
 
-infixr 1 <-->
-infixr 1 -->
-infixl 2 |||
-infixl 3 &
 infixr 5 @@
-(-->) :: PureFormula -> PureFormula -> PureFormula
-rule --> goal = disj [Not rule, goal]
-
-(<-->) :: PureFormula -> PureFormula -> PureFormula
-rule <--> goal = (rule --> goal) & (goal --> rule)
-
-(&) :: PureFormula -> PureFormula -> PureFormula
-CTrue & b = b
-CFalse & _ = CFalse
-a & CTrue = a
-_ & CFalse = CFalse
-a & b = Conjunction a b
-
-(|||) :: PureFormula -> PureFormula -> PureFormula
-CTrue ||| _ = CTrue
-CFalse ||| b = b
-_ ||| CTrue = CTrue
-a ||| CFalse = a
-a ||| b = Disjunction a b
 
 (.*.) :: Formula -> Formula -> Formula
 FOne .*. b = b
@@ -563,14 +496,6 @@ a .+. FZero = a
 a .+. b = FChoice a b
 
 -- get the top level conjucts
-getConjuncts :: PureFormula -> [PureFormula]
-getConjuncts (Conjunction form1 form2) =  getConjuncts form1 ++ getConjuncts form2
-getConjuncts a = [a]
-
-getDisjuncts :: PureFormula -> [PureFormula]
-getDisjuncts (Disjunction form1 form2) =  getDisjuncts form1 ++ getDisjuncts form2
-getDisjuncts a = [a]
-
 getFsequencings :: Formula -> [Formula]
 getFsequencings (FSequencing form1 form2) =  getFsequencings form1 ++ getFsequencings form2
 getFsequencings a = [a]
@@ -578,14 +503,6 @@ getFsequencings a = [a]
 getFchoices :: Formula -> [Formula]
 getFchoices (FChoice form1 form2) = getFchoices form1 ++ getFchoices form2
 getFchoices a = [a]
-
-getConjuncts' :: PureFormula -> [PureFormula]
-getConjuncts' (Conjunction form1 form2) =  getConjuncts' form1 ++ [form2]
-getConjuncts' a = [a]
-
-getDisjuncts' :: PureFormula -> [PureFormula]
-getDisjuncts' (Disjunction form1 form2) =  getDisjuncts' form1 ++ [form2]
-getDisjuncts' a = [a]
 
 getFsequencings' :: Formula -> [Formula]
 getFsequencings' (FSequencing form1 form2) =  getFsequencings' form1 ++ [form2]
@@ -595,40 +512,26 @@ getFchoices' :: Formula -> [Formula]
 getFchoices' (FChoice form1 form2) = getFchoices' form1 ++  [form2]
 getFchoices' a = [a]
 
-conj :: [PureFormula] -> PureFormula
-conj = foldl (&) CTrue
-
-disj :: [PureFormula] -> PureFormula
-disj = foldl (|||) CFalse
-
 fsequencing :: [Formula] -> Formula
 fsequencing = foldl (.*.) FOne
 
 fchoice :: [Formula] -> Formula
 fchoice = foldl (.+.) FZero
 
-(@@) :: Pred -> [Expr] -> PureFormula
-pred' @@ args = Atomic (Atom pred' args)
+(@@) :: Pred -> [Expr] -> Formula
+pred' @@ args = FAtomic (Atom pred' args)
 
 class SubstPred a where
     substPred :: Map Pred Pred -> a -> a
 
-instance SubstPred PureFormula where
-    substPred _ form@(Return _) = form
-    substPred pmap (Atomic a) = Atomic (substPred pmap a)
-    substPred pmap (Conjunction form1 form2) = Conjunction ( substPred pmap form1) ( substPred pmap form2)
-    substPred pmap (Disjunction form1 form2) = Disjunction (substPred pmap form1) (substPred pmap form2)
-    substPred pmap (Not a) = Not (substPred pmap a)
-    substPred pmap (Exists v a) = Exists v (substPred pmap a)
-    substPred _ form = form
-
 instance SubstPred Formula where
     substPred _ form@(FReturn _) = form
     substPred pmap (FAtomic a) = FAtomic (substPred pmap a)
-    substPred pmap (FClassical a) = FClassical (substPred pmap a)
     substPred pmap (FTransaction) = FTransaction
     substPred pmap (FSequencing form1 form2) = FSequencing (substPred pmap form1) (substPred pmap form2)
     substPred pmap (FChoice form1 form2) = FChoice (substPred pmap form1) (substPred pmap form2)
+    substPred pmap (Not a) = Not (substPred pmap a)
+    substPred pmap (Exists v a) = Exists v (substPred pmap a)
     substPred pmap (FInsert lits) = FInsert (substPred pmap lits)
     substPred _ form = form
 
@@ -647,23 +550,9 @@ instance SubstPred a => SubstPred [a] where
 -- predicate map
 type PredMap = Map PredName Pred
 
-checkFormula' :: PureFormula -> Except String ()
-checkFormula' (Return _) = return ()
-checkFormula' (Atomic a) = checkAtom a
-checkFormula' (Disjunction form1 form2) = do
-    checkFormula' form1
-    checkFormula' form2
-checkFormula' (Conjunction form1 form2) = do
-    checkFormula' form1
-    checkFormula' form2
-checkFormula' (Not a) = checkFormula' a
-checkFormula' (Exists _ a) = checkFormula' a
-checkFormula' _ = return ()
-
 checkFormula :: Formula -> Except String ()
 checkFormula (FReturn _) = return ()
 checkFormula (FAtomic a) = checkAtom a
-checkFormula (FClassical a) = checkFormula' a
 checkFormula (FTransaction) = return ()
 checkFormula (FSequencing form1 form2) = do
     checkFormula form1
@@ -671,6 +560,8 @@ checkFormula (FSequencing form1 form2) = do
 checkFormula (FChoice form1 form2) = do
     checkFormula form1
     checkFormula form2
+checkFormula (Not a) = checkFormula a
+checkFormula (Exists _ a) = checkFormula a
 checkFormula (FInsert lit) =
     checkLit lit
 checkFormula _ = return ()

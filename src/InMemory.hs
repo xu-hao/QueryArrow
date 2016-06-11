@@ -57,8 +57,6 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
     prepareQuery db vars qu _ = return (MapDBStmt db vars qu)
     supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
     supported _ _ _ = False
-    supported' (MapDB name predname _) (Atomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
-    supported' _ _ _ = False
     translateQuery _ _ qu vars = (show qu, vars)
 
 instance (Monad m) => DBStatementClose m (MapDBStmt m) where
@@ -93,8 +91,6 @@ instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
     supported _ _ _ = False
-    supported' _ (Atomic _) _ = True
-    supported' _ _ _ = False
     translateQuery _ _ qu vars = (show qu, vars)
 
 instance (Monad m) => DBStatementClose (StateT (Map String [(ResultValue, ResultValue)]) m) (StateMapDBStmt m) where
@@ -179,9 +175,6 @@ instance (Monad m) => Database_ (RegexDB m) m MapResultRow RegexDBStmt where
 
     supported _ (FAtomic (Atom (RegexPred _) _)) _ = True
     supported _ _ _ = False
-    supported' _ (Atomic (Atom (RegexPred _) _)) _ = True
-    supported' _ (Not (Atomic (Atom (RegexPred _) _))) _ = True
-    supported' _ _ _ = False
 
 instance (Monad m) => DBStatementClose m (RegexDBStmt) where
     dbStmtClose _ = return ()
@@ -197,13 +190,7 @@ instance (Monad m) => DBStatementExec m MapResultRow (RegexDBStmt) where
             then return mempty
             else emptyResultStream
 
-    dbStmtExec (RegexDBStmt (Query (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
-        row <- stream
-        if extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b)
-            then return mempty
-            else emptyResultStream
-
-    dbStmtExec (RegexDBStmt (Query (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
+    dbStmtExec (RegexDBStmt (Query  (Not (FAtomic (Atom _ [a, b]))))) rsvars stream = do
         row <- stream
         if not (extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b))
             then return mempty
@@ -230,10 +217,8 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     translateQuery _ _ qu vars = (show qu, vars)
 
     supported _ (FAtomic (Atom (EqPred _) _)) _ = True
+    supported _ (Not (FAtomic (Atom (EqPred _) _))) _ = True
     supported _ _ _ = False
-    supported' _ (Atomic (Atom (EqPred _) _)) _ = True
-    supported' _ (Not (Atomic (Atom (EqPred _) _))) _ = True
-    supported' _ _ _ = False
 
 instance (Monad m) => DBStatementClose m (EqDBStmt) where
     dbStmtClose _ = return ()
@@ -252,13 +237,7 @@ instance (Monad m) => DBStatementExec m MapResultRow (EqDBStmt) where
             then return mempty
             else emptyResultStream
 
-    dbStmtExec (EqDBStmt (Query (FClassical (Atomic (Atom _ [a, b]))))) rsvars stream = do
-        row <- stream
-        if evalExpr row a == evalExpr row b
-            then return mempty
-            else emptyResultStream
-
-    dbStmtExec (EqDBStmt (Query (FClassical (Not (Atomic (Atom _ [a, b])))))) rsvars stream = do
+    dbStmtExec (EqDBStmt (Query (Not (FAtomic (Atom _ [a, b]))))) rsvars stream = do
         row <- stream
         if evalExpr row a /= evalExpr row b
             then return mempty

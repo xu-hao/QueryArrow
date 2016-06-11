@@ -111,15 +111,6 @@ neg :: Lit -> Lit
 neg (Lit Pos a) = Lit Neg a
 neg (Lit Neg a) = Lit Pos a
 
-notexistsp :: FOParser PureFormula
-notexistsp = (Not <$> (negp >> formula1p'))
-        <|> (do
-            existsp
-            vars <- varsp
-            _ <- dot
-            form <- formulap'
-            return (foldr Exists form vars))
-
 returnp :: FOParser [Var]
 returnp = reserved "return" *> varsp
 
@@ -128,19 +119,17 @@ formula1p = try (parens formulap)
        <|> (FReturn <$> returnp)
        <|> (FAtomic <$> try atomp)
        <|> transactionp *> pure FTransaction
-       <|> (FClassical <$> notexistsp)
+       <|> (Not <$> (negp >> formula1p))
+       <|> (do
+           existsp
+           vars <- varsp
+           _ <- dot
+           form <- formulap
+           return (foldr Exists form vars))
        <|> onep *> pure FOne
        <|> zerop *> pure FZero
        <|> (fsequencing . map FInsert) <$> (reserved "insert" >> litsp)
        <|> (fsequencing . map FInsert) <$> (reserved "delete" >> fmap (map neg) litsp)
-
-formula1p' :: FOParser PureFormula
-formula1p' = try (parens formulap')
-      <|> notexistsp
-      <|> (Return <$> returnp)
-      <|> (Atomic <$> try atomp)
-      <|> onep *> pure CTrue
-      <|> zerop *> pure CFalse
 
 formulap :: FOParser Formula
 formulap = do
@@ -151,17 +140,6 @@ formulaSequencingp :: FOParser Formula
 formulaSequencingp = do
   formulaConjs <- sepBy formula1p timesp
   return (fsequencing formulaConjs)
-
-formulaConjp :: FOParser PureFormula
-formulaConjp = do
-    formula1s <- sepBy formula1p' timesp
-    return (conj formula1s)
-
-formulap' :: FOParser PureFormula
-formulap' = do
-    formulaConjs <- sepBy formulaConjp plusp
-    return (disj formulaConjs)
-
 
 paramtypep :: FOParser ParamType
 paramtypep = ((reserved "key" >> return Key) <|> (reserved "property" >> return Property)) <*> identifier

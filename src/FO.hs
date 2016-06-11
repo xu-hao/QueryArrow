@@ -38,7 +38,7 @@ import Data.Tree
 
 getAllResults2 :: (MonadIO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
 getAllResults2 dbs rvars query = do
-    qp <- prepareQuery' dbs  [] [] [] [] rvars query []
+    qp <- prepareQuery' dbs  [] [] [] rvars query []
     let (_, stream) = execQueryPlan ([], pure mempty) qp
     getAllResultsInStream stream
 
@@ -55,10 +55,10 @@ queryPlan2 dbs vars vars2 qu@(Query  formula) =
         qp2 = calculateVars vars vars2 qp1 in
         optimizeQueryPlan dbs qp2
 
-prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> m (QueryPlan2 m row)
-prepareQuery' dbs qr qr2 ir dr rvars qu0 vars = do
+prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> m (QueryPlan2 m row)
+prepareQuery' dbs qr ir dr rvars qu0 vars = do
     liftIO $ infoM "QA" ("original query: " ++ show qu0)
-    let qu@(Query form) = rewriteQuery  qr qr2 ir dr rvars qu0 vars
+    let qu@(Query form) = rewriteQuery  qr ir dr rvars qu0 vars
     liftIO $ infoM "QA" ("rewritten query: " ++ show qu)
     let insp = queryPlan dbs qu
     let qp2 = calculateVars vars rvars insp
@@ -79,15 +79,15 @@ printQueryPlan qp = do
 defaultRewritingLimit :: Int
 defaultRewritingLimit = 100
 
-type RewritingRuleSets = ([QueryRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+type RewritingRuleSets = ([InsertRewritingRule],  [InsertRewritingRule], [InsertRewritingRule])
 data TransDB m row = TransDB String [Database m row ]  [Pred] RewritingRuleSets
 
-rewriteQuery :: [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> Query
-rewriteQuery  qr qr2 ir dr vars (Query form) ext = Query (runNew (do
+rewriteQuery :: [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> Query
+rewriteQuery  qr ir dr vars (Query form) ext = Query (runNew (do
     registerVars ((case vars of
         Include vars -> vars
         Exclude vars -> vars)  `union` freeVars form)
-    rewrites defaultRewritingLimit ext   qr qr2 ir dr form))
+    rewrites defaultRewritingLimit ext   qr ir dr form))
 
 instance (Monad m, ResultRow row) => DBStatementClose m (QueryPlan2 m row) where
     dbStmtClose qp = return ()
@@ -110,11 +110,10 @@ instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPla
                 else
                     return []) dbs
         return (foldl1 (intersectionWith (+)) (concat mps))
-    prepareQuery (TransDB _ dbs _ (qr, qr2, ir, dr) ) vars2 qu =
-        prepareQuery' dbs  qr qr2 ir dr (Include vars2) qu
+    prepareQuery (TransDB _ dbs _ (qr, ir, dr) ) vars2 qu =
+        prepareQuery' dbs  qr ir dr (Include vars2) qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
     supported _ _ _ = True
-    supported' _ _ _ = True
 
 data RestrictDB m row stmt where
     RestrictDB :: Database_ db m row stmt => [Pred] -> Map Pred Pred -> db -> RestrictDB m row stmt
@@ -129,15 +128,7 @@ instance (MonadIO m, ResultRow row, DBStatementExec m row stmt, DBStatementClose
     domainSize (RestrictDB _ pmap db) domainsizemap form = domainSize db domainsizemap (substPred pmap form)
     prepareQuery (RestrictDB _ pmap db) vars (Query  form) = prepareQuery db vars (Query  (substPred pmap form))
     supported (RestrictDB _ pmap db) form = supported db (substPred pmap form)
-    supported' (RestrictDB _ pmap db) form = supported' db (substPred pmap form)
     translateQuery (RestrictDB _ pmap db) vars (Query  form) = translateQuery db vars (Query  (substPred pmap form))
-
-extractClassicalRules rules = concatMap (\r -> case extractClassicalRule r of
-                                                    Left _ -> []
-                                                    Right qr -> [qr]) rules
-
-extractClassicalRule :: InsertRewritingRule -> Either ConvertError QueryRewritingRule
-extractClassicalRule (InsertRewritingRule a form) = QueryRewritingRule a <$> safeConvert form
 
 getRewriting :: PredMap -> TranslationInfo -> IO (RewritingRuleSets, PredMap, [Export])
 getRewriting predmap ps = do
@@ -145,7 +136,7 @@ getRewriting predmap ps = do
     case runParser rulesp (predmap, empty) "" d0 of
         Left err -> error (show err)
         Right ((qr, ir, dr), predmap, exports) -> do
-            return ((extractClassicalRules qr, qr, ir, dr), predmap, exports)
+            return ((qr, ir, dr), predmap, exports)
 
 dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])
 dbMap = fromList [

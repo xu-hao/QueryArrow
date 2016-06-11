@@ -69,7 +69,6 @@ instance DeterminedVars Atom where
 instance DeterminedVars Formula where
     determinedVars dsp  (FAtomic atom0) = determinedVars dsp  atom0
     determinedVars _  (FInsert _) = return empty
-    determinedVars _  (FClassical _) = return empty
     determinedVars dsp  (FTransaction ) = return empty
     determinedVars dsp  (FSequencing form1 form2) = do
         map1 <- determinedVars dsp form1
@@ -79,20 +78,8 @@ instance DeterminedVars Formula where
         map1 <- determinedVars dsp form1
         map2 <- determinedVars dsp form2
         return (intersectionWith max map1 map2)
-    determinedVars _ _ = return empty
-
-instance DeterminedVars PureFormula where
-    determinedVars dsp  (Atomic atom0) = determinedVars dsp  atom0
     determinedVars _  (Not _) = return empty
     determinedVars dsp  (Exists v form) = do
         dsp' <- determinedVars dsp  form
         return (delete v dsp')
-    determinedVars dsp  (Conjunction form1 form2) = do
-        map1 <- determinedVars dsp form1
-        map2 <- determinedVars dsp form2
-        return (unionWith min map1 map2)
-    determinedVars dsp  (Disjunction form1 form2) = do
-        map1 <- determinedVars dsp form1
-        map2 <- determinedVars dsp form2
-        return (intersectionWith max map1 map2)
     determinedVars _ _ = return empty

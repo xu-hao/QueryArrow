@@ -60,7 +60,6 @@ class ExtractDomainSize m conn trans | conn -> m  where
 class (Show query) => Translate trans row query  | trans -> row query  where
     translateQueryWithParams :: trans -> [Var] -> Query -> [Var] -> (query, [Var])
     translateable :: trans -> Formula -> [Var] -> Bool
-    translateable' :: trans -> PureFormula -> [Var] -> Bool
 
 class (Show query) => TranslateSequence trans query | trans -> query where
     translateSequenceQuery :: trans -> (query, Var)
@@ -91,7 +90,6 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedS
 
 
     supported (GenericDB _ _ _ trans) formula vars = translateable trans formula vars
-    supported' (GenericDB _ _ _ trans) formula vars = translateable' trans formula vars
     translateQuery (GenericDB _ _ _ trans) vars2 qu vars  = first show (translateQueryWithParams trans vars2 qu vars)
 
 data PreparedSequenceStatement conn trans where
@@ -136,5 +134,4 @@ instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (Prepared
         supported (SequenceDB _ name predname _) (FAtomic (Atom (Pred predname2 _) [VarExpr _])) [_] =
             predNameMatches (PredName (Just name) predname) predname2
         supported _ _ _ = False
-        supported' _ _ _ = False
         translateQuery (SequenceDB _ _ _ trans) _ _ _ = ( show (fst (translateSequenceQuery trans )), [])

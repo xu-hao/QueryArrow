@@ -244,9 +244,6 @@ instance Translate ESTrans MapResultRow ElasticSearchQuery where
     translateable _ (FInsert _) _ = True
     translateable _ _ _ = False
 
-    translateable' _ (Atomic _) _ = True
-    translateable' _ _ _ = False
-
 makeElasticSearchDBAdapter :: String -> ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
 makeElasticSearchDBAdapter ns conn = GenericDB conn ns [Pred (QPredName ns "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])] ESTrans
 

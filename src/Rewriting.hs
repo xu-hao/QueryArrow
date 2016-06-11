@@ -12,7 +12,6 @@ import Data.List ((\\))
 
 type Pattern = Atom
 
-data QueryRewritingRule = QueryRewritingRule Pattern PureFormula deriving Show
 data InsertRewritingRule = InsertRewritingRule Pattern Formula deriving Show
 
 class Match a b where
@@ -37,19 +36,6 @@ instance Match Atom Atom where
 
 
 
-rewriteAtomic1' :: [Var] -> Atom -> [QueryRewritingRule] -> NewEnv (Maybe PureFormula)
-rewriteAtomic1' _ _ [] = return Nothing
-rewriteAtomic1' ext a2 ((QueryRewritingRule p form) : rs) =
-    case match p a2 of
-        Nothing -> rewriteAtomic1' ext a2 rs
-        Just sub -> do
-            let fvp = freeVars p
-                fvform = freeVars form
-                fvold = (fvform \\ fvp) \\ ext
-            fvnew <- new fvold
-            let sub2 = fromList (zip fvold (map VarExpr fvnew))
-            return (Just (subst (sub `union` sub2) form))
-
 rewriteAtomic1 :: [Var] -> Atom -> [InsertRewritingRule] -> NewEnv (Maybe Formula)
 rewriteAtomic1 _ _ [] = return Nothing
 rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
@@ -63,19 +49,19 @@ rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
             let sub2 = fromList (zip fvold (map VarExpr fvnew))
             return (Just (subst (sub `union` sub2) form))
 
-rewrite1 :: [Var] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
-rewrite1 ext  qr qr2 ir dr form0 =
+rewrite1 :: [Var] ->[InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrite1 ext  qr  ir dr form0 =
     case form0 of
         (FReturn _) -> return form0
         (FAtomic a2) -> do
-            res <- rewriteAtomic1 ext a2 qr2
+            res <- rewriteAtomic1 ext a2 qr
             return (case res of
                 Nothing -> form0
                 Just form -> form)
         (FChoice disj1 disj2) ->
-            (FChoice <$> rewrite1 ext qr qr2 ir dr disj1 <*> rewrite1 ext qr qr2 ir dr disj2)
+            (FChoice <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2)
         (FSequencing conj1 conj2) ->
-            (FSequencing <$> rewrite1 ext qr qr2 ir dr conj1 <*> rewrite1 ext qr qr2 ir dr conj2)
+            (FSequencing <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2)
         (FOne) ->
             return FOne
         (FZero) ->
@@ -87,36 +73,17 @@ rewrite1 ext  qr qr2 ir dr form0 =
             return (case res of
                         Nothing -> FInsert lit
                         Just form -> form)
-
-        (FClassical form) ->
-            (FClassical <$> rewrite1' ext  qr  form)
         (FTransaction ) ->
             return FTransaction
-
-rewrite1' :: [Var] -> [QueryRewritingRule] -> PureFormula -> NewEnv PureFormula
-rewrite1' ext  qr form0 =
-    case form0 of
-        (Return _) -> return form0
-        (Atomic a2) -> do
-            res <- rewriteAtomic1' ext a2 qr
-            return (case res of
-                Nothing -> form0
-                Just form -> form)
-        (Disjunction disj1 disj2) ->
-            (Disjunction <$> rewrite1' ext qr disj1 <*> rewrite1' ext qr disj2)
-        (Conjunction conj1 conj2) ->
-            (Conjunction <$> rewrite1' ext qr conj1 <*> rewrite1' ext qr conj2)
-        CTrue -> return CTrue
-        CFalse -> return CFalse
         (Exists v form) ->
-            (Exists v <$> rewrite1' ext  qr form)
+            (Exists v <$> rewrite1 ext  qr ir dr form)
         (Not form) ->
-            (Not <$> rewrite1' ext  qr form)
+            (Not <$> rewrite1 ext  qr ir dr form)
 
-rewrites    :: Int -> [Var] -> [QueryRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
-rewrites n ext  rules rules2 ir dr form | n < 0     = error "maximum number of rewrites reached"
+rewrites    :: Int -> [Var] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrites n ext  rules  ir dr form | n < 0     = error "maximum number of rewrites reached"
                         | otherwise = do
-                            form' <-  rewrite1 ext rules rules2 ir dr form
+                            form' <-  rewrite1 ext rules  ir dr form
                             if form == form'
                                 then return form
-                                else rewrites (n - 1) ext rules rules2 ir dr form'
+                                else rewrites (n - 1) ext rules  ir dr form'

@@ -96,7 +96,7 @@ main = do
 
 runzmq :: String -> TranslationInfo -> IO ()
 runzmq addr ps = do
-    tdb@(TransDB _ dbs   preds (qr, qr2, ir, dr) ) <- transDB "tdb" ps
+    tdb@(TransDB _ dbs   preds (qr, ir, dr) ) <- transDB "tdb" ps
     mapM_ (debugM "QA" . show) qr
     mapM_ (debugM "QA" . show) ir
     mapM_ (debugM "QA" . show) dr
@@ -138,7 +138,7 @@ runzmq addr ps = do
 
 run2 :: [String] -> String -> TranslationInfo -> IO ()
 run2 hdr query ps = do
-    tdb@(TransDB _ dbs preds (qr, qr2, ir, dr) ) <- transDB "tdb" ps
+    tdb@(TransDB _ dbs preds (qr, ir, dr) ) <- transDB "tdb" ps
     mapM_ print qr
     mapM_ print ir
     mapM_ print dr

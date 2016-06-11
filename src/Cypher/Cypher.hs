@@ -517,25 +517,12 @@ cypherDeterminedVars builtin (FSequencing form1 form2) =
     cypherDeterminedVars builtin form1 `union` cypherDeterminedVars builtin form2
 cypherDeterminedVars builtin (FChoice form1 form2) =
     cypherDeterminedVars builtin form1 `intersect` cypherDeterminedVars builtin form2
-cypherDeterminedVars builtin (FClassical _) = []
 cypherDeterminedVars builtin FTransaction = []
 cypherDeterminedVars builtin FOne = []
 cypherDeterminedVars builtin FZero = []
 cypherDeterminedVars builtin (FInsert _) = []
-
-cypherDeterminedVars' :: CypherBuiltIn -> PureFormula -> [Var]
-cypherDeterminedVars' (CypherBuiltIn builtin) (Atomic a@(Atom name _)) =
-    if name `member` builtin
-        then []
-        else freeVars a
-cypherDeterminedVars' builtin (Conjunction form1 form2) =
-    cypherDeterminedVars' builtin form1 `union` cypherDeterminedVars' builtin form2
-cypherDeterminedVars' builtin (Disjunction form1 form2) =
-    cypherDeterminedVars' builtin form1 `intersect` cypherDeterminedVars' builtin form2
-cypherDeterminedVars' builtin (Not _) = []
-cypherDeterminedVars' builtin (Exists v form) = cypherDeterminedVars' builtin form \\ [v]
-cypherDeterminedVars' builtin CTrue = []
-cypherDeterminedVars' builtin CFalse = []
+cypherDeterminedVars builtin (Not _) = []
+cypherDeterminedVars builtin (Exists v form) = cypherDeterminedVars builtin form \\ [v]
 
 translateFormulaToCypher :: [Var] -> Formula -> [Var] -> TransMonad [Cypher]
 translateFormulaToCypher rvars (FSequencing form1 form2) env = do
@@ -558,37 +545,14 @@ translateFormulaToCypher rvars (FInsert lits@(Lit sign0 a)) env = do
         Pos -> translateInsertAtomToCypher rvars a env
         Neg -> translateDeleteAtomToCypher rvars a env
     return [cypher]
-translateFormulaToCypher rvars (FClassical form) env =
-    translateFormulaToCypher' rvars form env
-
-translateFormulaToCypher' :: [Var] -> PureFormula -> [Var] -> TransMonad [Cypher]
-translateFormulaToCypher' rvars (Conjunction form1 form2) env = do
-    (builtin , _) <- get
-    let determinedvars = cypherDeterminedVars' builtin form1
-    let rvars1 = (determinedvars `union` env) `intersect` (freeVars form2 `union` rvars)
-    cypher1 <- translateFormulaToCypher' rvars1 form1 env
-    cypher2 <- translateFormulaToCypher' rvars form2 rvars1
-    return (cypher1 ++ cypher2)
-
-translateFormulaToCypher' _ (Disjunction disj1 disj2) env =
-    error "translateFormulaToCypher: unsupported"
-
-translateFormulaToCypher' _ CTrue env = return []
-translateFormulaToCypher' _ CFalse env =
-    error "translateFormulaToCypher: unsupported"
-
-translateFormulaToCypher' rvars (Atomic a) env = do
-    cypher <- translateQueryAtomToCypher rvars Pos a env
-    return [cypher]
-
-translateFormulaToCypher' rvars (Not (Atomic a)) env = do
+translateFormulaToCypher rvars (Not (FAtomic a)) env = do
     cypher <- translateQueryAtomToCypher rvars Neg a env
     return [cypher]
 
-translateFormulaToCypher' _ (Exists var formula) env = do
+translateFormulaToCypher _ (Exists var formula) env = do
     error "translateFormulaToCypher: unsupported"
 
-translateFormulaToCypher' _ (Not _) env = do
+translateFormulaToCypher _ (Not _) env = do
     error "translateFormulaToCypher: unsupported"
 
 -- instantiate a cypher mapping
@@ -724,25 +688,11 @@ translateableCypher _ (FInsert lit) = do
         else do
             put cs{csUpdate = True}
             return ()
-translateableCypher trans (FClassical formula) = do
-    cs <- get
-    if csUpdate cs
-        then lift $ Nothing
-        else translateableCypher' trans formula
 translateableCypher trans (FTransaction) = lift $ Nothing
 translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
-
-translateableCypher' :: CypherTrans -> PureFormula -> StateT CypherState Maybe ()
-translateableCypher' (CypherTrans builtin positiverequired predtablemap) (Not formula)  = lift $ Nothing
-translateableCypher' _ (Exists _ _)  = lift $ Nothing
-translateableCypher' trans (Conjunction form1 form2)  = do
-    translateableCypher' trans form1
-    translateableCypher' trans form2
-translateableCypher' trans (Disjunction form1 form2)  = lift $ Nothing
-translateableCypher' _ (Atomic _)  = return ()
-translateableCypher' trans (CTrue) = return ()
-translateableCypher' trans (CFalse) = lift $ Nothing
+translateableCypher trans (Not formula)  = lift $ Nothing
+translateableCypher trans (Exists _ _)  = lift $ Nothing
 
 instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
     extractDomainSize conn trans varDomainSize (Atom name args) =
@@ -759,9 +709,7 @@ instance Translate CypherTrans MapResultRow CypherQuery where
         let (CypherTrans builtin _ predtablemap) = trans
             sql = runNew (evalStateT (translateQueryToCypher vars query env) (builtin, predtablemap)) in
             (sql,  env)
-    translateable trans form vars = isJust (evalStateT (translateableCypher trans form ) (CypherState False False vars))
-
-    translateable' trans form vars = isJust (evalStateT (translateableCypher' trans form) (CypherState False False vars))
+    translateable trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False vars))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

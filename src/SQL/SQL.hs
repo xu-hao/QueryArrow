@@ -127,7 +127,7 @@ showWhereCond2 cond sqlvar = case cond of
     _ -> " WHERE " ++ show2 cond sqlvar
 
 instance Show2 SQL0 where
-    show2 (SQL0 cols tables conds) sqlvar = "SELECT " ++ (if null cols then "*" else intercalate "," (map show cols)) ++
+    show2 (SQL0 cols tables conds) sqlvar = "SELECT " ++ (if null cols then "1" else intercalate "," (map show cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map show tables)) ++
@@ -376,9 +376,6 @@ sqlexists (SQL0 cols tablelist cond) = SQL0 [] [] (SQLExistsCond (SQL0 cols tabl
 sqlfalse = SQL0 [] [] (SQLFalseCond)
 
 translateFormulaToSQL :: Formula -> TransMonad SQL0
-translateFormulaToSQL (FClassical form) = do
-    sql <- (translateFormulaToSQL (convert form))
-    return (sqlexists sql)
 translateFormulaToSQL (FAtomic a) = translateAtomToSQL Pos a
 translateFormulaToSQL (FSequencing form1 form2) =
     mappend <$> translateFormulaToSQL form1 <*> translateFormulaToSQL form2
@@ -389,39 +386,23 @@ translateFormulaToSQL (FChoice form1 form2) =
     sor <$> translateFormulaToSQL form1 <*> translateFormulaToSQL form2
 translateFormulaToSQL (FZero) =
     return sqlfalse
-
-translateFormulaToSQL' :: PureFormula -> TransMonad SQL0
-translateFormulaToSQL' (CTrue) =
-    return mempty
-
-translateFormulaToSQL' (CFalse) =
-    return sqlfalse
-translateFormulaToSQL' (Conjunction form1 form2) =
-    mappend <$> translateFormulaToSQL' form1 <*> translateFormulaToSQL' form2
-
-translateFormulaToSQL' (Disjunction form1 form2) =
-    sor <$> translateFormulaToSQL' form1 <*> translateFormulaToSQL' form2
-
-translateFormulaToSQL' (Atomic a) = translateAtomToSQL Pos a
-
 -- assume that all atoms in conj involves var
-translateFormulaToSQL' (Exists var conj) = do
+translateFormulaToSQL (Exists var conj) = do
     ts <- get
     let repvar = lookup var (repmap ts)
     put ts{repmap = delete var (repmap ts)}
-    sql <- translateFormulaToSQL (convert conj)
+    sql <- translateFormulaToSQL conj
     ts' <- get
     put ts'{repmap = alter (\_ -> repvar) var (repmap ts')}
     return (sqlexists sql)
 
-translateFormulaToSQL' (Not (Atomic a)) =
+translateFormulaToSQL (Not (FAtomic a)) =
     translateAtomToSQL Neg a
 
 -- assume that all atoms in conj involves var
-translateFormulaToSQL' (Not form) = do
-    snot <$> translateFormulaToSQL' form
+translateFormulaToSQL (Not form) = do
+    snot <$> translateFormulaToSQL form
 
-translateFormulaToSQL' form = error ("translateFormulaToSQL: unsupported " ++ show form)
 
 lookupTableVar :: String -> [Expr] -> TransMonad (Bool, SQLVar)
 lookupTableVar tablename prikeyargs = do
@@ -462,7 +443,9 @@ translateAtomToSQL thesign (Atom name args) = do
                 let cols3 = map (subst varmap) cols2
                 condsFromArgs <- mapM (condFromArg (.=.)) (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
-                return (SQL0 [] tables2 cond3)
+                return (case thesign of
+                            Pos -> SQL0 [] tables2 cond3
+                            Neg -> SQL0 [] [] (SQLNotCond (SQLExistsCond (SQL0 [] tables2 cond3))))
             Nothing -> error (show name ++ " is not defined")
 
 
@@ -672,7 +655,6 @@ pureOrExecF  (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
                 Just (OneTable tablename _, _) -> do
                     let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
-pureOrExecF  trans (FClassical form) = pureOrExecF' trans form
 pureOrExecF  trans (FTransaction ) =  lift $ Nothing
 
 pureOrExecF  trans (FSequencing form1 form2) = do
@@ -730,29 +712,9 @@ pureOrExecF  (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 ar
 
 pureOrExecF  _ FOne = return ()
 pureOrExecF  _ FZero = return ()
-
-pureOrExecF' :: SQLTrans -> PureFormula -> StateT KeyState Maybe ()
-pureOrExecF' (SQLTrans  _ predtablemap) (Atomic (Atom n args)) = do
-    ks <- get
-    if isJust (updateKey ks)
-        then lift $ Nothing
-        else case lookup n predtablemap of
-                Nothing -> do
-                    trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
-                Just (OneTable tablename _, _) -> do
-                    let key = keyComponents n args
-                    put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
-pureOrExecF' trans (Conjunction form1 form2) = do
-    pureOrExecF' trans form1
-    pureOrExecF' trans form2
-pureOrExecF' trans (Disjunction form1 form2) = do
-    pureOrExecF' trans form1
-    pureOrExecF' trans form2
-pureOrExecF' trans (Not form) = pureOrExecF' trans form
-pureOrExecF' trans (Exists _ form) = pureOrExecF' trans form
-pureOrExecF' trans (CTrue) = return ()
-pureOrExecF' trans (CFalse) = return ()
-
+pureOrExecF trans (Not form) = pureOrExecF trans form
+pureOrExecF trans (Exists _ form) = pureOrExecF trans form
+pureOrExecF trans (FReturn _) = lift $ Nothing
 
 instance Translate SQLTrans MapResultRow SQLQuery where
     translateQueryWithParams trans ret query env =
@@ -760,8 +722,7 @@ instance Translate SQLTrans MapResultRow SQLQuery where
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql, ts') = runNew (runStateT (translateQueryToSQL ret query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             (sql, params sql)
-    translateable trans form vars = isJust (evalStateT (pureOrExecF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
-    translateable' trans form vars = isJust (evalStateT (pureOrExecF' trans form) (KeyState [] Nothing [] False [] False (not (null vars))))
+    translateable trans form vars = layeredF form && isJust (evalStateT (pureOrExecF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
 
 instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize (Atom name args) =
