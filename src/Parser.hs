@@ -135,7 +135,7 @@ formulap = do
 
 formulaChoicep :: FOParser Formula
 formulaChoicep = do
-    formulaConjs <- sepBy formula1p plusp
+    formulaConjs <- sepBy formulaSequencingp plusp
     return (fchoice formulaConjs)
 
 
