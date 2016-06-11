@@ -45,6 +45,8 @@ executable QueryArrow
                    exceptions,
                    utf8-string,
                    regex-tdfa,
+                   monad-control,
+                   lifted-async,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

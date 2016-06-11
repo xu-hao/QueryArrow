@@ -24,7 +24,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero"],
-    T.reservedOpNames = ["~", "|", "⊗", "⊕", "∃", "¬", "⟶","𝟏","𝟎"],
+    T.reservedOpNames = ["~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
 
@@ -74,12 +74,6 @@ atomp = do
 negp :: FOParser ()
 negp = reservedOp "~" <|> reservedOp "¬"
 
-andp :: FOParser ()
-andp = optional (reservedOp "∧")
-
-orp :: FOParser ()
-orp = reservedOp "|" <|> reservedOp "∨"
-
 existsp :: FOParser ()
 existsp = reserved "exists" <|> reservedOp "∃"
 
@@ -88,6 +82,9 @@ timesp = optional (reservedOp "⊗")
 
 plusp :: FOParser ()
 plusp = reservedOp "|" <|> reservedOp "⊕"
+
+parp :: FOParser ()
+parp = reservedOp "||" <|> reservedOp "‖"
 
 onep :: FOParser ()
 onep = reserved "one" <|> reservedOp "𝟏"
@@ -133,8 +130,14 @@ formula1p = try (parens formulap)
 
 formulap :: FOParser Formula
 formulap = do
-  formula1s <- sepBy formulaSequencingp plusp
-  return (fchoice formula1s)
+  formula1s <- sepBy formulaChoicep parp
+  return (fpar formula1s)
+
+formulaChoicep :: FOParser Formula
+formulaChoicep = do
+    formulaConjs <- sepBy formula1p plusp
+    return (fchoice formulaConjs)
+
 
 formulaSequencingp :: FOParser Formula
 formulaSequencingp = do

@@ -28,6 +28,7 @@ import Control.Applicative ((<$>), liftA2)
 import Data.Convertible.Base
 import Control.Monad.Logic
 import Control.Monad.Except
+import Control.Monad.Trans.Control
 import Data.Maybe
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
@@ -36,7 +37,7 @@ import Data.Tree
 
 -- exec query from dbname
 
-getAllResults2 :: (MonadIO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
+getAllResults2 :: (MonadIO m, MonadBaseControl IO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
 getAllResults2 dbs rvars query = do
     qp <- prepareQuery' dbs  [] [] [] rvars query []
     let (_, stream) = execQueryPlan ([], pure mempty) qp
@@ -92,10 +93,10 @@ rewriteQuery  qr ir dr vars (Query form) ext = Query (runNew (do
 instance (Monad m, ResultRow row) => DBStatementClose m (QueryPlan2 m row) where
     dbStmtClose qp = return ()
 
-instance (MonadIO m, ResultRow row) => DBStatementExec m row (QueryPlan2 m row) where
+instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => DBStatementExec m row (QueryPlan2 m row) where
     dbStmtExec qp vars rs = snd (execQueryPlan  (vars, rs) qp)
 
-instance (MonadIO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPlan2 m row) where
+instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPlan2 m row) where
     dbBegin (TransDB _ dbs  _ _ ) = mapM_ (\(Database db) -> dbBegin db) dbs
     dbCommit (TransDB _ dbs  _ _ ) =     all id <$> mapM (\(Database db) -> dbCommit db) dbs
     dbPrepare (TransDB _ dbs  _ _ ) =     all id <$> mapM (\(Database db) -> dbPrepare db) dbs

@@ -52,6 +52,7 @@ data Formula = FTransaction
              | FInsert Lit
              | FChoice Formula Formula
              | FSequencing Formula Formula
+             | FPar Formula Formula
              | FOne
              | FZero
              | Not Formula
@@ -103,6 +104,8 @@ instance FreeVars Formula where
     freeVars (FSequencing form1 form2) =
         freeVars form1 `union` freeVars form2
     freeVars (FChoice form1 form2) =
+        freeVars form1 `union` freeVars form2
+    freeVars (FPar form1 form2) =
         freeVars form1 `union` freeVars form2
     freeVars (Not formula1) =
         freeVars formula1
@@ -299,6 +302,7 @@ instance Show Formula where
     show (FTransaction ) = "transactional"
     show form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map show (getFsequencings' form)) ++ ")"
     show form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map show (getFchoices' form)) ++ ")"
+    show form@(FPar _ _) = "(" ++ intercalate " ‖ " (map show (getFpars' form)) ++ ")"
     show (FOne) = "𝟏"
     show (FZero) = "𝟎"
     show (Exists var form) = "(∃ " ++ show var ++ "." ++ show form ++ ")"
@@ -400,6 +404,7 @@ instance Subst Formula where
     subst s (FTransaction ) = FTransaction
     subst s (FSequencing form1 form2) = FSequencing (subst s form1) (subst s form2)
     subst s (FChoice form1 form2) = FChoice (subst s form1) (subst s form2)
+    subst s (FPar form1 form2) = FPar (subst s form1) (subst s form2)
     subst s (Not a) = Not (subst s a)
     subst s (Exists var a) = Exists var (subst (delete var s) a)
     subst _ form = form
@@ -457,6 +462,7 @@ pureF (FAtomic _) = True
 pureF (FTransaction ) = False
 pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
+pureF (FPar form1 form2) = pureF form1 && pureF form2
 pureF (FInsert _) = False
 pureF (Exists _ form) =  pureF form
 pureF (Not form) =  pureF form
@@ -469,6 +475,7 @@ layeredF (FAtomic _) = True
 layeredF (FTransaction ) = True
 layeredF (FSequencing form1 form2) =  layeredF form1 &&  layeredF form2
 layeredF (FChoice form1 form2) = layeredF form1 && layeredF form2
+layeredF (FPar form1 form2) = layeredF form1 && layeredF form2
 layeredF (FInsert _) = True
 layeredF (Exists _ form) =  pureF form
 layeredF (Not form) =  pureF form
@@ -495,6 +502,11 @@ FZero .+. b = b
 a .+. FZero = a
 a .+. b = FChoice a b
 
+(.|.) :: Formula -> Formula -> Formula
+FZero .|. b = b
+a .|. FZero = a
+a .|. b = FPar a b
+
 -- get the top level conjucts
 getFsequencings :: Formula -> [Formula]
 getFsequencings (FSequencing form1 form2) =  getFsequencings form1 ++ getFsequencings form2
@@ -504,6 +516,10 @@ getFchoices :: Formula -> [Formula]
 getFchoices (FChoice form1 form2) = getFchoices form1 ++ getFchoices form2
 getFchoices a = [a]
 
+getFpars :: Formula -> [Formula]
+getFpars (FPar form1 form2) = getFpars form1 ++ getFpars form2
+getFpars a = [a]
+
 getFsequencings' :: Formula -> [Formula]
 getFsequencings' (FSequencing form1 form2) =  getFsequencings' form1 ++ [form2]
 getFsequencings' a = [a]
@@ -512,11 +528,18 @@ getFchoices' :: Formula -> [Formula]
 getFchoices' (FChoice form1 form2) = getFchoices' form1 ++  [form2]
 getFchoices' a = [a]
 
+getFpars' :: Formula -> [Formula]
+getFpars' (FPar form1 form2) = getFpars' form1 ++  [form2]
+getFpars' a = [a]
+
 fsequencing :: [Formula] -> Formula
 fsequencing = foldl (.*.) FOne
 
 fchoice :: [Formula] -> Formula
 fchoice = foldl (.+.) FZero
+
+fpar :: [Formula] -> Formula
+fpar = foldl (.|.) FZero
 
 (@@) :: Pred -> [Expr] -> Formula
 pred' @@ args = FAtomic (Atom pred' args)
@@ -530,6 +553,7 @@ instance SubstPred Formula where
     substPred pmap (FTransaction) = FTransaction
     substPred pmap (FSequencing form1 form2) = FSequencing (substPred pmap form1) (substPred pmap form2)
     substPred pmap (FChoice form1 form2) = FChoice (substPred pmap form1) (substPred pmap form2)
+    substPred pmap (FPar form1 form2) = FPar (substPred pmap form1) (substPred pmap form2)
     substPred pmap (Not a) = Not (substPred pmap a)
     substPred pmap (Exists v a) = Exists v (substPred pmap a)
     substPred pmap (FInsert lits) = FInsert (substPred pmap lits)
@@ -558,6 +582,9 @@ checkFormula (FSequencing form1 form2) = do
     checkFormula form1
     checkFormula form2
 checkFormula (FChoice form1 form2) = do
+    checkFormula form1
+    checkFormula form2
+checkFormula (FPar form1 form2) = do
     checkFormula form1
     checkFormula form2
 checkFormula (Not a) = checkFormula a
