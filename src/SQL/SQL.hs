@@ -5,6 +5,7 @@ import QueryPlan
 import FO.Data hiding (Subst, subst)
 import FO.Domain
 import DBQuery
+import ListUtils
 import Utils
 
 import Prelude hiding (lookup)
@@ -727,11 +728,11 @@ instance Translate SQLTrans MapResultRow SQLQuery where
 instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize (Atom name args) =
         if isBuiltIn
-            then return maxArgDomainSize -- assume that builtins don't restrict domain size
+            then return [] -- assume that builtins don't restrict domain size
             else return (if name `member` predtablemap
-                    then fromList [(fv, Bounded 1) | fv <- freeVars args] -- just set bound to 1, we only use Bounded 1 or Unbounded for now
-                    else empty) where
-                argsDomainSizeMaps = map (exprDomainSizeMap varDomainSize Unbounded) args
-                maxArgDomainSize = mmaxs argsDomainSizeMaps
+                    then concatMap (\arg -> case arg of
+                            (VarExpr v) -> [v]
+                            _ -> []) args
+                    else []) where
                 isBuiltIn = name `member` builtin
                 (SQLTrans (BuiltIn builtin) predtablemap) = trans

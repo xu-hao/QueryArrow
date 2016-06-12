@@ -6,7 +6,7 @@ import SQL.SQL
 import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map, (!))
 import Data.List (partition)
 import FO.Data
-import Utils
+import ListUtils
 import Debug.Trace
 
 sqlToCypher :: Map String String -> Map String String -> PredTableMap -> CypherPredTableMap

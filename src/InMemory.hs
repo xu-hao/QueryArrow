@@ -27,6 +27,7 @@ import qualified Data.ByteString.Lazy.Char8 as B8
 import Text.ParserCombinators.Parsec hiding (State)
 import Text.Regex.TDFA ((=~))
 import Data.Text (Text, unpack)
+import Control.Concurrent (threadDelay)
 import Debug.Trace
 
 
@@ -48,12 +49,12 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
     dbRollback _ = return ()
     getName (MapDB name _ _) = name
     getPreds (MapDB name predname _) = [ Pred (QPredName name predname) (PredType ObjectPred [Key "String", Key "String"]) ]
-    domainSize db varDomainSize  (Atom thepred args)
-        | thepred `elem` getPreds db = return (case db of
-                MapDB _ _ rows ->
-                    mmins (map (exprDomainSizeMap varDomainSize (Bounded (length rows))) args))
+    determinateVars db vars (Atom thepred args)
+        | thepred `elem` getPreds db = return (concatMap (\arg -> case arg of
+                                                        (VarExpr v) -> [v]
+                                                        _ -> []) args \\ vars)
              -- this just look up each var from the varDomainSize
-    domainSize _ _ _ = return empty
+    determinateVars _ _ _ = return []
     prepareQuery db vars qu _ = return (MapDBStmt db vars qu)
     supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
     supported _ _ _ = False
@@ -81,12 +82,11 @@ instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue
     dbRollback _ = return ()
     getName (StateMapDB name _) = name
     getPreds (StateMapDB name predname) = [ Pred (PredName (Just name) predname) (PredType ObjectPred [Key "String", Key "String"]) ]
-    domainSize db varDomainSize  (Atom thepred args)
-        | thepred `elem` getPreds db = do
-                rows <- get
-                return (mmins (map (exprDomainSizeMap varDomainSize (Bounded (length rows))) args))
-            -- this just look up each var from the varDomainSize
-    domainSize _ _ _ = return empty
+    determinateVars db vars  (Atom thepred args)
+        | thepred `elem` getPreds db = return (concatMap (\arg -> case arg of
+                                                        (VarExpr v) -> [v]
+                                                        _ -> []) args \\ vars)
+    determinateVars _ _ _ = return []
     prepareQuery db vars2 qu _ = return (StateMapDBStmt db vars2 qu)
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
@@ -169,7 +169,7 @@ instance (Monad m) => Database_ (RegexDB m) m MapResultRow RegexDBStmt where
     dbRollback _ = return ()
     getName (RegexDB name) = name
     getPreds db = [ RegexPred (getName db)]
-    domainSize _ _ _ = return empty
+    determinateVars _ _ _ = return []
     prepareQuery _ _ qu _ = return (RegexDBStmt qu)
     translateQuery _ _ qu vars = (show qu, vars)
 
@@ -212,7 +212,7 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     dbRollback _ = return ()
     getName (EqDB name) = name
     getPreds db = [ EqPred (getName db)]
-    domainSize _ _ _ = return empty
+    determinateVars _ _ _ = return []
     prepareQuery _ _ qu _ = return (EqDBStmt qu)
     translateQuery _ _ qu vars = (show qu, vars)
 
@@ -244,3 +244,37 @@ instance (Monad m) => DBStatementExec m MapResultRow (EqDBStmt) where
             else emptyResultStream
 
     dbStmtExec (EqDBStmt qu) rsvars stream = error ("dqdb: unsupported query " ++ show qu)
+
+-- example UtilsDB
+
+data UtilsDB (m :: * -> *) = UtilsDB String
+
+pattern SleepPred ns = Pred (QPredName ns "sleep") (PredType ObjectPred [Key "Number"])
+
+data UtilsDBStmt = UtilsDBStmt Query
+
+instance (MonadIO m) => Database_ (UtilsDB m) m MapResultRow UtilsDBStmt where
+    dbBegin _ = return ()
+    dbPrepare _ = return True
+    dbCommit _ = return True
+    dbRollback _ = return ()
+    getName (UtilsDB name) = name
+    getPreds db = [ SleepPred (getName db)]
+    determinateVars _ _ _ = return []
+    prepareQuery _ _ qu _ = return (UtilsDBStmt qu)
+    translateQuery _ _ qu vars = (show qu, vars)
+
+    supported _ (FAtomic (Atom (SleepPred _) _)) _ = True
+    supported _ _ _ = False
+
+instance (MonadIO m) => DBStatementClose m (UtilsDBStmt) where
+    dbStmtClose _ = return ()
+
+instance (MonadIO m) => DBStatementExec m MapResultRow (UtilsDBStmt) where
+    dbStmtExec (UtilsDBStmt (Query (FAtomic (Atom (SleepPred _) [a])))) rsvars stream = do
+        row <- stream
+        let (IntValue i) = evalExpr row a
+        liftIO $ threadDelay i
+        return mempty
+
+    dbStmtExec (UtilsDBStmt qu) rsvars stream = error ("dqdb: unsupported query " ++ show qu)

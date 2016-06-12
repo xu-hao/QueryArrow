@@ -4,6 +4,7 @@ module QueryPlan where
 import ResultStream
 import FO.Data
 import FO.Domain
+import ListUtils
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete)
@@ -82,9 +83,8 @@ class (Monad m, DBStatementClose m stmt, DBStatementExec m row stmt) => Database
     dbRollback :: db -> m ()
     getName :: db -> String
     getPreds :: db -> [Pred]
-    -- domainSize function is a function from arguments to domain size
-    -- it is used to compute the optimal query plan
-    domainSize :: db -> DomainSizeMap -> DomainSizeFunction (m) Atom
+    -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
+    determinateVars :: db -> [Var] -> Atom -> m [Var]
     prepareQuery :: db -> [Var] -> Query -> [Var] -> m stmt
     supported :: db -> Formula -> [Var] -> Bool
     translateQuery :: db -> [Var] -> Query -> [Var] -> (String, [Var])
@@ -357,25 +357,20 @@ optimizeQueryPlan dbsx (qpd, QPNot2 qp1) =
 optimizeQueryPlan _ qp@(_, QPReturn2 _) = qp
 
 
-domainSizeFormula :: (Monad m) => DomainSizeMap -> Database m row -> Formula -> m DomainSizeMap
-domainSizeFormula map1 (Database db_) form = do
-        map1' <- determinedVars (domainSize db_ map1)  (form)
-        return (mmin map1 map1')
+domainSizeFormula :: (Monad m) => [Var] -> Database m row -> Formula -> m [Var]
+domainSizeFormula vars (Database db_) form = do
+        map1' <- determinedVars (determinateVars db_ ) vars form
+        return (vars `union` map1')
 
 checkQueryPlan :: (Monad m ) => [Database m row] -> QueryPlan2 m row -> ExceptT (String, Formula) m ()
 checkQueryPlan _ (_, Exec2 form []) = throwError ("no database", form)
 checkQueryPlan dbs (qpd, Exec2 form (x : _)) = do
     let par0 = paramvs qpd
     let det0 = determinevs qpd
-    let map1 = foldr (\v map1' -> insert v (Bounded 1) map1') empty par0
-    map2 <- lift (domainSizeFormula map1 (dbs !! x) form)
-    let vec = map (\v ->
-            case lookupDomainSize v map2 of
-                Bounded _ -> True
-                Unbounded -> False) det0
-    if and vec
+    map2 <- lift (domainSizeFormula par0 (dbs !! x) form)
+    if det0 `subset` map2
         then return ()
-        else throwError ("checkQueryPlan: unbounded vars: " ++ show det0 ++ " " ++ show vec ++ ", the formula is " ++ show form ++ " " ++ show map1 ++ " " ++ show map2, form)
+        else throwError ("checkQueryPlan: unbounded vars: " ++ show (det0 \\ map2) ++ ", the formula is " ++ show form, form)
 
 checkQueryPlan dbs (_, QPChoice2 qp1 qp2) = do
     checkQueryPlan dbs qp1

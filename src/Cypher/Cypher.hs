@@ -697,12 +697,14 @@ translateableCypher trans (Exists _ _)  = lift $ Nothing
 instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
     extractDomainSize conn trans varDomainSize (Atom name args) =
         return (if isBuiltIn
-            then maxArgDomainSize
-            else if name `member` predtablemap then fromList [(fv, Bounded 1) | fv <- freeVars args] else empty) where
-            argsDomainSizeMaps = map (exprDomainSizeMap varDomainSize Unbounded) args
-            maxArgDomainSize = mmaxs argsDomainSizeMaps
-            isBuiltIn = name `member` builtin
-            (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
+            then []
+            else if name `member` predtablemap
+                then concatMap (\arg -> case arg of
+                    (VarExpr v) -> [v]
+                    _ -> []) args
+                else []) where
+                    isBuiltIn = name `member` builtin
+                    (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
 instance Translate CypherTrans MapResultRow CypherQuery where
     translateQueryWithParams trans vars query env =

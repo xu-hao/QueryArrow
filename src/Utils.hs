@@ -4,6 +4,7 @@ module Utils where
 
 import ResultStream
 import FO.Data
+import ListUtils
 import QueryPlan
 
 import Prelude  hiding (lookup)
@@ -53,26 +54,6 @@ combineLits lits generateUpdate generateInsert generateDelete = do
         ([posobjatom], [negobjatom]) -> generateUpdate (posobjatom:pospropredatoms) (negobjatom:negproppredatoms) -- update property
         x -> error ("combineLits: uncombinable " ++ show x)
 
-
-maximumd :: Ord a => a -> [a] -> a
-maximumd d [] = d
-maximumd _ l = maximum l
-
-superset :: (Eq a) => [a] -> [a] -> Bool
-superset s = all (`elem` s)
-
-endswith :: Eq a => [a] -> [a] -> Bool
-endswith a b = drop (length b - length a) b == a
-
-startswith :: Eq a => [a] -> [a] -> Bool
-startswith a b = take (length a) b == a
-
-replace :: Eq a => [a] -> [a] -> [a] -> [a]
-replace old new [] = []
-replace old new a@(x:xs) =
-    if startswith a old
-        then new ++ replace old new (drop (length old) a)
-        else x : replace old new xs
 
 dbCatch :: (MonadCatch m) => m a -> m (Either SomeException a)
 dbCatch action =

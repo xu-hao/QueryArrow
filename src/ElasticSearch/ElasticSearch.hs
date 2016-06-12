@@ -199,7 +199,9 @@ data ESTrans = ESTrans
 
 instance DBConnection conn ElasticSearchQuery  => ExtractDomainSize DBAdapterMonad conn ESTrans where
     extractDomainSize _ _ _ (Atom _ args) =
-        return (fromList [(fv, Bounded 1) | fv <- freeVars args])
+        return (concatMap (\arg -> case arg of
+                (VarExpr v) -> [v]
+                _ -> []) args)
 
 translateQueryArg :: [Var] -> Expr -> ([ElasticSearchQueryExpr], [Var])
 translateQueryArg env (VarExpr var)  =

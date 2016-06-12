@@ -22,7 +22,7 @@ import Prelude  hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete, singleton, keys, filterWithKey)
 import qualified Data.Map.Strict
-import Data.List ((\\), intercalate, union, find)
+import Data.List ((\\), intercalate, union, find, intersect)
 import Control.Monad.Trans.State.Strict (StateT, evalStateT,evalState, get, put, State, runState   )
 import Control.Applicative ((<$>), liftA2)
 import Data.Convertible.Base
@@ -103,14 +103,14 @@ instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => Database_ (TransDB
     dbRollback (TransDB _ dbs  _ _ ) =    mapM_ (\(Database db) -> dbRollback db) dbs
     getName (TransDB name _ _ _ ) = name
     getPreds (TransDB _ dbs predmap _ ) = predmap
-    domainSize (TransDB _ dbs _ _ ) varDomainSize  atom@(Atom pred args) = do
+    determinateVars (TransDB _ dbs _ _ ) vars  atom@(Atom pred args) = do
         mps <- mapM (\ (Database db) ->
                 if pred `elem` getPreds db then do
-                    map2 <- (domainSize db varDomainSize  atom)
+                    map2 <- (determinateVars db vars  atom)
                     return [map2]
                 else
                     return []) dbs
-        return (foldl1 (intersectionWith (+)) (concat mps))
+        return (foldl1 intersect (concat mps))
     prepareQuery (TransDB _ dbs _ (qr, ir, dr) ) vars2 qu =
         prepareQuery' dbs  qr ir dr (Include vars2) qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
@@ -126,7 +126,7 @@ instance (MonadIO m, ResultRow row, DBStatementExec m row stmt, DBStatementClose
     dbRollback (RestrictDB _ _ db ) = dbRollback db
     getName (RestrictDB _ _ db ) = "RestrictDB " ++ getName db
     getPreds (RestrictDB preds _ _) = preds
-    domainSize (RestrictDB _ pmap db) domainsizemap form = domainSize db domainsizemap (substPred pmap form)
+    determinateVars (RestrictDB _ pmap db) domainsizemap form = determinateVars db domainsizemap (substPred pmap form)
     prepareQuery (RestrictDB _ pmap db) vars (Query  form) = prepareQuery db vars (Query  (substPred pmap form))
     supported (RestrictDB _ pmap db) form = supported db (substPred pmap form)
     translateQuery (RestrictDB _ pmap db) vars (Query  form) = translateQuery db vars (Query  (substPred pmap form))

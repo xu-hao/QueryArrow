@@ -55,7 +55,7 @@ class DBConnection conn query  | conn -> query  where
     connClose :: conn -> DBAdapterMonad ()
 
 class ExtractDomainSize m conn trans | conn -> m  where
-    extractDomainSize :: conn -> trans -> DomainSizeMap -> Atom -> m DomainSizeMap
+    extractDomainSize :: conn -> trans -> [Var] -> Atom -> m [Var]
 
 class (Show query) => Translate trans row query  | trans -> row query  where
     translateQueryWithParams :: trans -> [Var] -> Query -> [Var] -> (query, [Var])
@@ -82,7 +82,7 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedS
         connRollback conn
     getName (GenericDB _ name _ _)= name
     getPreds (GenericDB _ _ preds _)= preds
-    domainSize (GenericDB conn _  _ trans) = extractDomainSize conn trans
+    determinateVars (GenericDB conn _  _ trans) = extractDomainSize conn trans
     prepareQuery (GenericDB conn _ _ trans) vars2 query vars  = do
         let (sqlquery, params) = translateQueryWithParams trans vars2 query vars
         stmt <- prepareQueryStatement conn sqlquery
@@ -126,7 +126,7 @@ instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (Prepared
         dbRollback (SequenceDB _ _ _ _) = return ()
         getName (SequenceDB _ name _ _)= name
         getPreds (SequenceDB _ name predname _)= [Pred (PredName (Just name) predname) (PredType ObjectPred [Key "Any"])]
-        domainSize (SequenceDB _ _ _ _)= \ _ (Atom _ [VarExpr v]) -> return (singleton v (Bounded 1))
+        determinateVars (SequenceDB _ _ _ _)= \ _ (Atom _ [VarExpr v]) -> return [v]
         prepareQuery (SequenceDB conn _ _ trans) vars (Query  (FAtomic (Atom _ [VarExpr v]))) _ =
             return (PreparedSequenceStatement conn trans vars v)
         prepareQuery _ _ _ _ = error "not supported"
