@@ -29,7 +29,6 @@ import ElasticSearch.ICAT
 
 import Debug.Trace
 
-
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
     let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_path ps !! 0))
