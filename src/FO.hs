@@ -146,6 +146,7 @@ dbMap = fromList [
     ("Cypher/Neo4j", Neo4j.getDB),
     ("InMemory/EqDB", \ps -> return [Database (InMemory.EqDB (db_name ps !! 0))]),
     ("InMemory/RegexDB", \ps -> return [Database (InMemory.RegexDB (db_name ps !! 0))]),
+    ("InMemory/UtilsDB", \ps -> return [Database (InMemory.UtilsDB (db_name ps !! 0))]),
     ("ElasticSearch/ElasticSearch", ElasticSearch.getDB)
     ];
 
