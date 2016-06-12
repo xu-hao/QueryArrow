@@ -22,12 +22,11 @@ import qualified Data.Text as Text
 data ElasticSearchConnInfo = ElasticSearchConnInfo {
     host :: String,
     port :: Int,
-    index :: String,
-    mapping :: String
+    index :: String
 }
 
-esConnInfoToUrl :: ElasticSearchConnInfo -> String
-esConnInfoToUrl esci = "http://" ++ host esci ++ ":" ++ show (port esci) ++ "/" ++ index esci ++ "/" ++ mapping esci
+esConnInfoToUrl :: ElasticSearchConnInfo -> Text.Text -> String
+esConnInfoToUrl esci type0 = "http://" ++ host esci ++ ":" ++ show (port esci) ++ "/" ++ index esci ++ "/" ++ Text.unpack type0
 
 
 data ESQuery = ESQuery {
@@ -45,7 +44,7 @@ data ESTermQuery = ESTermQuery {
     term :: ESTermQueryItem
 } deriving (Show, Generic)
 
-data ESTermQueryItem = ESIntTermQuery  String Int | ESStrTermQuery  String String deriving (Show)
+data ESTermQueryItem = ESIntTermQuery  Text.Text Int | ESStrTermQuery  Text.Text Text.Text deriving (Show)
 
 instance ToJSON ESQuery
 instance ToJSON ESBoolQuery
@@ -54,28 +53,28 @@ instance ToJSON ESTermQuery
 
 instance ToJSON ESTermQueryItem where
     toJSON (ESIntTermQuery attr val) = object [
-        Text.pack attr .= val ]
+        attr .= val ]
     toJSON (ESStrTermQuery attr val) = object [
-        Text.pack attr .= Text.pack val ]
+        attr .= val ]
 
 
-getESRecord :: (MonadIO m) => ElasticSearchConnInfo -> String -> m (Maybe ESRecord)
-getESRecord esci esid =
-    get (esConnInfoToUrl esci ++ "/" ++ esid) >>= return . decode
+getESRecord :: (MonadIO m) => ElasticSearchConnInfo -> Text.Text -> String -> m (Maybe ESRecord)
+getESRecord esci type0 esid =
+    get (esConnInfoToUrl esci type0 ++ "/" ++ esid) >>= return . decode
 
-postESRecord :: ElasticSearchConnInfo -> ESRecord -> IO BL.ByteString
-postESRecord esci rec = postJSON (esConnInfoToUrl esci) rec
+postESRecord :: ElasticSearchConnInfo -> Text.Text -> ESRecord -> IO BL.ByteString
+postESRecord esci type0 rec = postJSON (esConnInfoToUrl esci type0) rec
 
-queryBySearch :: ElasticSearchConnInfo -> ESQuery -> IO (Either String ESQueryResult)
-queryBySearch esci qu = do
+queryBySearch :: ElasticSearchConnInfo -> Text.Text -> ESQuery -> IO (Either String ESQueryResult)
+queryBySearch esci type0 qu = do
         infoM "ElasticSearch" ("queryBySearch: " ++ BL8.unpack (encode qu) ++ show qu)
-        resp <- post (esConnInfoToUrl esci ++ "/" ++ "_search") (RequestBodyLBS (encode qu))
+        resp <- post (esConnInfoToUrl esci type0 ++ "/" ++ "_search") (RequestBodyLBS (encode qu))
         infoM "ElasticSearch" ("resp: " ++ BL8.unpack resp)
         return (eitherDecode resp)
 
-deleteById :: ElasticSearchConnInfo -> String -> IO BL.ByteString
-deleteById esci esid = do
+deleteById :: ElasticSearchConnInfo -> Text.Text -> String -> IO BL.ByteString
+deleteById esci type0 esid = do
     infoM "ElasticSearch" ("deleteById: " ++ esid)
-    resp <- delete (esConnInfoToUrl esci) esid
+    resp <- delete (esConnInfoToUrl esci type0) esid
     infoM "ElasticSearch" ("resp: " ++ BL8.unpack resp)
     return resp

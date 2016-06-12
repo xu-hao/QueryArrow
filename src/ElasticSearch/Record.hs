@@ -2,16 +2,17 @@
 
 module ElasticSearch.Record where
 
-import Data.Aeson
-import GHC.Generics
+import QueryPlan
 
-data ESRecord = ESRecord {
-    obj_id :: Int,
-    meta_id :: Int,
-    attribute :: String,
-    value :: String,
-    unit :: String
-} deriving (Show, Generic)
+import Data.Aeson (parseJSON, toJSON, Object, FromJSON, ToJSON, Value)
+import Data.Map.Strict (Map)
+import Data.Text (Text)
+import Control.Applicative ((<$>))
 
-instance FromJSON ESRecord
-instance ToJSON ESRecord
+newtype ESRecord = ESRecord (Map Text Value) deriving Show
+
+instance FromJSON ESRecord where
+    parseJSON a = ESRecord <$> parseJSON a
+
+instance ToJSON ESRecord where
+    toJSON (ESRecord a) = toJSON a

@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
 
-module ElasticSearch.ElasticSearch where
+module ElasticSearch.ICAT where
 
 -- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
 
@@ -25,10 +25,13 @@ import qualified ElasticSearch.Query as ESQ
 import ElasticSearch.QueryResult
 import ElasticSearch.QueryResultHits
 import ElasticSearch.ESQL
-import ElasticSearch.ICAT
+import ElasticSearch.ElasticSearchConnection
 
-import Debug.Trace
+esMetaPred :: String -> Pred
+esMetaPred ns = Pred (QPredName ns "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])
 
+makeElasticSearchDBAdapter :: String -> ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
+makeElasticSearchDBAdapter ns conn = GenericDB conn ns [esMetaPred ns] (ESTrans  (fromList [(esMetaPred ns, (pack "ES_META", [pack "obj_id", pack "meta_id", pack "attribute", pack "value", pack "unit"]))]))
 
 getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
 getDB ps = do
