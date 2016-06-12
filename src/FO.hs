@@ -11,6 +11,7 @@ import Config
 import Parser
 import DBQuery
 import Utils
+import MSet
 -- import Plugins
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified SQL.HDBC.CockroachDB as CockroachDB

@@ -5,6 +5,7 @@ import ResultStream
 import FO.Data
 import FO.Domain
 import ListUtils
+import MSet
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete)
@@ -408,36 +409,6 @@ checkQueryPlan dbs (_, QPTransaction2) =
 
 calculateVars :: [Var] -> MSet Var -> QueryPlan -> QueryPlan2 m row
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
-
-data MSet a = Include [a] | Exclude [a] deriving Show
-
-munion :: Eq a => MSet a -> MSet a -> MSet a
-munion (Include vars) (Include vars2) = Include (vars `union` vars2)
-munion (Include vars) (Exclude vars2) = Exclude (vars2 \\ vars)
-munion (Exclude vars) (Include vars2) = Exclude (vars \\ vars2)
-munion (Exclude vars) (Exclude vars2) = Exclude (vars2 `intersect` vars)
-
-mcomplement :: Eq a => MSet a -> MSet a
-mcomplement (Include vars) = Exclude vars
-mcomplement (Exclude vars) = Include vars
-
-mintersect :: Eq a => MSet a -> MSet a -> MSet a
-mintersect (Include vars) (Include vars2) = Include (vars `intersect` vars2)
-mintersect (Exclude vars) (Include vars2) = Include (vars2 \\ vars)
-mintersect (Include vars) (Exclude vars2) = Include (vars \\ vars2)
-mintersect (Exclude vars) (Exclude vars2) = Exclude (vars `union` vars2)
-
-mdiff :: Eq a => MSet a -> MSet a -> MSet a
-mdiff s1 s2 = s1 `mintersect` (mcomplement s2)
-
-rmintersect :: Eq a => [a] -> MSet a -> [a]
-rmintersect vars (Include vars2) = vars `intersect` vars2
-rmintersect vars (Exclude vars2) = vars \\ vars2
-
-
-lmintersect :: Eq a => MSet a -> [a] -> [a]
-lmintersect (Include vars2) vars = vars `intersect` vars2
-lmintersect (Exclude vars2) vars = vars \\ vars2
 
 calculateVars1 :: MSet Var -> QueryPlan -> QueryPlan2 m row
 calculateVars1  rvars (Exec form dbxs) =
