@@ -60,6 +60,8 @@ rewrite1 ext  qr  ir dr form0 =
                 Just form -> form)
         (FChoice disj1 disj2) ->
             (FChoice <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2)
+        (FPar disj1 disj2) ->
+            (FPar <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2)
         (FSequencing conj1 conj2) ->
             (FSequencing <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2)
         (FOne) ->
