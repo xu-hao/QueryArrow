@@ -15,7 +15,6 @@ import Data.Aeson (Value (String, Number))
 import Control.Monad (zipWithM_)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Applicative ((<|>))
-import System.Log.Logger (debugM)
 
 import FO.Domain
 import FO.Data
@@ -137,7 +136,6 @@ instance PreparedStatement_ ElasticSearchStatement where
 
     execWithParams (ElasticSearchStatement esci (ElasticSearchDelete type0 rec)) args = (do
         hit <- esResultStream esci type0 rec args
-        liftIO $ debugM "ElasticSearch" ("ElasticSearch deleting " ++ show hit)
         liftIO $ ESQ.deleteById esci type0 (_id hit)
         emptyResultStream) <|> return mempty
 
@@ -146,7 +144,6 @@ instance PreparedStatement_ ElasticSearchStatement where
         let rec = _source hit
             id0 = _id hit
             updatedrec = updateProps (recordToESRecord updaterec args) rec
-        liftIO $ debugM "ElasticSearch"  ("ElasticSearch updating property " ++ show hit)
         liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
         emptyResultStream
         ) <|> return mempty
@@ -156,7 +153,6 @@ instance PreparedStatement_ ElasticSearchStatement where
         let rec = _source hit
             id0 = _id hit
             updatedrec = deleteProps diff rec
-        liftIO $ debugM "ElasticSearch"  ("ElasticSearch deleting property " ++ show hit)
         liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
         emptyResultStream
         ) <|> return mempty
