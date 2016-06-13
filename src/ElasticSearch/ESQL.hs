@@ -82,7 +82,7 @@ translateInsertToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPr
 
 
 translateDeleteToElasticSearch :: ESTrans -> Pred -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
-translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPred _) ) args env =
+translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType ObjectPred _) ) args env =
     let (args2, params) = mconcat (map (translateQueryArg env) args)
         (type0, props) = case lookup pred0 map1 of
                 Just props0 -> props0
