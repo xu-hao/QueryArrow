@@ -54,7 +54,7 @@ isSQLConstExpr _ = False
 data SQLCond = SQLCompCond SQLOper SQLExpr SQLExpr
              | SQLAndCond SQLCond SQLCond
              | SQLOrCond SQLCond SQLCond
-             | SQLExistsCond SQL0
+             | SQLExistsCond SQL
              | SQLNotCond SQLCond
              | SQLTrueCond
              | SQLFalseCond
@@ -82,12 +82,12 @@ a .=. b = SQLCompCond "=" a b
 a .<>. b = SQLCompCond "<>" a b
 
 
-data SQL0 = SQL0 {sqlSelect :: [ SQLExpr ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond} deriving (Eq, Ord)
+data SQL = SQLQuery {sqlSelect :: [ SQLExpr ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond} deriving (Eq, Ord)
 
-data SQL = SQLQ SQL0
-    | SQLInsert TableName [(Col,SQLExpr)] [Table] SQLCond
-    | SQLUpdate (TableName, SQLVar) [(Col,SQLExpr)] SQLCond
-    | SQLDelete (TableName, SQLVar) SQLCond deriving (Eq, Ord)
+data SQLStmt = SQLQueryStmt SQL
+    | SQLInsertStmt TableName [(Col,SQLExpr)] [Table] SQLCond
+    | SQLUpdateStmt (TableName, SQLVar) [(Col,SQLExpr)] SQLCond
+    | SQLDeleteStmt (TableName, SQLVar) SQLCond deriving (Eq, Ord)
 
 instance Show Table where
     show (OneTable tablename var) = tablename ++ " " ++ show var
@@ -127,18 +127,18 @@ showWhereCond2 cond sqlvar = case cond of
     SQLTrueCond -> ""
     _ -> " WHERE " ++ show2 cond sqlvar
 
-instance Show2 SQL0 where
-    show2 (SQL0 cols tables conds) sqlvar = "SELECT " ++ (if null cols then "1" else intercalate "," (map show cols)) ++
+instance Show2 SQL where
+    show2 (SQLQuery cols tables conds) sqlvar = "SELECT " ++ (if null cols then "1" else intercalate "," (map show cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map show tables)) ++
             (showWhereCond2 conds sqlvar)
 
 
-instance Show SQL where
-    show (SQLQ sql) = show2 sql []
+instance Show SQLStmt where
+    show (SQLQueryStmt sql) = show2 sql []
 
-    show (SQLInsert tname colsexprs tables cond) =
+    show (SQLInsertStmt tname colsexprs tables cond) =
         let (cols, exprs) = unzip colsexprs in
             "INSERT INTO " ++ tname ++ " (" ++ intercalate "," cols ++ ")" ++
                 if null tables && all isSQLConstExpr exprs
@@ -146,10 +146,10 @@ instance Show SQL where
                     else " SELECT " ++ intercalate "," (map (\a -> show2 a []) exprs) ++ (if null tables
                         then ""
                         else " FROM " ++ intercalate "," (map show tables)) ++ showWhereCond2 cond []
-    show (SQLDelete (tname, sqlvar) cond)  =
+    show (SQLDeleteStmt (tname, sqlvar) cond)  =
         "DELETE FROM " ++ tname ++ showWhereCond2  cond [sqlvar]
 
-    show (SQLUpdate (tname, sqlvar) colsexprs cond)  =
+    show (SQLUpdateStmt (tname, sqlvar) colsexprs cond)  =
         "UPDATE " ++ tname ++ " SET " ++ intercalate "," (map (\(col, expr)-> col ++ " = " ++ show2  expr [sqlvar]) colsexprs) ++ showWhereCond2  cond [sqlvar]
 
 sqlStringEscape :: String -> String
@@ -200,19 +200,19 @@ instance Subst SQLQualifiedCol where
 instance Subst a => Subst [a] where
     subst varmap = map (subst varmap)
 
-type SQLQuery = ([Var], SQL, [Var]) -- return vars, sql, param vars
+type SQLQuery = ([Var], SQLStmt, [Var]) -- return vars, sql, param vars
 
-instance Monoid SQL0 where
-    (SQL0 sselect1 sfrom1 swhere1) `mappend` (SQL0 sselect2 sfrom2 swhere2) =
-        SQL0 (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2)
-    mempty = SQL0 [] [] SQLTrueCond
+instance Monoid SQL where
+    (SQLQuery sselect1 sfrom1 swhere1) `mappend` (SQLQuery sselect2 sfrom2 swhere2) =
+        SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2)
+    mempty = SQLQuery [] [] SQLTrueCond
 
-sor (SQL0 sselect1 sfrom1 swhere1) (SQL0 sselect2 sfrom2 swhere2) = SQL0 (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2)
+sor (SQLQuery sselect1 sfrom1 swhere1) (SQLQuery sselect2 sfrom2 swhere2) = SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2)
 
-snot :: SQL0 -> SQL0
-snot (SQL0 sselect sfrom swhere) = SQL0 sselect sfrom (SQLNotCond swhere)
+snot :: SQL -> SQL
+snot (SQLQuery sselect sfrom swhere) = SQLQuery sselect sfrom (SQLNotCond swhere)
 
-swhere swhere1 = SQL0 [] [] swhere1
+swhere swhere1 = SQLQuery [] [] swhere1
 -- translate relational calculus to sql
 -- If P maps to table T col_1 ... col_n
 -- {xs : P(e_1,e_2,...,e_n)}
@@ -233,9 +233,9 @@ type PredTableMap = Map Pred (Table, [SQLQualifiedCol])
 -- table -> cols, primary key
 type Schema = Map TableName ([Col], [Col])
 -- builtin predicate -> op, neg op
-newtype BuiltIn = BuiltIn (Map Pred (Sign -> [Expr] -> TransMonad SQL0))
+newtype BuiltIn = BuiltIn (Map Pred (Sign -> [Expr] -> TransMonad SQL))
 
-simpleBuildIn :: String -> (Sign -> [SQLExpr] -> TransMonad SQL0) -> Sign -> [Expr] -> TransMonad SQL0
+simpleBuildIn :: String -> (Sign -> [SQLExpr] -> TransMonad SQL) -> Sign -> [Expr] -> TransMonad SQL
 simpleBuildIn n builtin sign args = do
     let err m = do
                 a <- m
@@ -311,14 +311,14 @@ instance Params SQLCond where
     params (SQLTrueCond) = []
     params (SQLExistsCond sql) = params sql
 
-instance Params SQL where
-    params (SQLQ (SQL0 sel _ cond)) = params sel ++ params cond
-    params (SQLInsert _ vs _ cond) = params (map snd vs) ++ params cond
-    params (SQLUpdate _ vs cond) = params (map snd vs) ++ params cond
-    params (SQLDelete _ cond) = params cond
+instance Params SQLStmt where
+    params (SQLQueryStmt (SQLQuery sel _ cond)) = params sel ++ params cond
+    params (SQLInsertStmt _ vs _ cond) = params (map snd vs) ++ params cond
+    params (SQLUpdateStmt _ vs cond) = params (map snd vs) ++ params cond
+    params (SQLDeleteStmt _ cond) = params cond
 
-instance Params SQL0 where
-    params (SQL0 sel _ cond) = params sel ++ params cond
+instance Params SQL where
+    params (SQLQuery sel _ cond) = params sel ++ params cond
 
 instance Params SQLQuery where
     params (_, _, params) = params
@@ -327,25 +327,25 @@ translateQueryToSQL :: [Var] -> Query -> TransMonad SQLQuery
 translateQueryToSQL vars qu@(Query formula) = do
     (vars, sql, vars2) <- if pureF formula
         then do
-            (SQL0 _ tablelist cond1) <-  translateFormulaToSQL formula
+            (SQLQuery _ tablelist cond1) <-  translateFormulaToSQL formula
             ts <- get
             let extractCol var = case lookup var (repmap ts) of
                                     Just col -> col
-                                    _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL0, available " ++ show (repmap ts))
+                                    _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
             let cols = map extractCol vars
-                sql = SQLQ (SQL0 cols tablelist cond1)
+                sql = SQLQueryStmt (SQLQuery cols tablelist cond1)
             return (vars, sql, (params sql))
         else translateInsertToSQL formula
     return (vars, simplifySQLCond sql, vars2)
 
-simplifySQLCond :: SQL -> SQL
-simplifySQLCond (SQLQ (SQL0 s f cond)) = SQLQ (SQL0 s f (simplifySQLCond' cond))
-simplifySQLCond (SQLInsert t s f cond) = SQLInsert t s f (simplifySQLCond' cond)
-simplifySQLCond (SQLUpdate t cs cond) = SQLUpdate t cs (simplifySQLCond' cond)
-simplifySQLCond (SQLDelete t cond) = SQLDelete t (simplifySQLCond' cond)
+simplifySQLCond :: SQLStmt -> SQLStmt
+simplifySQLCond (SQLQueryStmt (SQLQuery s f cond)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond))
+simplifySQLCond (SQLInsertStmt t s f cond) = SQLInsertStmt t s f (simplifySQLCond' cond)
+simplifySQLCond (SQLUpdateStmt t cs cond) = SQLUpdateStmt t cs (simplifySQLCond' cond)
+simplifySQLCond (SQLDeleteStmt t cond) = SQLDeleteStmt t (simplifySQLCond' cond)
 
-simplifySQLCond2 :: SQL0 -> SQL0
-simplifySQLCond2 (SQL0 s f cond) = SQL0 s f (simplifySQLCond' cond)
+simplifySQLCond2 :: SQL -> SQL
+simplifySQLCond2 (SQLQuery s f cond) = SQLQuery s f (simplifySQLCond' cond)
 
 simplifySQLCond' :: SQLCond -> SQLCond
 simplifySQLCond' c@(SQLCompCond _ _ _) = c
@@ -372,11 +372,11 @@ simplifySQLCond' (SQLNotCond a) = case simplifySQLCond' a of
 simplifySQLCond' (SQLExistsCond sql) = SQLExistsCond (simplifySQLCond2 sql)
 
 
-sqlexists sql@(SQL0 [] tablelist (SQLExistsCond _)) = sql
-sqlexists (SQL0 cols tablelist cond) = SQL0 [] [] (SQLExistsCond (SQL0 cols tablelist cond))
-sqlfalse = SQL0 [] [] (SQLFalseCond)
+sqlexists sql@(SQLQuery [] tablelist (SQLExistsCond _)) = sql
+sqlexists (SQLQuery cols tablelist cond) = SQLQuery [] [] (SQLExistsCond (SQLQuery cols tablelist cond))
+sqlfalse = SQLQuery [] [] (SQLFalseCond)
 
-translateFormulaToSQL :: Formula -> TransMonad SQL0
+translateFormulaToSQL :: Formula -> TransMonad SQL
 translateFormulaToSQL (FAtomic a) = translateAtomToSQL Pos a
 translateFormulaToSQL (FSequencing form1 form2) =
     mappend <$> translateFormulaToSQL form1 <*> translateFormulaToSQL form2
@@ -416,7 +416,7 @@ lookupTableVar tablename prikeyargs = do
             addTable tablename prikeyargs sqlvar2
             return (True, sqlvar2)
 
-translateAtomToSQL :: Sign -> Atom -> TransMonad SQL0
+translateAtomToSQL :: Sign -> Atom -> TransMonad SQL
 translateAtomToSQL thesign (Atom name args) = do
     ts <- get
     let (BuiltIn builtints) = builtin ts
@@ -445,8 +445,8 @@ translateAtomToSQL thesign (Atom name args) = do
                 condsFromArgs <- mapM (condFromArg (.=.)) (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
                 return (case thesign of
-                            Pos -> SQL0 [] tables2 cond3
-                            Neg -> SQL0 [] [] (SQLNotCond (SQLExistsCond (SQL0 [] tables2 cond3))))
+                            Pos -> SQLQuery [] tables2 cond3
+                            Neg -> SQLQuery [] [] (SQLNotCond (SQLExistsCond (SQLQuery [] tables2 cond3))))
             Nothing -> error (show name ++ " is not defined")
 
 
@@ -466,7 +466,7 @@ translateInsertToSQL form = do
 
 translateInsertToSQL' :: [Lit] -> Formula -> TransMonad SQLQuery
 translateInsertToSQL' lits conj = do
-    (SQL0 _ tablelist cond) <- translateFormulaToSQL conj
+    (SQLQuery _ tablelist cond) <- translateFormulaToSQL conj
     let keymap = sortByKey lits
     if size keymap > 1
         then error "translateInsertToSQL: more than one key"
@@ -479,25 +479,25 @@ translateInsertToSQL' lits conj = do
                     return ([], sql, params sql)
                 _ -> error "translateInsertToSQL: more than one actions"
 
--- each SQL0 must be an Insert statement
-sortParts :: [SQL] -> [SQL]
+-- each SQLStmt must be an Insert statement
+sortParts :: [SQLStmt] -> [SQLStmt]
 sortParts [] = []
 sortParts (p : ps) = b++[a] where
     (a, b) = foldl (\(active, done) part ->
         case (active, part) of
-            (SQLInsert tname colexprs tablelist cond, SQLInsert tname2 colexprs2 tablelist2 cond2)
+            (SQLInsertStmt tname colexprs tablelist cond, SQLInsertStmt tname2 colexprs2 tablelist2 cond2)
                 | tname == tname2 && compatible colexprs colexprs2 ->
-                    (SQLInsert tname ( colexprs `union` colexprs2) (tablelist ++ tablelist2) (cond .&&. cond2), done)
+                    (SQLInsertStmt tname ( colexprs `union` colexprs2) (tablelist ++ tablelist2) (cond .&&. cond2), done)
             _ -> (part, active : done)) (p,[]) ps where
             compatible colexpr = all (\(col, expr) -> all (\(col2, expr2) ->col2 /= col || expr2 == expr) colexpr)
 
-toInsert :: [Table] -> SQLCond -> SQL -> SQL
-toInsert tablelist cond (SQLInsert tname colexprs tablelist2 cond2) = SQLInsert tname colexprs (tablelist ++ tablelist2) (cond .&&. cond2)
-toInsert tablelist cond (SQLDelete tname cond2) = SQLDelete tname (cond .&&. cond2)
-toInsert tablelist cond (SQLUpdate tname colexprs cond2) = SQLUpdate tname colexprs (cond .&&. cond2)
+toInsert :: [Table] -> SQLCond -> SQLStmt -> SQLStmt
+toInsert tablelist cond (SQLInsertStmt tname colexprs tablelist2 cond2) = SQLInsertStmt tname colexprs (tablelist ++ tablelist2) (cond .&&. cond2)
+toInsert tablelist cond (SQLDeleteStmt tname cond2) = SQLDeleteStmt tname (cond .&&. cond2)
+toInsert tablelist cond (SQLUpdateStmt tname colexprs cond2) = SQLUpdateStmt tname colexprs (cond .&&. cond2)
 
 
-combineLitsSQL :: [Lit] -> TransMonad [SQL]
+combineLitsSQL :: [Lit] -> TransMonad [SQLStmt]
 combineLitsSQL lits = combineLits lits generateUpdateSQL generateInsertSQL generateDeleteSQL
 
 preproc0 tname sqlvar qcols pred1 args = do
@@ -513,17 +513,17 @@ preproc tname sqlvar qcols pred1 args = do
         let propqcol_args = propComponents pred1 qcol_args
         return (keyqcol_args, propqcol_args, sqlvar2)
 
-generateDeleteSQL :: Atom -> TransMonad [SQL]
+generateDeleteSQL :: Atom -> TransMonad [SQLStmt]
 generateDeleteSQL atom = do
     sql <- translateDeleteAtomToSQL atom
     return [sql]
 
-generateInsertSQL :: [Atom] -> TransMonad [SQL]
+generateInsertSQL :: [Atom] -> TransMonad [SQLStmt]
 generateInsertSQL atoms = do
     let map1 = sortAtomByPred atoms
     mapM generateInsertSQLForPred (toList map1)
 
-generateUpdateSQL :: [Atom] -> [Atom] -> TransMonad [SQL]
+generateUpdateSQL :: [Atom] -> [Atom] -> TransMonad [SQLStmt]
 generateUpdateSQL pospropatoms negpropatoms = do
     let posprednamemap = sortAtomByPred pospropatoms
     let negprednamemap = sortAtomByPred negpropatoms
@@ -532,36 +532,36 @@ generateUpdateSQL pospropatoms negpropatoms = do
     let neglist = [l | key <- allkeys, let l = case lookup key negprednamemap of Nothing -> []; Just l' -> l']
     mapM generateUpdateSQLForPred (zip3 allkeys poslist neglist)
 
-generateInsertSQLForPred :: (Pred, [Atom]) -> TransMonad SQL
+generateInsertSQLForPred :: (Pred, [Atom]) -> TransMonad SQLStmt
 generateInsertSQLForPred (pred1, [posatom]) = translatePosInsertAtomToSQL posatom -- set property
 generateInsertSQLForPred (pred1, _) = error "unsupported number of pos and neg literals" -- set property
 
-generateUpdateSQLForPred :: (Pred, [Atom], [Atom]) -> TransMonad SQL
+generateUpdateSQLForPred :: (Pred, [Atom], [Atom]) -> TransMonad SQLStmt
 generateUpdateSQLForPred (pred1, [posatom], _) = translatePosUpdateAtomToSQL posatom -- set property
 generateUpdateSQLForPred (pred1, [], [negatom]) = translateNegUpdateAtomToSQL negatom -- set property
 generateUpdateSQLForPred (pred1, _, _) = error "unsupported number of pos and neg literals" -- set property
 
-translateDeleteAtomToSQL :: Atom -> TransMonad SQL
+translateDeleteAtomToSQL :: Atom -> TransMonad SQLStmt
 translateDeleteAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
         Just (OneTable tname sqlvar, qcols) -> do
             (qcol_args, sqlvar2) <- preproc0 tname sqlvar qcols pred1 args
             cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToDelete qcol_args
-            return (SQLDelete (tname, sqlvar2) cond)
+            return (SQLDeleteStmt (tname, sqlvar2) cond)
         Nothing -> error "not an updatable predicate"
 
-translatePosInsertAtomToSQL :: Atom -> TransMonad SQL
+translatePosInsertAtomToSQL :: Atom -> TransMonad SQLStmt
 translatePosInsertAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
         Just (OneTable tname _, qcols) -> do
             let qcol_args = zip qcols args
             colexprs <- mapM qcolArgToValue qcol_args
-            return (SQLInsert tname colexprs [] SQLTrueCond)
+            return (SQLInsertStmt tname colexprs [] SQLTrueCond)
         Nothing -> error "not an updatable predicate"
 
-translatePosUpdateAtomToSQL :: Atom -> TransMonad SQL
+translatePosUpdateAtomToSQL :: Atom -> TransMonad SQLStmt
 translatePosUpdateAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
@@ -569,11 +569,11 @@ translatePosUpdateAtomToSQL (Atom pred1 args) = do
             (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols pred1 args
             cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToUpdateCond keyqcol_args
             set <- mapM qcolArgToSet propqcol_args
-            return (SQLUpdate (tname, sqlvar2) set cond)
+            return (SQLUpdateStmt (tname, sqlvar2) set cond)
         Nothing -> error "not an updatable predicate"
 
 
-translateNegUpdateAtomToSQL :: Atom -> TransMonad SQL
+translateNegUpdateAtomToSQL :: Atom -> TransMonad SQLStmt
 translateNegUpdateAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
@@ -581,7 +581,7 @@ translateNegUpdateAtomToSQL (Atom pred1 args) = do
             (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols pred1 args
             cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToUpdateCond keyqcol_args
             (set, conds) <- unzip <$> mapM qcolArgToSetNull propqcol_args
-            return (SQLUpdate (tname, sqlvar2) set (foldl (.&&.) cond conds))
+            return (SQLUpdateStmt (tname, sqlvar2) set (foldl (.&&.) cond conds))
         Nothing -> error "not an updatable predicate"
 
 qcolArgToDelete :: (SQLQualifiedCol, Expr) -> TransMonad SQLCond

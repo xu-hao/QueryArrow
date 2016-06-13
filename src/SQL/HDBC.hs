@@ -61,7 +61,7 @@ instance PreparedStatement_ HDBCQueryStatement where
 
 prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLQuery -> IO HDBCQueryStatement
 prepareHDBCQueryStatement conn sqlquery@(vars, query, params) = HDBCQueryStatement (case query of
-                                                                                        SQLQ _ -> True
+                                                                                        SQLQueryStmt _ -> True
                                                                                         _ -> False) vars <$> prepare conn (showSQLQuery conn sqlquery) <*> pure params
 
 

@@ -38,4 +38,4 @@ data NextidTrans = NextidTrans
 instance TranslateSequence NextidTrans SQLQuery where
     translateSequenceQuery trans =
         let v = Var "nextid" in
-            (([v], SQLQ (SQL0 {sqlSelect = [SQLFuncExpr "nextval" [SQLStringConstExpr "R_ObjectId"]], sqlFrom = [], sqlWhere = SQLTrueCond}), []), v)
+            (([v], SQLQueryStmt (SQLQuery {sqlSelect = [SQLFuncExpr "nextval" [SQLStringConstExpr "R_ObjectId"]], sqlFrom = [], sqlWhere = SQLTrueCond}), []), v)
