@@ -65,6 +65,9 @@ getESRecord esci type0 esid =
 postESRecord :: ElasticSearchConnInfo -> Text.Text -> ESRecord -> IO BL.ByteString
 postESRecord esci type0 rec = postJSON (esConnInfoToUrl esci type0) rec
 
+updateESRecord :: ElasticSearchConnInfo -> Text.Text -> String -> ESRecord -> IO BL.ByteString
+updateESRecord esci type0 esid rec = putJSON (esConnInfoToUrl esci type0 ++ "/" ++ esid) rec
+
 queryBySearch :: ElasticSearchConnInfo -> Text.Text -> ESQuery -> IO (Either String ESQueryResult)
 queryBySearch esci type0 qu = do
         infoM "ElasticSearch" ("queryBySearch: " ++ BL8.unpack (encode qu) ++ show qu)

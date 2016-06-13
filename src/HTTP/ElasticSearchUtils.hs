@@ -32,6 +32,23 @@ postJSON :: ToJSON a => String -> a -> IO BL.ByteString
 postJSON url rec =
     post url (RequestBodyLBS (encode rec))
 
+buildPutRequest :: String -> RequestBody -> IO Request
+buildPutRequest url body = do
+  nakedRequest <- parseUrl url
+  return (nakedRequest { method = B8.pack "PUT", requestBody = body })
+
+put :: String -> RequestBody -> IO BL.ByteString
+put url s = do
+  manager <- newManager tlsManagerSettings
+  request <- buildPutRequest url s
+  response <- httpLbs request manager
+  return (responseBody response)
+
+putJSON :: ToJSON a => String -> a -> IO BL.ByteString
+putJSON url rec =
+  put url (RequestBodyLBS (encode rec))
+
+
 buildDeleteRequest :: String -> String -> IO Request
 buildDeleteRequest url esid = do
   nakedRequest <- parseUrl (url ++ "/" ++ esid)

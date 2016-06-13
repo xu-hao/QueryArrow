@@ -12,6 +12,10 @@ import Data.Char (toLower)
 import Data.Convertible
 import Data.Scientific (toBoundedInteger)
 import Data.Aeson (Value (String, Number))
+import Control.Monad (zipWithM_)
+import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Applicative ((<|>))
+import System.Log.Logger (debugM)
 
 import FO.Domain
 import FO.Data
@@ -25,8 +29,6 @@ import qualified ElasticSearch.Query as ESQ
 import ElasticSearch.QueryResult
 import ElasticSearch.QueryResultHits
 import ElasticSearch.ESQL
-
-import Debug.Trace
 
 type ElasticSearchConnection = ESQ.ElasticSearchConnInfo
 data ElasticSearchStatement = ElasticSearchStatement ElasticSearchConnection ElasticSearchQuery
@@ -43,19 +45,15 @@ instance Convertible Value ResultValue where
                                 Nothing -> Left (ConvertError "Value" "ResultValue" (show n) "")
     safeConvert a = Left (ConvertError "Value" "ResultValue" (show a) "")
 
-convertHitToMapResultRow :: ElasticSearchQuery -> ESHit -> MapResultRow
-convertHitToMapResultRow esquery eshit =
-    case esquery of
-        ElasticSearchQuery _ map2 ->
-            let (ESRecord map1) = _source eshit in
-                foldrWithKey (\key val map3 -> case val of
-                    ElasticSearchQueryVar var ->
-                        case lookup key map1 of
-                            Just val2 -> insert var (convert val2) map3
-                            Nothing -> map3
-                    _ -> map3) empty map2
-        _ -> empty
-
+convertHitToMapResultRow :: Text -> Map Text ElasticSearchQueryExpr -> ESHit -> MapResultRow
+convertHitToMapResultRow _ map2 eshit =
+    let (ESRecord map1) = _source eshit in
+        foldrWithKey (\key val map3 -> case val of
+            ElasticSearchQueryVar var ->
+                case lookup key map1 of
+                    Just val2 -> insert var (convert val2) map3
+                    Nothing -> map3
+            _ -> map3) empty map2
 
 extractQueryItem :: Text -> ElasticSearchQueryExpr -> Map Var Expr -> [ESQ.ESTermQuery]
 extractQueryItem key val args = case val of
@@ -93,49 +91,77 @@ extractInsertItem key val args = case val of
 
 page :: Int
 page = 100
+
+recordToQuery :: Map Text ElasticSearchQueryExpr -> Map Var Expr -> Int -> Int -> ESQ.ESQuery
+recordToQuery rec args off lim = ESQ.ESQuery off lim (
+                        ESQ.ESBoolQuery (
+                            ESQ.ESMustQuery (
+                                foldrWithKey (\key val list -> extractQueryItem key val args ++ list) [] rec
+                            )
+                        )
+                    )
+
+recordToESRecord :: Map Text ElasticSearchQueryExpr -> Map Var Expr -> ESRecord
+recordToESRecord rec args =
+    ESRecord (foldrWithKey (\key val list -> insert key (snd (extractInsertItem key val args)) list) empty rec)
+
+
+esResultStream :: MonadIO m => ESQ.ElasticSearchConnInfo -> Text -> Map Text ElasticSearchQueryExpr -> Map Var Expr -> ResultStream m ESHit
+esResultStream esci type0 rec args = do
+        let getrs off lim = do
+                let esquery = recordToQuery rec args off lim
+                rows <- liftIO $ do
+                    res <- ESQ.queryBySearch esci type0 esquery
+                    case res of
+                        Left res1 -> error ("execWithParams: cannot decode response " ++ res1)
+                        Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> return hits1
+                case rows of
+                    [] -> emptyResultStream
+                    _ -> do
+                        listResultStream rows <|> getrs (off + lim) lim
+        getrs 0 page
+
 instance PreparedStatement_ ElasticSearchStatement where
-        execWithParams (ElasticSearchStatement esci qu@(ElasticSearchQuery type0 rec)) args =
-            let esquery =
-                    ESQ.ESQuery 0 page (
-                        ESQ.ESBoolQuery (
-                            ESQ.ESMustQuery (
-                                foldrWithKey (\key val list -> extractQueryItem key val args ++ list) [] rec
-                            )
-                        )
-                    ) in
-                resultStream2 (do
-                    res <- ESQ.queryBySearch esci type0 esquery
-                    case res of
-                        Left res1 -> error ("execWithParams: cannot decode response " ++ res1)
-                        Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> return (map (convertHitToMapResultRow qu) hits1)) (return ())
+    execWithParams (ElasticSearchStatement esci qu@(ElasticSearchQuery type0 rec)) args = do
+        hit <- esResultStream esci type0 rec args
+        return (convertHitToMapResultRow type0 rec hit)
 
-        execWithParams (ElasticSearchStatement esci (ElasticSearchInsert type0 rec)) args =
-            let esquery =
-                    ESRecord
-                        (fromList (foldrWithKey (\key val list -> extractInsertItem key val args : list) [] rec)) in
-                resultStream2 (do
-                    _ <- ESQ.postESRecord esci type0 esquery
-                    return [mempty]
-                    ) (return ())
+    execWithParams (ElasticSearchStatement esci (ElasticSearchInsert type0 rec)) args =
+        let esquery =
+                ESRecord
+                    (fromList (foldrWithKey (\key val list -> extractInsertItem key val args : list) [] rec)) in
+            resultStream2 (do
+                _ <- ESQ.postESRecord esci type0 esquery
+                return [mempty]
+                ) (return ())
 
-        execWithParams (ElasticSearchStatement esci (ElasticSearchDelete type0 rec)) args =
-            let esquery =
-                    ESQ.ESQuery 0 page (
-                        ESQ.ESBoolQuery (
-                            ESQ.ESMustQuery (
-                                foldrWithKey (\key val list -> extractQueryItem key val args ++ list) [] rec
-                            )
-                        )
-                    ) in
-                resultStream2 (do
-                    res <- ESQ.queryBySearch esci type0 esquery
-                    case res of
-                        Left res1 -> error ("execWithParams: cannot decode response " ++ res1)
-                        Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> do
-                            trace ("ElasticSearch deleting " ++ show hits1) $ mapM_ (\hit -> ESQ.deleteById esci type0 (_id hit)) hits1
-                            return [mempty]
-                            ) (return ())
-        closePreparedStatement _ = return ()
+    execWithParams (ElasticSearchStatement esci (ElasticSearchDelete type0 rec)) args = (do
+        hit <- esResultStream esci type0 rec args
+        liftIO $ debugM "ElasticSearch" ("ElasticSearch deleting " ++ show hit)
+        liftIO $ ESQ.deleteById esci type0 (_id hit)
+        emptyResultStream) <|> return mempty
+
+    execWithParams (ElasticSearchStatement esci (ElasticSearchUpdateProperty type0 rec updaterec)) args = (do
+        hit <- esResultStream esci type0 rec args
+        let rec = _source hit
+            id0 = _id hit
+            updatedrec = updateProps (recordToESRecord updaterec args) rec
+        liftIO $ debugM "ElasticSearch"  ("ElasticSearch updating property " ++ show hit)
+        liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
+        emptyResultStream
+        ) <|> return mempty
+
+    execWithParams (ElasticSearchStatement esci (ElasticSearchDeleteProperty type0 rec diff)) args = (do
+        hit <- esResultStream esci type0 rec args
+        let rec = _source hit
+            id0 = _id hit
+            updatedrec = deleteProps diff rec
+        liftIO $ debugM "ElasticSearch"  ("ElasticSearch deleting property " ++ show hit)
+        liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
+        emptyResultStream
+        ) <|> return mempty
+
+    closePreparedStatement _ = return ()
 
 instance DBConnection ElasticSearchConnection ElasticSearchQuery where
         prepareQueryStatement conn query = return (PreparedStatement (ElasticSearchStatement conn query))
