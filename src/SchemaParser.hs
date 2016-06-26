@@ -12,6 +12,7 @@ import Utils
 import System.IO.Unsafe
 import Data.List (partition)
 import Data.Char
+import ListUtils
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
