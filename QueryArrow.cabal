@@ -47,6 +47,7 @@ executable QueryArrow
                    regex-tdfa,
                    monad-control,
                    lifted-async,
+                   namespace,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

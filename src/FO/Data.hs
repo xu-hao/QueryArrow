@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances,
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances,
    RankNTypes, FlexibleContexts, GADTs, PatternSynonyms #-}
 
 module FO.Data where
@@ -14,6 +14,8 @@ import qualified Data.Map as Map
 import Data.Convertible
 import Control.Monad.Except
 import qualified Data.Text as T
+import Data.Namespace.Path
+import Data.Namespace.Namespace
 
 -- variable types
 type Type = String
@@ -27,7 +29,7 @@ data ParamType = Key Type
                | Property Type deriving (Eq, Ord, Show)
 
 -- predicate
-data PredName = PredName {namespace :: Maybe String, name :: String} deriving (Eq, Ord, Show)
+type PredName = ObjectPath String
 
 data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Ord, Show)
 
@@ -199,7 +201,7 @@ isObjectPred (Pred _ (PredType predKind _)) = case predKind of
             PropertyPred -> False
 
 constructPredMap :: [Pred] -> PredMap
-constructPredMap = foldl (\map1 pred1@(Pred name _) -> insert name pred1 map1) empty
+constructPredMap = foldl (\map1 pred1@(Pred name _) -> insertObject name pred1 map1) mempty
 
 sortByKey :: [Lit] -> Map [Expr] [Lit]
 sortByKey = foldl insertByKey empty where
@@ -223,27 +225,27 @@ sortAtomByPred = foldl insertAtomByPred empty where
             Nothing -> Just [a]
             Just as -> Just (as ++ [a])) pred1 map1
 
-pattern QPredName ns n = PredName (Just ns) n
-pattern UQPredName n = PredName Nothing n
+pattern PredName ks n = ObjectPath (NamespacePath ks) n
+pattern QPredName k ks n = ObjectPath (NamespacePath (k : ks)) n
+pattern UQPredName n = ObjectPath (NamespacePath []) n
 
 predNameToString :: PredName -> String
-predNameToString (PredName mns n)= case mns of
-                            Just ns -> ns ++ "." ++ n
-                            Nothing -> n
+predNameToString (PredName mns n)= intercalate "." mns ++ n
 
 predNameToString2 :: PredName -> String
 predNameToString2 (PredName _ n) = n
 
 predNameMatches :: PredName -> PredName -> Bool
-predNameMatches (PredName Nothing n1) (PredName Nothing n2) = n1 == n2
-predNameMatches (PredName (Just _) n1) (PredName Nothing n2) = n1 == n2
-predNameMatches (PredName (Just ns1) n1) (PredName (Just ns2) n2) = ns1 == ns2 && n1 == n2
+predNameMatches (UQPredName n1) (UQPredName n2) = n1 == n2
+predNameMatches (QPredName _ _ n1) (UQPredName n2) = n1 == n2
+predNameMatches (QPredName k1 ks1 n1) (QPredName k2 ks2 n2) = k1 == k2 && ks1 == ks2 && n1 == n2
 predNameMatches _ _ = False
 
+instance Key String where
+
 setNamespace :: String -> PredName -> PredName
-setNamespace ns (UQPredName n) = QPredName ns n
-setNamespace ns1 n@(QPredName ns2 _) | ns1 == ns2 = n
-                                     | otherwise = error ("cannot set namespace to a qualified predicate name" ++ ns1 ++ ns2)
+setNamespace ns (UQPredName n) = QPredName ns [] n
+setNamespace ns n = error ("cannot set namespace to a qualified predicate name " ++ ns ++ " " ++ show n)
 
 setPredNamespace :: String -> Pred -> Pred
 setPredNamespace ns (Pred name paramtypes) = Pred (setNamespace ns name) paramtypes
@@ -572,7 +574,7 @@ instance SubstPred a => SubstPred [a] where
 
 
 -- predicate map
-type PredMap = Map PredName Pred
+type PredMap = Namespace String Pred
 
 checkFormula :: Formula -> Except String ()
 checkFormula (FReturn _) = return ()

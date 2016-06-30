@@ -48,7 +48,7 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
     dbPrepare _ = return True
     dbRollback _ = return ()
     getName (MapDB name _ _) = name
-    getPreds (MapDB name predname _) = [ Pred (QPredName name predname) (PredType ObjectPred [Key "String", Key "String"]) ]
+    getPreds (MapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     determinateVars db vars (Atom thepred args)
         | thepred `elem` getPreds db = return (concatMap (\arg -> case arg of
                                                         (VarExpr v) -> [v]
@@ -56,7 +56,7 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
              -- this just look up each var from the varDomainSize
     determinateVars _ _ _ = return []
     prepareQuery db vars qu _ = return (MapDBStmt db vars qu)
-    supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name predname) p = True
+    supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name [] predname) p = True
     supported _ _ _ = False
     translateQuery _ _ qu vars = (show qu, vars)
 
@@ -81,7 +81,7 @@ instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue
     dbCommit _ = return True
     dbRollback _ = return ()
     getName (StateMapDB name _) = name
-    getPreds (StateMapDB name predname) = [ Pred (PredName (Just name) predname) (PredType ObjectPred [Key "String", Key "String"]) ]
+    getPreds (StateMapDB name predname) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     determinateVars db vars  (Atom thepred args)
         | thepred `elem` getPreds db = return (concatMap (\arg -> case arg of
                                                         (VarExpr v) -> [v]
@@ -159,7 +159,7 @@ mapDBFilterResults rows  results (FAtomic (Atom thepred args)) = do
 
 data RegexDB (m :: * -> *) = RegexDB String
 
-pattern RegexPred ns = Pred (QPredName ns "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"])
+pattern RegexPred ns = Pred (QPredName ns [] "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"])
 
 data RegexDBStmt = RegexDBStmt Query
 instance (Monad m) => Database_ (RegexDB m) m MapResultRow RegexDBStmt where
@@ -202,7 +202,7 @@ instance (Monad m) => DBStatementExec m MapResultRow (RegexDBStmt) where
 
 data EqDB (m :: * -> *) = EqDB String
 
-pattern EqPred ns = Pred (QPredName ns "eq") (PredType ObjectPred [Key "Any", Key "Any"])
+pattern EqPred ns = Pred (QPredName ns [] "eq") (PredType ObjectPred [Key "Any", Key "Any"])
 
 data EqDBStmt = EqDBStmt Query
 instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
@@ -249,7 +249,7 @@ instance (Monad m) => DBStatementExec m MapResultRow (EqDBStmt) where
 
 data UtilsDB (m :: * -> *) = UtilsDB String
 
-pattern SleepPred ns = Pred (QPredName ns "sleep") (PredType ObjectPred [Key "Number"])
+pattern SleepPred ns = Pred (QPredName ns [] "sleep") (PredType ObjectPred [Key "Number"])
 
 data UtilsDBStmt = UtilsDBStmt Query
 

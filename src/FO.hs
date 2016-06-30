@@ -11,7 +11,7 @@ import Config
 import Parser
 import DBQuery
 import Utils
-import MSet
+import Data.MSet
 -- import Plugins
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified SQL.HDBC.CockroachDB as CockroachDB
@@ -35,7 +35,7 @@ import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
 import System.Log.Logger
 import Data.Tree
-
+import Data.Namespace.Namespace
 -- exec query from dbname
 
 getAllResults2 :: (MonadIO m, MonadBaseControl IO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
@@ -118,7 +118,7 @@ instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => Database_ (TransDB
     supported _ _ _ = True
 
 data RestrictDB m row stmt where
-    RestrictDB :: Database_ db m row stmt => [Pred] -> Map Pred Pred -> db -> RestrictDB m row stmt
+    RestrictDB :: Database_ db m row stmt => [Pred] -> PredMap -> db -> RestrictDB m row stmt
 
 instance (MonadIO m, ResultRow row, DBStatementExec m row stmt, DBStatementClose m stmt) => Database_ (RestrictDB m row stmt) m row stmt where
     dbBegin (RestrictDB _ _ db ) = dbBegin db
@@ -127,15 +127,15 @@ instance (MonadIO m, ResultRow row, DBStatementExec m row stmt, DBStatementClose
     dbRollback (RestrictDB _ _ db ) = dbRollback db
     getName (RestrictDB _ _ db ) = "RestrictDB " ++ getName db
     getPreds (RestrictDB preds _ _) = preds
-    determinateVars (RestrictDB _ pmap db) domainsizemap form = determinateVars db domainsizemap (substPred pmap form)
-    prepareQuery (RestrictDB _ pmap db) vars (Query  form) = prepareQuery db vars (Query  (substPred pmap form))
-    supported (RestrictDB _ pmap db) form = supported db (substPred pmap form)
-    translateQuery (RestrictDB _ pmap db) vars (Query  form) = translateQuery db vars (Query  (substPred pmap form))
+    determinateVars (RestrictDB _ pmap db) domainsizemap form = determinateVars db domainsizemap form
+    prepareQuery (RestrictDB _ pmap db) vars (Query  form) = prepareQuery db vars (Query  form)
+    supported (RestrictDB _ pmap db) form = supported db form
+    translateQuery (RestrictDB _ pmap db) vars (Query  form) = translateQuery db vars (Query  form)
 
-getRewriting :: PredMap -> TranslationInfo -> IO (RewritingRuleSets, PredMap, [Export])
+getRewriting :: PredMap -> TranslationInfo -> IO (RewritingRuleSets, PredMap, PredMap)
 getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
-    case runParser rulesp (predmap, empty) "" d0 of
+    case runParser rulesp (predmap, mempty, mempty) "" d0 of
         Left err -> error (show err)
         Right ((qr, ir, dr), predmap, exports) -> do
             return ((qr, ir, dr), predmap, exports)
@@ -157,29 +157,18 @@ getDB ps = case lookup (catalog_database_type ps) dbMap of
     Nothing -> error ("unimplemented database type " ++ (catalog_database_type ps))
 
 
-restrictDB :: (MonadIO m, ResultRow row) => [Export] -> Database m row -> ([Pred] , Database m row)
+restrictDB :: (MonadIO m, ResultRow row) => PredMap -> Database m row -> ([Pred] , Database m row)
 restrictDB exports (Database db) =
     let preds = getPreds db
-        predmap = constructPredMap preds
-        (preds', preds1, pmap) = foldr (\export (preds', preds1', pmap') -> case export of
-                            ExportQualified predname ->
-                                if namespace predname == Just (getName db)
-                                    then case lookup predname predmap of
-                                        Nothing -> error "cannot find predicate"
-                                        Just pred1 -> (preds', preds1' ++ [pred1], pmap')
-                                    else (preds', preds1', pmap')
-                            ExportUnqualified predname ->
-                                if namespace predname == Just (getName db)
-                                    then case lookup predname predmap of
-                                        Nothing -> error "cannot find predicate"
-                                        Just pred1 ->
-                                            let predname' = UQPredName (name (predName pred1))
-                                                pred1' = Pred predname' (predType pred1) in
-                                                (preds' ++ [pred1'], preds' ++ [pred1'], insert pred1' pred1 pmap')
-                                    else (preds', preds1', pmap')
-                            _ ->
-                                (preds', preds1', pmap')) (preds, [], empty) exports in
-        (preds1, Database (RestrictDB preds' pmap db))
+        (preds', pmap) = foldr (\p@(Pred pn@(PredName ns n) _) (preds', pmap') ->
+                                  case lookupObject pn exports of
+                                    Just p' | p == p' -> (preds' ++ [p], insertObject pn p pmap')
+                                            | otherwise -> error "fully qualified predicate name does not match predicate"
+                                    Nothing ->
+                                      case lookupObject (UQPredName n) exports of
+                                        Just p' | p == p' -> (preds' ++ [p], insertObject pn p pmap')
+                                        _ -> (preds', pmap')) ([], mempty) preds in
+        (preds', Database (RestrictDB preds' pmap db))
 
 transDB :: String -> TranslationInfo -> IO (TransDB DBAdapterMonad MapResultRow)
 transDB name transinfo = do
@@ -193,10 +182,5 @@ transDB name transinfo = do
     let (preds1s, dbs') = unzip (map (restrictDB exports) dbs)
     let predmap1 = unions preds1s
     -- trace (intercalate "\n" (map show (predmap1))) $ return ()
-    let predmap2 = foldr (\export preds' -> case export of
-                            ExportAdd predname ->
-                                case lookup predname predmap0' of
-                                    Nothing -> error "cannot find predicate"
-                                    Just pred1 -> (preds' ++ [pred1])
-                            _ -> preds') [] exports
+    let predmap2 = elems (topLevelObjects exports)
     return (TransDB name dbs' (predmap1 `union` predmap2 ) rewriting )

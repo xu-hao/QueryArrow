@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
 
 module ElasticSearch.ICAT where
 
@@ -28,7 +28,7 @@ import ElasticSearch.ESQL
 import ElasticSearch.ElasticSearchConnection
 
 esMetaPred :: String -> Pred
-esMetaPred ns = Pred (QPredName ns "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])
+esMetaPred ns = Pred (QPredName ns [] "ES_META") (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])
 
 makeElasticSearchDBAdapter :: String -> ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
 makeElasticSearchDBAdapter ns conn = GenericDB conn ns [esMetaPred ns] (ESTrans  (fromList [(esMetaPred ns, (pack "ES_META", [pack "obj_id", pack "meta_id", pack "attribute", pack "value", pack "unit"]))]))

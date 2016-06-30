@@ -1,4 +1,4 @@
-module MSet (MSet (..), munion, mcomplement, mintersect, mdiff, rmintersect, lmintersect) where
+module Data.MSet (MSet (..), munion, mcomplement, mintersect, mdiff, rmintersect, lmintersect) where
 
 import Data.List (union, intersect, (\\))
 data MSet a = Include [a] | Exclude [a] deriving Show

@@ -15,11 +15,12 @@ import Prelude hiding (lookup)
 import Control.Applicative ((<$>),(<*>))
 import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)
 
+import Data.Namespace.Namespace
 
 cypherBuiltIn :: String -> CypherBuiltIn
 cypherBuiltIn ns =
     let cypherStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
-        lookupPred n = case lookup (QPredName ns n) cypherStandardBuiltInPredsMap of
+        lookupPred n = case lookupObject (QPredName ns [] n) cypherStandardBuiltInPredsMap of
                 Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ n)
                 Just pred1 -> pred1 in
         CypherBuiltIn ( fromList [

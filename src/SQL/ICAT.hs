@@ -8,6 +8,7 @@ import SQL.SQL
 import DBQuery
 import ICAT
 import SQL.ICATGen
+import Data.Namespace.Namespace
 
 import Data.Map.Strict (empty, fromList, insert, lookup)
 import qualified Data.Text as T
@@ -22,7 +23,7 @@ makeICATSQLDBAdapter ns conn = GenericDB conn ns (qStandardPreds ns ++ qStandard
 sqlMapping :: String -> PredTableMap
 sqlMapping ns =
     let sqlStandardPredsMap = qStandardPredsMap ns
-        lookupPred n = case lookup (QPredName ns n) sqlStandardPredsMap of
+        lookupPred n = case lookupObject (QPredName ns [] n) sqlStandardPredsMap of
                 Nothing -> error ("sqlMapping: cannot find predicate " ++ n)
                 Just pred1 -> pred1 in
         fromList (map (\(n, m) -> (lookupPred n, m)) mappings)
@@ -30,7 +31,7 @@ sqlMapping ns =
 sqlStandardTrans :: String -> SQLTrans
 sqlStandardTrans ns =
     let sqlStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
-        lookupPred n = case lookup (QPredName ns n) sqlStandardBuiltInPredsMap of
+        lookupPred n = case lookupObject (QPredName ns [] n) sqlStandardBuiltInPredsMap of
                 Nothing -> error ("sqlStandardTrans: cannot find predicate " ++ n)
                 Just pred1 -> pred1 in
 

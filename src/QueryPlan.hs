@@ -5,7 +5,7 @@ import ResultStream
 import FO.Data
 import FO.Domain
 import ListUtils
-import MSet
+import Data.MSet
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete)

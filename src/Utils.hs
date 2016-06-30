@@ -12,6 +12,8 @@ import Data.Map.Strict (Map, empty, insert, alter, lookup)
 import Data.List ((\\), intercalate, transpose)
 import Control.Monad.Catch
 
+import Data.Namespace.Path
+import Data.Namespace.Namespace
 
 intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
 intResultStream i = return (insert (Var "i") (IntValue i) empty)
@@ -20,10 +22,10 @@ intResultStream i = return (insert (Var "i") (IntValue i) empty)
 type PredDBMap = Map Pred [String]
 
 constructDBPredMap :: [Database m row ] -> PredMap
-constructDBPredMap = foldr addPredFromDBToMap empty where
+constructDBPredMap = foldr addPredFromDBToMap mempty where
     addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
         addPredToMap thepred map1 =
-            insert (predName thepred) thepred map1
+            insertObject (predName thepred) thepred map1
         preds = getPreds db
 
 -- construct map from predicates to db names

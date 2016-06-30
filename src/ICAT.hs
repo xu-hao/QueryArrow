@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, FlexibleContexts, TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 module ICAT where
 
 import ICATGen
@@ -8,11 +8,11 @@ standardPreds :: [Pred]
 standardPreds = preds
 
 standardBuiltInPreds = [
-        Pred (PredName Nothing "le") (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
-        Pred (PredName Nothing "lt") (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
-        Pred (PredName Nothing "eq") (PredType ObjectPred [Key "Any", Key "Any"]),
-        Pred (PredName Nothing "like") (PredType ObjectPred [Key "String", Key "Pattern"]),
-        Pred (PredName Nothing "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"])]
+        Pred (UQPredName "le") (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
+        Pred (UQPredName "lt") (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
+        Pred (UQPredName "eq") (PredType ObjectPred [Key "Any", Key "Any"]),
+        Pred (UQPredName "like") (PredType ObjectPred [Key "String", Key "Pattern"]),
+        Pred (UQPredName "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"])]
 
 
 standardBuiltInPredsMap = constructPredMap standardBuiltInPreds

@@ -163,8 +163,8 @@ generateICATDef (Stmt tablename coldefs) = do
             -- find all keys
             let (keys, props) = findAllKeys prefix coldefs
             let keysq = foldr (\(ColDef _ keytype _) q -> [| Key $(stringQ (show keytype)) : $q |]) [| [] |] keys
-            let q1 = [| Pred (PredName Nothing $(stringQ predname)) (PredType ObjectPred $keysq) |]
-            let propPred (ColDef key2 keytype2 _) = [| Pred  (PredName Nothing $(stringQ (colNameToPredName prefix key2))) (PredType PropertyPred ($keysq ++  [Property $(stringQ (show keytype2))])) |]
+            let q1 = [| Pred (PredName [] $(stringQ predname)) (PredType ObjectPred $keysq) |]
+            let propPred (ColDef key2 keytype2 _) = [| Pred  (PredName [] $(stringQ (colNameToPredName prefix key2))) (PredType PropertyPred ($keysq ++  [Property $(stringQ (show keytype2))])) |]
             let propPreds = foldr (\coldef q2 -> [| $(propPred coldef) : $q2 |]) [| [] |] props
             [| $q1 : $propPreds |]
 

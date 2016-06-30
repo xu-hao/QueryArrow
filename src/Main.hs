@@ -76,7 +76,8 @@ import qualified Data.Text as T
 import System.Log.Logger
 import Logging
 -- import Data.Serialize
-
+import Data.Namespace.Path
+import Data.Namespace.Namespace
 
 main::IO()
 main = do
@@ -152,7 +153,7 @@ run3 hdr query tdb user zone = do
 
 
     r <- runResourceT $ evalStateT (dbCatch $ do
-                case runParser progp (empty, predmap) "" query of
+                case runParser progp (mempty, predmap, mempty) "" query of
                             Left err -> error (show err)
                             Right (qu@(Query form), _) ->
                                 case runExcept (checkQuery qu) of
