@@ -48,6 +48,8 @@ executable QueryArrow
                    monad-control,
                    lifted-async,
                    namespace,
+                   lattices,
+                   semibounded-lattices,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

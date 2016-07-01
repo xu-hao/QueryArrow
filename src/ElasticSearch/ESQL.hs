@@ -6,12 +6,13 @@ module ElasticSearch.ESQL where
 
 import Prelude hiding (lookup)
 import qualified Data.ByteString.Lazy.Char8 as BL8
-import Data.Map.Strict hiding (map, elemAt)
+import Data.Map.Strict (lookup, fromList, Map)
 import Data.Text (unpack, pack, Text)
 import Data.Char (toLower)
 import Data.Convertible
 import Data.Scientific (toBoundedInteger)
 import Data.Aeson (Value (String, Number))
+import Data.Set (toAscList)
 
 import FO.Domain
 import FO.Data
@@ -101,11 +102,11 @@ translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPr
 
 instance Translate ESTrans MapResultRow ElasticSearchQuery where
     translateQueryWithParams trans vars (Query  (FAtomic (Atom pred1 args))) env =
-        translateQueryToElasticSearch trans vars pred1 args env
+        translateQueryToElasticSearch trans (toAscList vars) pred1 args (toAscList env)
     translateQueryWithParams trans vars (Query  (FInsert (Lit Pos (Atom pred1 args)))) env =
-        translateInsertToElasticSearch trans pred1 args env
+        translateInsertToElasticSearch trans pred1 args (toAscList env)
     translateQueryWithParams trans vars (Query  (FInsert (Lit Neg (Atom pred1 args)))) env =
-        translateDeleteToElasticSearch trans pred1 args env
+        translateDeleteToElasticSearch trans pred1 args (toAscList env)
     translateQueryWithParams _ _ _ _ =
         error "unsupported"
 

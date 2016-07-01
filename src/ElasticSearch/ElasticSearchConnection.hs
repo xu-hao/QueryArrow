@@ -6,7 +6,7 @@ module ElasticSearch.ElasticSearchConnection where
 
 import Prelude hiding (lookup)
 import qualified Data.ByteString.Lazy.Char8 as BL8
-import Data.Map.Strict hiding (map, elemAt)
+import Data.Map.Strict (Map, fromList, empty, foldrWithKey, insert, lookup)
 import Data.Text (unpack, pack, Text)
 import Data.Char (toLower)
 import Data.Convertible
@@ -15,6 +15,9 @@ import Data.Aeson (Value (String, Number))
 import Control.Monad (zipWithM_)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Applicative ((<|>))
+import Data.Set (unions, singleton)
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
 
 import FO.Domain
 import FO.Data
@@ -170,6 +173,6 @@ instance DBConnection ElasticSearchConnection ElasticSearchQuery where
 
 instance DBConnection conn ElasticSearchQuery  => ExtractDomainSize DBAdapterMonad conn ESTrans where
     extractDomainSize _ _ _ (Atom _ args) =
-        return (concatMap (\arg -> case arg of
-                (VarExpr v) -> [v]
-                _ -> []) args)
+        return (unions (map (\arg -> case arg of
+                (VarExpr v) -> singleton v
+                _ -> bottom) args))

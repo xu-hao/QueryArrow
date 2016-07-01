@@ -64,7 +64,6 @@ import System.ZMQ4.Monadic
 import System.IO
 import System.Environment
 import Data.Maybe
-import Data.List hiding (lookup)
 import Control.Concurrent
 import Control.Concurrent.Async hiding (async)
 import Data.Time
@@ -78,6 +77,7 @@ import Logging
 -- import Data.Serialize
 import Data.Namespace.Path
 import Data.Namespace.Namespace
+import qualified Data.Set as Set
 
 main::IO()
 main = do
@@ -158,7 +158,7 @@ run3 hdr query tdb user zone = do
                             Right (qu@(Query form), _) ->
                                 case runExcept (checkQuery qu) of
                                     Right _ -> do
-                                        rows <- getAllResultsInStream ( doQuery tdb (map Var hdr) qu (keys params) (pure params))
+                                        rows <- getAllResultsInStream ( doQuery tdb (Set.fromList (map Var hdr)) qu (keys params) (pure params))
                                         return rows
                                     Left e -> error e) (DBAdapterState Nothing)
     return (case r of

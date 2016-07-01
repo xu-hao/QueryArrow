@@ -16,6 +16,8 @@ import Control.Monad.Except
 import qualified Data.Text as T
 import Data.Namespace.Path
 import Data.Namespace.Namespace
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
 
 -- variable types
 type Type = String
@@ -60,13 +62,6 @@ data Formula = FTransaction
              | Not Formula
              | Exists { boundvar :: Var, formula :: Formula } deriving (Eq, Ord)
 
-intersects :: Eq a => [[a]] -> [a]
-intersects [] = error "can't intersect zero lists"
-intersects (hd : tl) = foldl (\ as bs -> [ x | x <- as, x `elem` bs ]) hd tl
-
-unions :: Eq a => [[a]] -> [a]
-unions = foldl union []
-
 unique :: [a] -> a
 unique as = if length as /= 1
         then error "More than one primary parameters and nonzero secondary parameters"
@@ -79,15 +74,14 @@ isConst _ = True
 
 
 class FreeVars a where
-    freeVars :: a -> [Var]
+    freeVars :: a -> Set Var
 
 instance FreeVars Expr where
-    freeVars (VarExpr var) = [var]
-    freeVars _ = []
+    freeVars (VarExpr var) = Set.singleton var
+    freeVars _ = bottom
 
 instance FreeVars Atom where
-    freeVars (Atom _ theargs) = foldl (\fvs expr ->
-        fvs `union` freeVars expr) [] theargs
+    freeVars (Atom _ theargs) = freeVars theargs
 
 
 
@@ -96,27 +90,27 @@ instance FreeVars Lit where
 
 instance FreeVars Formula where
     freeVars (FReturn _) =
-        []
+        bottom
     freeVars (FAtomic atom1) =
         freeVars atom1
     freeVars (FInsert lits) =
         freeVars lits
     freeVars (FTransaction ) =
-        []
+        bottom
     freeVars (FSequencing form1 form2) =
-        freeVars form1 `union` freeVars form2
+        freeVars form1 \/ freeVars form2
     freeVars (FChoice form1 form2) =
-        freeVars form1 `union` freeVars form2
+        freeVars form1 \/ freeVars form2
     freeVars (FPar form1 form2) =
-        freeVars form1 `union` freeVars form2
+        freeVars form1 \/ freeVars form2
     freeVars (Not formula1) =
         freeVars formula1
     freeVars (Exists var formula1) =
-        freeVars formula1 \\ [var]
-    freeVars _ = []
+        freeVars formula1 \\\ Set.singleton var
+    freeVars _ = bottom
 
 instance FreeVars a => FreeVars [a] where
-    freeVars = unions. map freeVars
+    freeVars = Set.unions . map freeVars
 
 class Unify a where
     unify :: a -> a -> Maybe Substitution
@@ -456,7 +450,7 @@ instance GatherConstants Formula where
     gatherConstants (FInsert lits) = Set.unions (map gatherConstants lits)
 -}
 instance FreeVars a => FreeVars (Set a) where
-    freeVars sa = unions (map freeVars (Set.toList sa))
+    freeVars sa = Set.unions (map freeVars (Set.toAscList sa))
 
 pureF :: Formula -> Bool
 pureF (FReturn _) = True
@@ -483,13 +477,6 @@ layeredF (Exists _ form) =  pureF form
 layeredF (Not form) =  pureF form
 layeredF FOne = True
 layeredF FZero = True
-
-instantiate :: (Subst a, FreeVars a, Monad m) => m Expr -> a -> m a
-instantiate es rule = do
-    let fv = freeVars rule
-    choose <- mapM (const es) fv
-    let s = fromList (zip fv choose)
-    return (subst s rule)
 
 infixr 5 @@
 

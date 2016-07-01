@@ -11,7 +11,7 @@ import Config
 import Parser
 import DBQuery
 import Utils
-import Data.MSet
+import ListUtils
 -- import Plugins
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified SQL.HDBC.CockroachDB as CockroachDB
@@ -36,11 +36,14 @@ import Text.ParserCombinators.Parsec hiding (State)
 import System.Log.Logger
 import Data.Tree
 import Data.Namespace.Namespace
+import Algebra.SemiBoundedLattice
+import Algebra.Lattice
+import Data.Set (toAscList, Set, intersection)
 -- exec query from dbname
 
 getAllResults2 :: (MonadIO m, MonadBaseControl IO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
 getAllResults2 dbs rvars query = do
-    qp <- prepareQuery' dbs  [] [] [] rvars query []
+    qp <- prepareQuery' dbs  [] [] [] rvars query bottom
     let (_, stream) = execQueryPlan ([], pure mempty) qp
     getAllResultsInStream stream
 
@@ -50,14 +53,14 @@ queryPlan dbs qu@(Query  formula) =
         qp1 = simplifyQueryPlan qp in
         qp1
 
-queryPlan2 :: (ResultRow row, Monad m) => [Database m row ] -> [Var] -> MSet Var -> Query -> QueryPlan2 m row
+queryPlan2 :: (ResultRow row, Monad m) => [Database m row ] -> Set Var -> MSet Var -> Query -> QueryPlan2 m row
 queryPlan2 dbs vars vars2 qu@(Query  formula) =
     let qp = formulaToQueryPlan dbs formula
         qp1 = simplifyQueryPlan qp
         qp2 = calculateVars vars vars2 qp1 in
         optimizeQueryPlan dbs qp2
 
-prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> m (QueryPlan2 m row)
+prepareQuery' :: (ResultRow row, MonadIO m) => [Database m row ] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> Set Var -> m (QueryPlan2 m row)
 prepareQuery' dbs qr ir dr rvars qu0 vars = do
     liftIO $ infoM "QA" ("original query: " ++ show qu0)
     let qu@(Query form) = rewriteQuery  qr ir dr rvars qu0 vars
@@ -84,11 +87,11 @@ defaultRewritingLimit = 100
 type RewritingRuleSets = ([InsertRewritingRule],  [InsertRewritingRule], [InsertRewritingRule])
 data TransDB m row = TransDB String [Database m row ]  [Pred] RewritingRuleSets
 
-rewriteQuery :: [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> [Var] -> Query
+rewriteQuery :: [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Query -> Set Var -> Query
 rewriteQuery  qr ir dr vars (Query form) ext = Query (runNew (do
-    registerVars ((case vars of
+    registerVars (toAscList ((case vars of
         Include vars -> vars
-        Exclude vars -> vars)  `union` freeVars form)
+        Exclude vars -> vars)  \/ freeVars form))
     rewrites defaultRewritingLimit ext   qr ir dr form))
 
 instance (Monad m, ResultRow row) => DBStatementClose m (QueryPlan2 m row) where
@@ -107,11 +110,11 @@ instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => Database_ (TransDB
     determinateVars (TransDB _ dbs _ _ ) vars  atom@(Atom pred args) = do
         mps <- mapM (\ (Database db) ->
                 if pred `elem` getPreds db then do
-                    map2 <- (determinateVars db vars  atom)
+                    map2 <- determinateVars db vars  atom
                     return [map2]
                 else
                     return []) dbs
-        return (foldl1 intersect (concat mps))
+        return (foldl1 intersection (concat mps))
     prepareQuery (TransDB _ dbs _ (qr, ir, dr) ) vars2 qu =
         prepareQuery' dbs  qr ir dr (Include vars2) qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
@@ -137,7 +140,7 @@ getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
     case runParser rulesp (predmap, mempty, mempty) "" d0 of
         Left err -> error (show err)
-        Right ((qr, ir, dr), predmap, exports) -> do
+        Right ((qr, ir, dr), predmap, exports) ->
             return ((qr, ir, dr), predmap, exports)
 
 dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])

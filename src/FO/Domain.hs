@@ -3,8 +3,10 @@ module FO.Domain where
 import FO.Data
 
 import Data.Map.Strict (Map, lookup, empty, intersectionWith, unionWith, unionsWith, insert, delete)
-import Data.List (union, intersect, (\\))
 import Prelude hiding (lookup)
+import Data.Set (Set, singleton)
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
 
 -- Int must be nonnegative
 data DomainSize = Unbounded
@@ -52,7 +54,7 @@ mmin = unionWith min
 mmaxs :: [DomainSizeMap] -> DomainSizeMap
 mmaxs = foldl1 (intersectionWith max) -- must have at least one
 
-type DomainSizeFunction m a = [Var] -> a -> m [Var]
+type DomainSizeFunction m a = Set Var -> a -> m (Set Var)
 
 class DeterminedVars a where
     determinedVars :: Monad m => DomainSizeFunction m Atom -> DomainSizeFunction m a
@@ -62,22 +64,22 @@ instance DeterminedVars Atom where
 
 instance DeterminedVars Formula where
     determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
-    determinedVars _  _ (FInsert _) = return []
-    determinedVars dsp _ (FTransaction ) = return []
+    determinedVars _  _ (FInsert _) = return bottom
+    determinedVars dsp _ (FTransaction ) = return bottom
     determinedVars dsp vars (FSequencing form1 form2) = do
         map1 <- determinedVars dsp vars form1
-        map2 <- determinedVars dsp (vars `union` map1) form2
-        return (vars `union` map1 `union` map2)
+        map2 <- determinedVars dsp (vars \/ map1) form2
+        return (vars \/ map1 \/ map2)
     determinedVars dsp vars (FChoice form1 form2) = do
         map1 <- determinedVars dsp vars form1
         map2 <- determinedVars dsp vars form2
-        return (map1 `intersect` map2)
+        return (map1 /\ map2)
     determinedVars dsp vars (FPar form1 form2) = do
         map1 <- determinedVars dsp vars form1
         map2 <- determinedVars dsp vars form2
-        return (map1 `intersect` map2)
+        return (map1 /\ map2)
     determinedVars dsp vars (Exists v form) = do
         dsp' <- determinedVars dsp vars form
-        return (dsp' \\ [v])
-    determinedVars _ _ (Not _) = return []
-    determinedVars _ _ _ = return []
+        return (dsp' \\\ singleton v)
+    determinedVars _ _ (Not _) = return bottom
+    determinedVars _ _ _ = return bottom

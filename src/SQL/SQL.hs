@@ -19,6 +19,10 @@ import Control.Monad.Trans.Except
 import Debug.Trace
 import Data.Convertible
 import qualified Data.Text as T
+import Data.Set (toAscList)
+import qualified Data.Set as Set
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
 
 type Col = String
 type TableName = String
@@ -721,18 +725,18 @@ instance Translate SQLTrans MapResultRow SQLQuery where
     translateQueryWithParams trans ret query env =
         let (SQLTrans  builtin predtablemap) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql, ts') = runNew (runStateT (translateQueryToSQL ret query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
+            (sql, ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             (sql, params sql)
     translateable trans form vars = layeredF form && isJust (evalStateT (pureOrExecF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
 
 instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize (Atom name args) =
         if isBuiltIn
-            then return [] -- assume that builtins don't restrict domain size
+            then return bottom -- assume that builtins don't restrict domain size
             else return (if name `member` predtablemap
-                    then concatMap (\arg -> case arg of
-                            (VarExpr v) -> [v]
-                            _ -> []) args
-                    else []) where
+                    then Set.unions (map (\arg -> case arg of
+                            (VarExpr v) -> Set.singleton v
+                            _ -> bottom) args)
+                    else bottom) where
                 isBuiltIn = name `member` builtin
                 (SQLTrans (BuiltIn builtin) predtablemap) = trans

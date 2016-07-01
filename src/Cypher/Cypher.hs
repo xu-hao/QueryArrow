@@ -11,6 +11,7 @@ import qualified FO.Data as FO
 import FO.Domain
 import DBQuery
 import QueryPlan
+import ListUtils
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\), union , partition, intersect, nub)
@@ -26,6 +27,10 @@ import Control.Applicative ((<$>))
 import Control.Monad.Trans.Class
 import qualified Data.Text as T
 import System.Log.Logger
+import Data.Set (toAscList)
+import qualified Data.Set as Set
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
 
 -- basic definitions
 
@@ -512,7 +517,7 @@ cypherDeterminedVars :: CypherBuiltIn -> Formula -> [Var]
 cypherDeterminedVars (CypherBuiltIn builtin) (FAtomic a@(Atom name _)) =
     if name `member` builtin
         then []
-        else freeVars a
+        else toAscList (freeVars a)
 cypherDeterminedVars builtin (FSequencing form1 form2) =
     cypherDeterminedVars builtin form1 `union` cypherDeterminedVars builtin form2
 cypherDeterminedVars builtin (FChoice form1 form2) =
@@ -528,7 +533,7 @@ translateFormulaToCypher :: [Var] -> Formula -> [Var] -> TransMonad [Cypher]
 translateFormulaToCypher rvars (FSequencing form1 form2) env = do
     (builtin , _) <- get
     let determinedvars = cypherDeterminedVars builtin form1
-    let rvars1 = (determinedvars `union` env) `intersect` (freeVars form2 `union` rvars)
+    let rvars1 = (determinedvars `union` env) `intersect` (toAscList (freeVars form2) `union` rvars)
     cypher1 <- translateFormulaToCypher rvars1 form1 env
     cypher2 <- translateFormulaToCypher rvars form2 rvars1
     return (cypher1 ++ cypher2)
@@ -683,7 +688,7 @@ translateableCypher _ (FAtomic _) = do
             return ()
 translateableCypher _ (FInsert lit) = do
     cs <- get
-    if csQuery cs && not (null (csReturn cs `intersect` freeVars lit))
+    if csQuery cs && not (null (csReturn cs `intersect` toAscList (freeVars lit)))
         then lift $ Nothing
         else do
             put cs{csUpdate = True}
@@ -697,21 +702,21 @@ translateableCypher trans (Exists _ _)  = lift $ Nothing
 instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
     extractDomainSize conn trans varDomainSize (Atom name args) =
         return (if isBuiltIn
-            then []
+            then bottom
             else if name `member` predtablemap
-                then concatMap (\arg -> case arg of
-                    (VarExpr v) -> [v]
-                    _ -> []) args
-                else []) where
+                then Set.unions (map (\arg -> case arg of
+                    (VarExpr v) -> Set.singleton v
+                    _ -> bottom) args)
+                else bottom) where
                     isBuiltIn = name `member` builtin
                     (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
 instance Translate CypherTrans MapResultRow CypherQuery where
     translateQueryWithParams trans vars query env =
         let (CypherTrans builtin _ predtablemap) = trans
-            sql = runNew (evalStateT (translateQueryToCypher vars query env) (builtin, predtablemap)) in
-            (sql,  env)
-    translateable trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False vars))
+            sql = runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap)) in
+            (sql,  toAscList env)
+    translateable trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

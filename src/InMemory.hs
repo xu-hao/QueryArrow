@@ -28,6 +28,10 @@ import Text.ParserCombinators.Parsec hiding (State)
 import Text.Regex.TDFA ((=~))
 import Data.Text (Text, unpack)
 import Control.Concurrent (threadDelay)
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
+import Data.Set (Set, toAscList)
+import qualified Data.Set as Set
 import Debug.Trace
 
 
@@ -41,7 +45,7 @@ limitvarsInRow vars row = transform (keys row) vars row
 
 data MapDB (m :: * -> * )= MapDB String String [(ResultValue, ResultValue)] deriving Show
 
-data MapDBStmt m = MapDBStmt (MapDB m) [Var] Query
+data MapDBStmt m = MapDBStmt (MapDB m) (Set Var) Query
 instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m) where
     dbBegin _ = return ()
     dbCommit _ = return True
@@ -50,15 +54,15 @@ instance (Functor m, Monad m) => Database_ (MapDB m) m MapResultRow (MapDBStmt m
     getName (MapDB name _ _) = name
     getPreds (MapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     determinateVars db vars (Atom thepred args)
-        | thepred `elem` getPreds db = return (concatMap (\arg -> case arg of
-                                                        (VarExpr v) -> [v]
-                                                        _ -> []) args \\ vars)
+        | thepred `elem` getPreds db = return (Set.unions (map (\arg -> case arg of
+                                                        (VarExpr v) -> Set.singleton v
+                                                        _ -> bottom) args) \\\ vars)
              -- this just look up each var from the varDomainSize
-    determinateVars _ _ _ = return []
+    determinateVars _ _ _ = return bottom
     prepareQuery db vars qu _ = return (MapDBStmt db vars qu)
     supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name [] predname) p = True
     supported _ _ _ = False
-    translateQuery _ _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, toAscList vars)
 
 instance (Monad m) => DBStatementClose m (MapDBStmt m) where
     dbStmtClose _ = return ()
@@ -66,14 +70,14 @@ instance (Monad m) => DBStatementClose m (MapDBStmt m) where
 instance (Monad m) => DBStatementExec m MapResultRow (MapDBStmt m) where
     dbStmtExec  (MapDBStmt (MapDB _ _ rows) vars (Query  form@(FAtomic _))) _ stream  = do
         row2 <- mapDBFilterResults rows stream form
-        return (limitvarsInRow vars row2)
+        return (limitvarsInRow (toAscList vars) row2)
 
 
 -- update mapdb
 
 data StateMapDB (m :: * -> * )= StateMapDB String String deriving Show
 
-data StateMapDBStmt m = StateMapDBStmt (StateMapDB m) [Var] Query
+data StateMapDBStmt m = StateMapDBStmt (StateMapDB m) (Set Var) Query
 
 instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue, ResultValue)]) m) MapResultRow (StateMapDBStmt m) where
     dbBegin _ = return ()
@@ -83,15 +87,15 @@ instance (Monad m) => Database_ (StateMapDB m) (StateT (Map String [(ResultValue
     getName (StateMapDB name _) = name
     getPreds (StateMapDB name predname) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     determinateVars db vars  (Atom thepred args)
-        | thepred `elem` getPreds db = return (concatMap (\arg -> case arg of
-                                                        (VarExpr v) -> [v]
-                                                        _ -> []) args \\ vars)
-    determinateVars _ _ _ = return []
+        | thepred `elem` getPreds db = return (Set.unions (map (\arg -> case arg of
+                                                        (VarExpr v) -> Set.singleton v
+                                                        _ -> bottom) args) \\\ vars)
+    determinateVars _ _ _ = return bottom
     prepareQuery db vars2 qu _ = return (StateMapDBStmt db vars2 qu)
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
     supported _ _ _ = False
-    translateQuery _ _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, toAscList vars)
 
 instance (Monad m) => DBStatementClose (StateT (Map String [(ResultValue, ResultValue)]) m) (StateMapDBStmt m) where
     dbStmtClose _ = return ()
@@ -101,7 +105,7 @@ instance (Monad m) => DBStatementExec (StateT (Map String [(ResultValue, ResultV
         rowsmap <- lift get
         let rows = rowsmap ! name
         row2 <- mapDBFilterResults rows stream form
-        return (limitvarsInRow vars row2)
+        return (limitvarsInRow (toAscList vars) row2)
     dbStmtExec (StateMapDBStmt (StateMapDB name _) vars (Query  (FInsert lit@(Lit thesign _))))  rsvars stream = do
         rowsmap <- lift get
         let rows = rowsmap ! name
@@ -169,9 +173,9 @@ instance (Monad m) => Database_ (RegexDB m) m MapResultRow RegexDBStmt where
     dbRollback _ = return ()
     getName (RegexDB name) = name
     getPreds db = [ RegexPred (getName db)]
-    determinateVars _ _ _ = return []
+    determinateVars _ _ _ = return bottom
     prepareQuery _ _ qu _ = return (RegexDBStmt qu)
-    translateQuery _ _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, toAscList vars)
 
     supported _ (FAtomic (Atom (RegexPred _) _)) _ = True
     supported _ _ _ = False
@@ -212,9 +216,9 @@ instance (Monad m) => Database_ (EqDB m) m MapResultRow EqDBStmt where
     dbRollback _ = return ()
     getName (EqDB name) = name
     getPreds db = [ EqPred (getName db)]
-    determinateVars _ _ _ = return []
+    determinateVars _ _ _ = return bottom
     prepareQuery _ _ qu _ = return (EqDBStmt qu)
-    translateQuery _ _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, toAscList vars)
 
     supported _ (FAtomic (Atom (EqPred _) _)) _ = True
     supported _ (Not (FAtomic (Atom (EqPred _) _))) _ = True
@@ -260,9 +264,9 @@ instance (MonadIO m) => Database_ (UtilsDB m) m MapResultRow UtilsDBStmt where
     dbRollback _ = return ()
     getName (UtilsDB name) = name
     getPreds db = [ SleepPred (getName db)]
-    determinateVars _ _ _ = return []
+    determinateVars _ _ _ = return bottom
     prepareQuery _ _ qu _ = return (UtilsDBStmt qu)
-    translateQuery _ _ qu vars = (show qu, vars)
+    translateQuery _ _ qu vars = (show qu, toAscList vars)
 
     supported _ (FAtomic (Atom (SleepPred _) _)) _ = True
     supported _ _ _ = False

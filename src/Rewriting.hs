@@ -7,6 +7,9 @@ import FO.Data
 import Data.Map.Strict (empty, singleton, union, fromList)
 import Control.Monad
 import Data.List ((\\))
+import Data.Set (Set, toAscList)
+import Algebra.Lattice
+import Algebra.SemiBoundedLattice
 -- import Debug.Trace
 
 
@@ -36,7 +39,7 @@ instance Match Atom Atom where
 
 
 
-rewriteAtomic1 :: [Var] -> Atom -> [InsertRewritingRule] -> NewEnv (Maybe Formula)
+rewriteAtomic1 :: Set Var -> Atom -> [InsertRewritingRule] -> NewEnv (Maybe Formula)
 rewriteAtomic1 _ _ [] = return Nothing
 rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
     case match p a2 of
@@ -44,12 +47,12 @@ rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
         Just sub -> do
             let fvp = freeVars p
                 fvform = freeVars form
-                fvold = (fvform \\ fvp) \\ ext
+                fvold = toAscList ((fvform \\\ fvp) \\\ ext)
             fvnew <- new fvold
             let sub2 = fromList (zip fvold (map VarExpr fvnew))
             return (Just (subst (sub `union` sub2) form))
 
-rewrite1 :: [Var] ->[InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrite1 :: Set Var ->[InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrite1 ext  qr  ir dr form0 =
     case form0 of
         (FReturn _) -> return form0
@@ -82,7 +85,7 @@ rewrite1 ext  qr  ir dr form0 =
         (Not form) ->
             (Not <$> rewrite1 ext  qr ir dr form)
 
-rewrites    :: Int -> [Var] -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrites    :: Int -> Set Var -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrites n ext  rules  ir dr form | n < 0     = error "maximum number of rewrites reached"
                         | otherwise = do
                             form' <-  rewrite1 ext rules  ir dr form
