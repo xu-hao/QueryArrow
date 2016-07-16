@@ -40,9 +40,6 @@ packages:
     - location:
         git: https://github.com/xu-hao/hdbc-postgresql.git
         commit : 89d134986894342cf41938be00c595c7b0335604
-    - location:
-        git: https://github.com/xu-hao/namespace.git
-        commit : 36ccbf66c012d5fb308924c9e82d574ace833e68
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.
@@ -53,6 +50,7 @@ packages:
 extra-deps:
     - pretty-tree-0.1.0.0
     - semibounded-lattices-0.1.0.0
+    - namespace-0.1.0.0
 
 # Override default flag values for local packages and extra-deps
 flags: {}
