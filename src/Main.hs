@@ -155,12 +155,27 @@ run3 hdr query tdb user zone = do
     r <- runResourceT $ evalStateT (dbCatch $ do
                 case runParser progp (mempty, predmap, mempty) "" query of
                             Left err -> error (show err)
-                            Right (qu@(Query form), _) ->
+                            Right (Left (qu@(Query form), _)) ->
                                 case runExcept (checkQuery qu) of
                                     Right _ -> do
                                         rows <- getAllResultsInStream ( doQuery tdb (Set.fromList (map Var hdr)) qu (keys params) (pure params))
                                         return rows
                                     Left e -> error e) (DBAdapterState Nothing)
+                            Right (Right Commit) -> do
+                                b <- dbPrepare tdb
+                                if b
+                                    then do
+                                        b <- dbCommit tdb
+                                        if b
+                                            then return [mempty]
+                                            else do
+                                                dbRollback
+                                                liftIO $ errorM "QA" "prepare succeeded but cannot commit"
+                                                error "prepare succeeded but cannot commit"
+                                    else do
+                                        dbRollback tdb
+                                        liftIO $ errorM "QA" "prepare failed, cannot commit"
+                                        error "prepare failed, cannot commit"
     return (case r of
         Right rows ->  (hdr, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
         Left e ->  (["error"], [singleton "error" (show e)]))

@@ -25,7 +25,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero"],
     T.reservedOpNames = ["~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -176,13 +176,17 @@ varp = Var <$> identifier
 varsp :: FOParser [Var]
 varsp = many1 varp
 
-progp :: FOParser (Query, PredMap)
+progp :: FOParser (Either (Query, PredMap) Commit)
 progp = do
     whiteSpace
-    q <- Query <$> formulap
-    eof
-    (_, predmap, _) <- getState
-    return (q, predmap)
+    (do
+        q <- Query <$> formulap
+        eof
+        (_, predmap, _) <- getState
+        return (Left (q, predmap))) <|> (do
+        reserved "commit"
+        eof
+        return (Right Commit))
 
 
 rulep :: FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])

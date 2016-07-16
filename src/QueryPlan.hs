@@ -68,6 +68,8 @@ instance SubstituteResultValue Lit where
 -- query
 newtype Query = Query Formula
 
+data Commit = Commit
+
 checkQuery :: Query -> Except String ()
 checkQuery (Query form) = checkFormula form
 
@@ -663,6 +665,7 @@ execQueryPlan (vars, rs) (qpd, QPTransaction2 ) =
                         if and b''
                             then return ()
                             else do
+                                rollback
                                 liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
                     else do
                         rollback
