@@ -41,7 +41,7 @@ import Algebra.Lattice
 import Data.Set (toAscList, Set, intersection)
 -- exec query from dbname
 
-getAllResults2 :: (MonadIO m, MonadBaseControl IO m, ResultRow row) => [Database m row] -> MSet Var -> Query -> m [row]
+getAllResults2 :: (MonadIO m, MonadBaseControl IO m, ResultRow row, Num (ElemType row), Ord (ElemType row)) => [Database m row] -> MSet Var -> Query -> m [row]
 getAllResults2 dbs rvars query = do
     qp <- prepareQuery' dbs  [] [] [] rvars query bottom
     let (_, stream) = execQueryPlan ([], pure mempty) qp
@@ -69,13 +69,13 @@ prepareQuery' dbs qr ir dr rvars qu0 vars = do
     let qp2 = calculateVars vars rvars insp
     effective <- (runExceptT (checkQueryPlan dbs qp2))
     case effective of
-        Left (errmsg, formula) -> error (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu ++ show formula)
+        Left errmsg -> error (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu)
         Right _ -> do
             let qp3 = optimizeQueryPlan dbs qp2
-            let qp3' = addTransaction' qp3
-            liftIO $ printQueryPlan qp3'
-            qp4 <- prepareTransaction dbs [] qp3'
-            prepareQueryPlan dbs (snd qp4)
+            -- let qp3' = addTransaction' qp3
+            liftIO $ printQueryPlan qp3
+            -- qp4 <- prepareTransaction dbs [] qp3'
+            prepareQueryPlan dbs qp3
 
 printQueryPlan qp = do
     infoM "QA" ("query plan:")
@@ -97,10 +97,10 @@ rewriteQuery  qr ir dr vars (Query form) ext = Query (runNew (do
 instance (Monad m, ResultRow row) => DBStatementClose m (QueryPlan2 m row) where
     dbStmtClose qp = return ()
 
-instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => DBStatementExec m row (QueryPlan2 m row) where
+instance (MonadIO m, MonadBaseControl IO m, ResultRow row, Num (ElemType row), Ord (ElemType row)) => DBStatementExec m row (QueryPlan2 m row) where
     dbStmtExec qp vars rs = snd (execQueryPlan  (vars, rs) qp)
 
-instance (MonadIO m, MonadBaseControl IO m, ResultRow row) => Database_ (TransDB m row) m row (QueryPlan2 m row) where
+instance (MonadIO m, MonadBaseControl IO m, ResultRow row, Num (ElemType row), Ord (ElemType row)) => Database_ (TransDB m row) m row (QueryPlan2 m row) where
     dbBegin (TransDB _ dbs  _ _ ) = mapM_ (\(Database db) -> dbBegin db) dbs
     dbCommit (TransDB _ dbs  _ _ ) =     all id <$> mapM (\(Database db) -> dbCommit db) dbs
     dbPrepare (TransDB _ dbs  _ _ ) =     all id <$> mapM (\(Database db) -> dbPrepare db) dbs

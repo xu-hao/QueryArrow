@@ -4,7 +4,7 @@ import FO.Data
 
 import Data.Map.Strict (Map, lookup, empty, intersectionWith, unionWith, unionsWith, insert, delete)
 import Prelude hiding (lookup)
-import Data.Set (Set, singleton)
+import Data.Set (Set, singleton, fromList)
 import Algebra.Lattice
 import Algebra.SemiBoundedLattice
 
@@ -78,8 +78,10 @@ instance DeterminedVars Formula where
         map1 <- determinedVars dsp vars form1
         map2 <- determinedVars dsp vars form2
         return (map1 /\ map2)
-    determinedVars dsp vars (Exists v form) = do
-        dsp' <- determinedVars dsp vars form
-        return (dsp' \\\ singleton v)
-    determinedVars _ _ (Not _) = return bottom
+    determinedVars _ _ (Aggregate Not _) = return bottom
+    determinedVars _ _ (Aggregate Exists _) = return bottom
+    determinedVars _ _ (Aggregate (Summarize funcs) _) = return (fromList (fst (unzip funcs)))
+    determinedVars dsp vars (Aggregate (Limit _) form) = determinedVars dsp vars form
+    determinedVars dsp vars (Aggregate (OrderByAsc _) form) = determinedVars dsp vars form
+    determinedVars dsp vars (Aggregate (OrderByDesc _) form) = determinedVars dsp vars form
     determinedVars _ _ _ = return bottom

@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, UndecidableInstances #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms #-}
 module SQL.SQL where
 
 import QueryPlan
@@ -9,7 +9,7 @@ import ListUtils
 import Utils
 
 import Prelude hiding (lookup)
-import Data.List (intercalate, (\\),union)
+import Data.List (intercalate, (\\),union, nub)
 import Control.Monad.Trans.State.Strict (StateT, get, put, evalStateT, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, alter, toList, elems, size, delete)
@@ -22,6 +22,8 @@ import qualified Data.Text as T
 import Data.Set (toAscList)
 import qualified Data.Set as Set
 import Algebra.Lattice
+import Algebra.Lattice.Dropped
+import Algebra.Lattice.Ordered
 import Algebra.SemiBoundedLattice
 
 type Col = String
@@ -47,6 +49,7 @@ data SQLExpr = SQLColExpr SQLQualifiedCol
              | SQLPatternExpr T.Text
              | SQLNullExpr
              | SQLParamExpr String
+             | SQLExprText String
              | SQLFuncExpr String [SQLExpr] deriving (Eq, Ord)
 
 isSQLConstExpr :: SQLExpr -> Bool
@@ -85,8 +88,12 @@ a .=. b = SQLCompCond "=" a b
 (.<>.) :: SQLExpr -> SQLExpr -> SQLCond
 a .<>. b = SQLCompCond "<>" a b
 
+data SQLOrder = ASC | DESC deriving (Eq, Ord)
 
-data SQL = SQLQuery {sqlSelect :: [ SQLExpr ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond} deriving (Eq, Ord)
+type IntLattice = Dropped (Ordered Int)
+pattern IntLattice a = Drop (Ordered a)
+
+data SQL = SQLQuery {sqlSelect :: [ (Var, SQLExpr) ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond, sqlOrderBy :: [(SQLExpr, SQLOrder)], sqlLimit :: IntLattice } deriving (Eq, Ord)
 
 data SQLStmt = SQLQueryStmt SQL
     | SQLInsertStmt TableName [(Col,SQLExpr)] [Table] SQLCond
@@ -121,6 +128,7 @@ instance Show2 SQLExpr where
     show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
     show2 (SQLParamExpr _) _ = "?"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
+    show2 (SQLExprText s) _ = s
     show2 SQLNullExpr _ = "NULL"
 
 instance Show SQLVar where
@@ -132,11 +140,19 @@ showWhereCond2 cond sqlvar = case cond of
     _ -> " WHERE " ++ show2 cond sqlvar
 
 instance Show2 SQL where
-    show2 (SQLQuery cols tables conds) sqlvar = "SELECT " ++ (if null cols then "1" else intercalate "," (map show cols)) ++
+    show2 (SQLQuery cols tables conds orderby limit) sqlvar = "SELECT " ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ show var) cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map show tables)) ++
-            (showWhereCond2 conds sqlvar)
+            (showWhereCond2 conds sqlvar) ++
+            (if null orderby
+                then ""
+                else " ORDER BY " ++ intercalate "," (map (\(expr, ord) -> show expr ++ " " ++ case ord of
+                                                                                                    ASC -> "ASC"
+                                                                                                    DESC -> "DESC") orderby)) ++
+            (case limit of
+                Top -> ""
+                IntLattice n -> " LIMIT " ++ show n)
 
 
 instance Show SQLStmt where
@@ -207,16 +223,19 @@ instance Subst a => Subst [a] where
 type SQLQuery = ([Var], SQLStmt, [Var]) -- return vars, sql, param vars
 
 instance Monoid SQL where
-    (SQLQuery sselect1 sfrom1 swhere1) `mappend` (SQLQuery sselect2 sfrom2 swhere2) =
-        SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2)
-    mempty = SQLQuery [] [] SQLTrueCond
+    (SQLQuery sselect1 sfrom1 swhere1 orderby1 limit1) `mappend` (SQLQuery sselect2 sfrom2 swhere2 orderby2 limit2) =
+        SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2) (orderby1 <> orderby2) (limit1 /\ limit2)
+    mempty = SQLQuery [] [] SQLTrueCond [] top
 
-sor (SQLQuery sselect1 sfrom1 swhere1) (SQLQuery sselect2 sfrom2 swhere2) = SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2)
+sor :: SQL -> SQL -> SQL
+sor (SQLQuery sselect1 sfrom1 swhere1 [] Top) (SQLQuery sselect2 sfrom2 swhere2 [] Top) = SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2) [] top
+sor _ _ = error "sor: incompatible order by and limit"
 
 snot :: SQL -> SQL
-snot (SQLQuery sselect sfrom swhere) = SQLQuery sselect sfrom (SQLNotCond swhere)
+snot (SQLQuery sselect sfrom swhere orderby limit) = SQLQuery sselect sfrom (SQLNotCond swhere) [] top
 
-swhere swhere1 = SQLQuery [] [] swhere1
+swhere :: SQLCond -> SQL
+swhere swhere1 = SQLQuery [] [] swhere1 [] top
 -- translate relational calculus to sql
 -- If P maps to table T col_1 ... col_n
 -- {xs : P(e_1,e_2,...,e_n)}
@@ -280,11 +299,11 @@ addVarRep :: Var -> SQLExpr -> TransMonad ()
 addVarRep var expr =
     modify (\ts-> ts {repmap =  insert var expr (repmap ts)})
 
-condFromArg :: (SQLExpr -> SQLExpr -> SQLCond) -> (Expr, SQLQualifiedCol) -> TransMonad SQLCond
-condFromArg op (arg, col) = do
+condFromArg :: (Expr, SQLQualifiedCol) -> TransMonad SQLCond
+condFromArg (arg, col) = do
     v <- sqlExprFromArg arg
     case v of
-        Left expr -> return (op (SQLColExpr col) expr)
+        Left expr -> return ((SQLColExpr col) .=. expr)
         Right var2 -> do
             addVarRep var2 (SQLColExpr col)
             return SQLTrueCond
@@ -316,13 +335,16 @@ instance Params SQLCond where
     params (SQLExistsCond sql) = params sql
 
 instance Params SQLStmt where
-    params (SQLQueryStmt (SQLQuery sel _ cond)) = params sel ++ params cond
+    params (SQLQueryStmt (SQLQuery sel _ cond _ _)) = params sel ++ params cond
     params (SQLInsertStmt _ vs _ cond) = params (map snd vs) ++ params cond
     params (SQLUpdateStmt _ vs cond) = params (map snd vs) ++ params cond
     params (SQLDeleteStmt _ cond) = params cond
 
 instance Params SQL where
-    params (SQLQuery sel _ cond) = params sel ++ params cond
+    params (SQLQuery sel _ cond _ _) = params sel ++ params cond
+
+instance Params (Var, SQLExpr) where
+    params (_, expr) = params expr
 
 instance Params SQLQuery where
     params (_, _, params) = params
@@ -331,37 +353,46 @@ translateQueryToSQL :: [Var] -> Query -> TransMonad SQLQuery
 translateQueryToSQL vars qu@(Query formula) = do
     (vars, sql, vars2) <- if pureF formula
         then do
-            (SQLQuery _ tablelist cond1) <-  translateFormulaToSQL formula
+            (SQLQuery _ tablelist cond1 orderby limit) <-  translateFormulaToSQL formula
             ts <- get
             let extractCol var = case lookup var (repmap ts) of
                                     Just col -> col
                                     _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
             let cols = map extractCol vars
-                sql = SQLQueryStmt (SQLQuery cols tablelist cond1)
+                sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit)
             return (vars, sql, (params sql))
         else translateInsertToSQL formula
     return (vars, simplifySQLCond sql, vars2)
 
 simplifySQLCond :: SQLStmt -> SQLStmt
-simplifySQLCond (SQLQueryStmt (SQLQuery s f cond)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond))
+simplifySQLCond (SQLQueryStmt (SQLQuery s f cond orderby limit)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond) orderby limit)
 simplifySQLCond (SQLInsertStmt t s f cond) = SQLInsertStmt t s f (simplifySQLCond' cond)
 simplifySQLCond (SQLUpdateStmt t cs cond) = SQLUpdateStmt t cs (simplifySQLCond' cond)
 simplifySQLCond (SQLDeleteStmt t cond) = SQLDeleteStmt t (simplifySQLCond' cond)
 
 simplifySQLCond2 :: SQL -> SQL
-simplifySQLCond2 (SQLQuery s f cond) = SQLQuery s f (simplifySQLCond' cond)
+simplifySQLCond2 (SQLQuery s f cond orderby limit) = SQLQuery s f (simplifySQLCond' cond) orderby limit
 
 simplifySQLCond' :: SQLCond -> SQLCond
+simplifySQLCond' c@(SQLCompCond "=" a b) | a == b = SQLTrueCond
 simplifySQLCond' c@(SQLCompCond _ _ _) = c
 simplifySQLCond' (SQLTrueCond) = SQLTrueCond
 simplifySQLCond' (SQLFalseCond) = SQLFalseCond
-simplifySQLCond' (SQLAndCond a b) = case simplifySQLCond' a of
-    SQLTrueCond -> simplifySQLCond' b
-    SQLFalseCond -> SQLFalseCond
-    a' -> case simplifySQLCond' b of
-        SQLTrueCond -> a'
-        SQLFalseCond -> SQLFalseCond
-        b' -> SQLAndCond a' b'
+simplifySQLCond' c@(SQLAndCond _ _) =
+    let conj = getSQLConjuncts c
+        conj2 = concatMap (getSQLConjuncts . simplifySQLCond') conj
+        conj3 = filter (\a -> case a of
+                                SQLTrueCond -> False
+                                _ -> True) conj2
+        conj4 = if all (\a -> case a of
+                                SQLFalseCond -> False
+                                _ -> True) conj3
+                    then conj3
+                    else [SQLFalseCond]
+        conj5 = nub conj4 in
+        if null conj5
+            then SQLTrueCond
+            else foldl1 (.&&.) conj5
 simplifySQLCond' (SQLOrCond a b) = case simplifySQLCond' a of
     SQLFalseCond -> simplifySQLCond' b
     SQLTrueCond -> SQLTrueCond
@@ -376,9 +407,31 @@ simplifySQLCond' (SQLNotCond a) = case simplifySQLCond' a of
 simplifySQLCond' (SQLExistsCond sql) = SQLExistsCond (simplifySQLCond2 sql)
 
 
-sqlexists sql@(SQLQuery [] tablelist (SQLExistsCond _)) = sql
-sqlexists (SQLQuery cols tablelist cond) = SQLQuery [] [] (SQLExistsCond (SQLQuery cols tablelist cond))
-sqlfalse = SQLQuery [] [] (SQLFalseCond)
+sqlexists :: SQL -> SQL
+sqlexists sql@(SQLQuery [] tablelist (SQLExistsCond _) _ _) = sql
+sqlexists (SQLQuery cols tablelist cond orderby limit) = SQLQuery [] [] (SQLExistsCond (SQLQuery cols tablelist cond orderby limit)) [] top
+
+sqlfalse :: SQL
+sqlfalse = SQLQuery [] [] (SQLFalseCond) [] top
+
+sqlsummarize :: [(Var, SQLExpr)] -> SQL -> SQL
+sqlsummarize funcs (SQLQuery _ from whe orderby limit) =
+    SQLQuery funcs from whe orderby limit
+
+sqlorderby :: SQLOrder -> SQLExpr -> SQL -> SQL
+sqlorderby ord expr (SQLQuery sel from whe orderby limit) =
+    SQLQuery sel from whe ((expr, ord) : orderby) limit
+
+sqllimit :: IntLattice -> SQL -> SQL
+sqllimit n (SQLQuery sel from whe orderby limit) =
+    SQLQuery sel from whe orderby (n /\ limit)
+
+findRep :: Var -> TransMonad SQLExpr
+findRep v =  do
+  ts <- get
+  case lookup v (repmap ts) of
+        Nothing -> error ("cannot find representative for variable " ++ show v)
+        Just expr -> return expr
 
 translateFormulaToSQL :: Formula -> TransMonad SQL
 translateFormulaToSQL (FAtomic a) = translateAtomToSQL Pos a
@@ -389,24 +442,48 @@ translateFormulaToSQL (FOne) =
 
 translateFormulaToSQL (FChoice form1 form2) =
     sor <$> translateFormulaToSQL form1 <*> translateFormulaToSQL form2
+translateFormulaToSQL (FPar form1 form2) =
+    sor <$> translateFormulaToSQL form1 <*> translateFormulaToSQL form2
 translateFormulaToSQL (FZero) =
     return sqlfalse
--- assume that all atoms in conj involves var
-translateFormulaToSQL (Exists var conj) = do
-    ts <- get
-    let repvar = lookup var (repmap ts)
-    put ts{repmap = delete var (repmap ts)}
+
+translateFormulaToSQL (Aggregate Exists conj) = do
     sql <- translateFormulaToSQL conj
-    ts' <- get
-    put ts'{repmap = alter (\_ -> repvar) var (repmap ts')}
     return (sqlexists sql)
 
-translateFormulaToSQL (Not (FAtomic a)) =
+translateFormulaToSQL (Aggregate Not (FAtomic a)) =
     translateAtomToSQL Neg a
 
--- assume that all atoms in conj involves var
-translateFormulaToSQL (Not form) = do
+translateFormulaToSQL (Aggregate Not form) =
     snot <$> translateFormulaToSQL form
+
+translateFormulaToSQL (Aggregate (Summarize funcs) conj) = do
+    sql <- translateFormulaToSQL conj
+    funcs' <- mapM (\(v, s) ->
+        case s of
+            Max v2 -> do
+                rep <- findRep v2
+                return (v, SQLFuncExpr "max" [rep])
+            Min v2 -> do
+                rep <- findRep v2
+                return (v, SQLFuncExpr "min" [rep])
+            Count -> return (v, SQLExprText "count(*)")) funcs
+    return (sqlsummarize funcs' sql)
+
+translateFormulaToSQL (Aggregate (Limit n) form) =
+    sqllimit (IntLattice n) <$> translateFormulaToSQL form
+
+translateFormulaToSQL (Aggregate (OrderByAsc v) form) = do
+    sql <- translateFormulaToSQL form
+    rep <- findRep v
+    return (sqlorderby ASC rep sql)
+
+
+translateFormulaToSQL (Aggregate (OrderByDesc v) form) = do
+    sql <- translateFormulaToSQL form
+    rep <- findRep v
+    return (sqlorderby DESC rep sql)
+translateFormulaToSQL form = error "unsupported"
 
 
 lookupTableVar :: String -> [Expr] -> TransMonad (Bool, SQLVar)
@@ -446,11 +523,11 @@ translateAtomToSQL thesign (Atom name args) = do
 
                 let tables2 = map (subst varmap) tables
                 let cols3 = map (subst varmap) cols2
-                condsFromArgs <- mapM (condFromArg (.=.)) (zip args2 cols3)
+                condsFromArgs <- mapM condFromArg (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
                 return (case thesign of
-                            Pos -> SQLQuery [] tables2 cond3
-                            Neg -> SQLQuery [] [] (SQLNotCond (SQLExistsCond (SQLQuery [] tables2 cond3))))
+                            Pos -> SQLQuery [] tables2 cond3 [] top
+                            Neg -> SQLQuery [] [] (SQLNotCond (SQLExistsCond (SQLQuery [] tables2 cond3 [] top))) [] top)
             Nothing -> error (show name ++ " is not defined")
 
 
@@ -470,10 +547,10 @@ translateInsertToSQL form = do
 
 translateInsertToSQL' :: [Lit] -> Formula -> TransMonad SQLQuery
 translateInsertToSQL' lits conj = do
-    (SQLQuery _ tablelist cond) <- translateFormulaToSQL conj
+    (SQLQuery _ tablelist cond orderby limit) <- translateFormulaToSQL conj
     let keymap = sortByKey lits
     if size keymap > 1
-        then error "translateInsertToSQL: more than one key"
+        then error ("translateInsertToSQL: more than one key " ++ show keymap)
         else do
             insertparts <- sortParts <$> (concat <$> mapM combineLitsSQL (elems keymap))
             case insertparts of
@@ -606,7 +683,7 @@ qcolArgToUpdateCond :: (SQLQualifiedCol, Expr) -> TransMonad SQLCond
 qcolArgToUpdateCond (qcol, arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
-        Left sqlexpr -> return SQLTrueCond
+        Left sqlexpr -> return (SQLColExpr qcol .=. sqlexpr)
         Right var -> do
             addVarRep var (SQLColExpr qcol)
             return SQLTrueCond -- unbounded var
@@ -646,38 +723,46 @@ data KeyState = KeyState {
     ksDeleteObj :: Bool,
     ksInsertProp :: [Pred],
     ksInsertObj :: Bool,
-    ksChoice :: Bool
+    ksQuery :: Bool
 }
 
 pureOrExecF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
 pureOrExecF  (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
-        then lift $ Nothing
+        then lift Nothing
         else case lookup n predtablemap of
                 Nothing -> do
                     trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
                 Just (OneTable tablename _, _) -> do
                     let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
-pureOrExecF  trans (FTransaction ) =  lift $ Nothing
+pureOrExecF  trans (FTransaction ) =  lift Nothing
 
 pureOrExecF  trans (FSequencing form1 form2) = do
     pureOrExecF  trans form1
     pureOrExecF  trans form2
 
+pureOrExecF  trans (FPar form1 form2) = do
+    ks <- get
+    if isJust (updateKey ks)
+        then lift Nothing
+        else do
+            put ks {ksQuery = True}
+            pureOrExecF  trans form1
+            pureOrExecF  trans form2
 pureOrExecF  trans (FChoice form1 form2) = do
     ks <- get
     if isJust (updateKey ks)
-        then lift $ Nothing
+        then lift Nothing
         else do
-            put ks {ksChoice = True}
+            put ks {ksQuery = True}
             pureOrExecF  trans form1
             pureOrExecF  trans form2
 pureOrExecF  (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
-            if ksChoice ks
-                then lift $ Nothing
+            if ksQuery ks
+                then lift Nothing
                 else do
                     let key = keyComponents pred0 args
                         tablename = case lookup pred0 predtablemap of
@@ -692,34 +777,71 @@ pureOrExecF  (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 ar
                             if isObject
                                 then if isDelete
                                     then if not (superset [(tablename, key)] (queryKeys ks))
-                                        then lift $ Nothing
+                                        then lift Nothing
                                         else put ks{updateKey = Just (tablename, key), ksDeleteObj = True}
                                     else put ks{updateKey = Just (tablename, key), ksInsertObj = True}
                                 else if isDelete
                                     then if not (superset [(tablename, key)] (queryKeys ks))
-                                        then lift $ Nothing
+                                        then lift Nothing
                                         else put ks{updateKey = Just (tablename, key), ksDeleteProp = [pred0]}
                                     else put ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
                         Just key' ->
                             if isObject
                                 then if isDelete
                                     then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
-                                        then lift $ Nothing
+                                        then lift Nothing
                                         else put ks{ksDeleteObj = True}
-                                    else lift $ Nothing
+                                    else lift Nothing
                                 else if isDelete
                                     then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || pred0 `elem` (ksDeleteProp ks) || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
-                                        then lift $ Nothing
+                                        then lift Nothing
                                         else put ks{ksDeleteProp = ksDeleteProp ks ++ [pred0]}
                                     else if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || (tablename, key) /= key'
-                                        then lift $ Nothing
+                                        then lift Nothing
                                         else put ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
 
 pureOrExecF  _ FOne = return ()
 pureOrExecF  _ FZero = return ()
-pureOrExecF trans (Not form) = pureOrExecF trans form
-pureOrExecF trans (Exists _ form) = pureOrExecF trans form
-pureOrExecF trans (FReturn _) = lift $ Nothing
+pureOrExecF trans (Aggregate Not form) = do
+    ks <- get
+    if isJust (updateKey ks)
+        then lift Nothing
+        else do
+            put ks {ksQuery = True}
+            pureOrExecF trans form
+pureOrExecF trans (Aggregate Exists form) = do
+  ks <- get
+  if isJust (updateKey ks)
+      then lift Nothing
+      else do
+          put ks {ksQuery = True}
+          pureOrExecF trans form
+pureOrExecF _ (Aggregate _ _) =
+  lift Nothing
+pureOrExecF trans (FReturn _) = lift Nothing
+
+limitF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
+limitF trans (Aggregate (Limit _) form) = do
+  ks <- get
+  put ks {ksQuery = True}
+  limitF trans form
+limitF trans form = orderByF trans form
+
+orderByF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
+orderByF trans (Aggregate (OrderByAsc _) form) = do
+  ks <- get
+  put ks {ksQuery = True}
+  orderByF trans form
+orderByF trans form = summarizeF trans form
+
+summarizeF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
+summarizeF trans (Aggregate (Summarize _) form) = do
+  ks <- get
+  put ks {ksQuery = True}
+  pureOrExecF trans form
+summarizeF trans form = pureOrExecF trans form
+
+
 
 instance Translate SQLTrans MapResultRow SQLQuery where
     translateQueryWithParams trans ret query env =
@@ -727,9 +849,9 @@ instance Translate SQLTrans MapResultRow SQLQuery where
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql, ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             (sql, params sql)
-    translateable trans form vars = layeredF form && isJust (evalStateT (pureOrExecF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
+    translateable trans form vars = layeredF form && isJust (evalStateT (limitF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
 
-instance DBConnection conn SQLQuery => ExtractDomainSize DBAdapterMonad conn SQLTrans where
+instance ExtractDomainSize DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize (Atom name args) =
         if isBuiltIn
             then return bottom -- assume that builtins don't restrict domain size

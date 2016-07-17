@@ -1,9 +1,9 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
    RankNTypes, FlexibleContexts, GADTs #-}
 module ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream, closeResultStream,
-    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, ResultRow(..), resultStream2, bracketPStream) where
+    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, mapResultStream, ResultRow(..), resultStream2, bracketPStream) where
 
-import Prelude  hiding (lookup, take, map, null)
+import Prelude  hiding (lookup, take, map, null, mapM)
 import Control.Applicative (empty, (<|>), Alternative)
 import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -14,7 +14,10 @@ import Data.Conduit.Combinators
 import Control.Monad.Trans.Resource
 
 class (Monoid row, Show row) => ResultRow row where
+    type ElemType row
     transform :: [Var] -> [Var] -> row -> row
+    ret :: Var -> ElemType row -> row
+    ext :: Var -> row -> ElemType row
 
 newtype ResultStream m row = ResultStream (Producer m row)
 
@@ -75,6 +78,8 @@ transformResultStream vars1 vars2 (ResultStream rs) = ResultStream (rs =$= map (
 filterResultStream :: (Monad m, ResultRow row) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
 filterResultStream (ResultStream rs) p = ResultStream (rs =$= filterM p)
 
+mapResultStream :: (Monad m, ResultRow row) => ResultStream m row -> (row -> m row) -> ResultStream m row
+mapResultStream (ResultStream rs) p = ResultStream (rs =$= mapM p)
 
 instance (MonadIO m) => MonadIO (ResultStream m) where
     liftIO = lift . liftIO

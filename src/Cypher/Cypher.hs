@@ -526,8 +526,7 @@ cypherDeterminedVars builtin FTransaction = []
 cypherDeterminedVars builtin FOne = []
 cypherDeterminedVars builtin FZero = []
 cypherDeterminedVars builtin (FInsert _) = []
-cypherDeterminedVars builtin (Not _) = []
-cypherDeterminedVars builtin (Exists v form) = cypherDeterminedVars builtin form \\ [v]
+cypherDeterminedVars builtin _ = error "unsupported"
 
 translateFormulaToCypher :: [Var] -> Formula -> [Var] -> TransMonad [Cypher]
 translateFormulaToCypher rvars (FSequencing form1 form2) env = do
@@ -550,14 +549,11 @@ translateFormulaToCypher rvars (FInsert lits@(Lit sign0 a)) env = do
         Pos -> translateInsertAtomToCypher rvars a env
         Neg -> translateDeleteAtomToCypher rvars a env
     return [cypher]
-translateFormulaToCypher rvars (Not (FAtomic a)) env = do
+translateFormulaToCypher rvars (Aggregate Not (FAtomic a)) env = do
     cypher <- translateQueryAtomToCypher rvars Neg a env
     return [cypher]
 
-translateFormulaToCypher _ (Exists var formula) env = do
-    error "translateFormulaToCypher: unsupported"
-
-translateFormulaToCypher _ (Not _) env = do
+translateFormulaToCypher _ _ _ = do
     error "translateFormulaToCypher: unsupported"
 
 -- instantiate a cypher mapping
@@ -696,8 +692,7 @@ translateableCypher _ (FInsert lit) = do
 translateableCypher trans (FTransaction) = lift $ Nothing
 translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
-translateableCypher trans (Not formula)  = lift $ Nothing
-translateableCypher trans (Exists _ _)  = lift $ Nothing
+translateableCypher trans (Aggregate _ _)  = lift $ Nothing
 
 instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
     extractDomainSize conn trans varDomainSize (Atom name args) =

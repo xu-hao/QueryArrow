@@ -23,10 +23,10 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.nestedComments = False,
     T.identStart = letter <|> char '_',
     T.identLetter = alphaNum <|> char '_',
-    T.opStart = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.opLetter = oneOf "~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero"],
-    T.reservedOpNames = ["~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
+    T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
+    T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "count", "limit", "order", "by", "asc", "desc", "let"],
+    T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
 
@@ -113,18 +113,25 @@ neg (Lit Neg a) = Lit Pos a
 returnp :: FOParser [Var]
 returnp = reserved "return" *> varsp
 
+letp :: FOParser (Var, Summary)
+letp = do
+    v <- varp
+    reservedOp "="
+    s <- (reserved "max" >> Max <$> varp)
+      <|> (reserved "min" >> Min <$> varp)
+      <|> (reserved "count" >> return Count)
+    return (v,s)
+
 formula1p :: FOParser Formula
 formula1p = try (parens formulap)
        <|> (FReturn <$> returnp)
        <|> (FAtomic <$> try atomp)
        <|> transactionp *> pure FTransaction
-       <|> (Not <$> (negp >> formula1p))
-       <|> (do
-           existsp
-           vars <- varsp
-           _ <- dot
-           form <- formulap
-           return (foldr Exists form vars))
+       <|> (Aggregate Not <$> (negp >> formula1p))
+       <|> (Aggregate Exists <$> (existsp >> formulap))
+       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> many letp)) <*> formulap)
+       <|> (Aggregate <$> (reserved "limit" >> Limit . fromIntegral <$> integer) <*> formulap)
+       <|> (Aggregate <$> (reserved "order" >> reserved "by" >> (try (OrderByAsc <$> varp <* reserved "asc") <|> (OrderByDesc <$> varp <* reserved "desc"))) <*> formulap)
        <|> onep *> pure FOne
        <|> zerop *> pure FZero
        <|> (fsequencing . map FInsert) <$> (reserved "insert" >> litsp)

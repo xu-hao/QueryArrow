@@ -80,10 +80,8 @@ rewrite1 ext  qr  ir dr form0 =
                         Just form -> form)
         (FTransaction ) ->
             return FTransaction
-        (Exists v form) ->
-            (Exists v <$> rewrite1 ext  qr ir dr form)
-        (Not form) ->
-            (Not <$> rewrite1 ext  qr ir dr form)
+        (Aggregate agg form) ->
+            (Aggregate agg <$> rewrite1 ext  qr ir dr form)
 
 rewrites    :: Int -> Set Var -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrites n ext  rules  ir dr form | n < 0     = error "maximum number of rewrites reached"

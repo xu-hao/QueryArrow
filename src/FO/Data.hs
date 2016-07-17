@@ -50,6 +50,9 @@ data Sign = Pos | Neg deriving (Eq, Ord)
 -- literals
 data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord)
 
+data Summary = Max Var | Min Var | Count deriving (Eq, Ord)
+data Aggregator = Summarize [(Var, Summary)] | Limit Int | OrderByAsc Var | OrderByDesc Var | Not | Exists deriving (Eq, Ord, Show)
+
 data Formula = FTransaction
              | FReturn [Var]
              | FAtomic Atom
@@ -59,8 +62,7 @@ data Formula = FTransaction
              | FPar Formula Formula
              | FOne
              | FZero
-             | Not Formula
-             | Exists { boundvar :: Var, formula :: Formula } deriving (Eq, Ord)
+             | Aggregate Aggregator Formula deriving (Eq, Ord)
 
 unique :: [a] -> a
 unique as = if length as /= 1
@@ -103,10 +105,18 @@ instance FreeVars Formula where
         freeVars form1 \/ freeVars form2
     freeVars (FPar form1 form2) =
         freeVars form1 \/ freeVars form2
-    freeVars (Not formula1) =
+    freeVars (Aggregate Not formula1) =
         freeVars formula1
-    freeVars (Exists var formula1) =
-        freeVars formula1 \\\ Set.singleton var
+    freeVars (Aggregate Exists formula1) =
+        freeVars formula1
+    freeVars (Aggregate (Summarize _) form) =
+        freeVars form
+    freeVars (Aggregate (Limit _) form) =
+        freeVars form
+    freeVars (Aggregate (OrderByAsc _) form) =
+        freeVars form
+    freeVars (Aggregate (OrderByDesc _) form) =
+        freeVars form
     freeVars _ = bottom
 
 instance FreeVars a => FreeVars [a] where
@@ -291,6 +301,11 @@ instance Show Lit where
         Pos -> show theatom
         Neg -> "¬" ++ show theatom
 
+instance Show Summary where
+    show (Max v) = "max " ++ show v
+    show (Min v) = "min " ++ show v
+    show (Count) = "count"
+
 instance Show Formula where
     show (FReturn vars) = "(return " ++ unwords (map show vars) ++ ")"
     show (FAtomic a) = show a
@@ -301,8 +316,12 @@ instance Show Formula where
     show form@(FPar _ _) = "(" ++ intercalate " ‖ " (map show (getFpars' form)) ++ ")"
     show (FOne) = "𝟏"
     show (FZero) = "𝟎"
-    show (Exists var form) = "(∃ " ++ show var ++ "." ++ show form ++ ")"
-    show (Not form) = "¬(" ++ show form ++ ")"
+    show (Aggregate Exists form) = "∃" ++ show form
+    show (Aggregate Not form) = "¬" ++ show form
+    show (Aggregate (Summarize funcs) form) = "(let " ++ unwords (map (\(var1, func1) -> show var1 ++ " = " ++ show func1) funcs) ++ " " ++ show form ++ ")"
+    show (Aggregate (Limit n) form) = "(limit " ++ show n ++ " " ++ show form ++ ")"
+    show (Aggregate (OrderByAsc var1) form) = "(order by " ++ show var1 ++ " asc " ++ show form ++ ")"
+    show (Aggregate (OrderByDesc var1) form) = "(order by " ++ show var1 ++ " desc " ++ show form ++ ")"
 
 -- rule
 
@@ -393,20 +412,39 @@ instance Subst Lit where
 instance Subst Atom where
     subst s (Atom pred' args) = Atom pred' (subst s args)
 
+extractVar :: Expr -> Var
+extractVar (VarExpr var) = var
+extractVar _ = error "this is not a var expr"
+
+instance Subst Var where
+    subst s v = extractVar (subst s (VarExpr v))
+
+instance Subst Summary where
+    subst s (Max v) = Max (subst s v)
+    subst s (Min v) = Min (subst s v)
+    subst _ (Count) = Count
+
 instance Subst Formula where
-    subst s form@(FReturn _) = form
+    subst s (FReturn vars) = FReturn (subst s vars)
     subst s (FAtomic a) = FAtomic (subst s a)
     subst s (FInsert lits) = FInsert (subst s lits)
-    subst s (FTransaction ) = FTransaction
+    subst _ (FTransaction ) = FTransaction
     subst s (FSequencing form1 form2) = FSequencing (subst s form1) (subst s form2)
     subst s (FChoice form1 form2) = FChoice (subst s form1) (subst s form2)
     subst s (FPar form1 form2) = FPar (subst s form1) (subst s form2)
-    subst s (Not a) = Not (subst s a)
-    subst s (Exists var a) = Exists var (subst (delete var s) a)
+    subst s (Aggregate Not a) = Aggregate Not (subst s a)
+    subst s (Aggregate Exists a) = Aggregate Exists (subst s a)
+    subst s (Aggregate (Summarize funcs) a) = Aggregate (Summarize (subst s funcs)) (subst s a)
+    subst s (Aggregate (Limit n) a) = Aggregate (Limit n) (subst s a)
+    subst s (Aggregate (OrderByAsc var1) a) = Aggregate (OrderByAsc (extractVar (subst s (VarExpr var1)))) (subst s a)
+    subst s (Aggregate (OrderByDesc var1) a) = Aggregate (OrderByAsc (extractVar (subst s (VarExpr var1)))) (subst s a)
     subst _ form = form
 
 instance Subst a => Subst [a] where
     subst s = map (subst s)
+
+instance (Subst a, Subst b) => Subst (a, b) where
+    subst s (a, b) = (subst s a, subst s b)
 
 instance (Subst a, Ord a) => Subst (Set a) where
     subst s = Set.map (subst s)
@@ -460,8 +498,7 @@ pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
 pureF (FPar form1 form2) = pureF form1 && pureF form2
 pureF (FInsert _) = False
-pureF (Exists _ form) =  pureF form
-pureF (Not form) =  pureF form
+pureF (Aggregate _ form) =  pureF form
 pureF FOne = True
 pureF FZero = True
 
@@ -473,8 +510,7 @@ layeredF (FSequencing form1 form2) =  layeredF form1 &&  layeredF form2
 layeredF (FChoice form1 form2) = layeredF form1 && layeredF form2
 layeredF (FPar form1 form2) = layeredF form1 && layeredF form2
 layeredF (FInsert _) = True
-layeredF (Exists _ form) =  pureF form
-layeredF (Not form) =  pureF form
+layeredF (Aggregate _ form) = pureF form
 layeredF FOne = True
 layeredF FZero = True
 
@@ -533,7 +569,7 @@ fpar = foldl (.|.) FZero
 (@@) :: Pred -> [Expr] -> Formula
 pred' @@ args = FAtomic (Atom pred' args)
 
-class SubstPred a where
+{- class SubstPred a where
     substPred :: Map Pred Pred -> a -> a
 
 instance SubstPred Formula where
@@ -557,7 +593,7 @@ instance SubstPred Lit where
     substPred pmap (Lit sign0 atom0) = Lit sign0 (substPred pmap atom0)
 
 instance SubstPred a => SubstPred [a] where
-    substPred pmap = map (substPred pmap)
+    substPred pmap = map (substPred pmap) -}
 
 
 -- predicate map
@@ -576,8 +612,7 @@ checkFormula (FChoice form1 form2) = do
 checkFormula (FPar form1 form2) = do
     checkFormula form1
     checkFormula form2
-checkFormula (Not a) = checkFormula a
-checkFormula (Exists _ a) = checkFormula a
+checkFormula (Aggregate _ a) = checkFormula a
 checkFormula (FInsert lit) =
     checkLit lit
 checkFormula _ = return ()
