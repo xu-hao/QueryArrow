@@ -16,8 +16,9 @@ data QuerySet = QuerySet {
     qsheaders :: [String],
     qsquery :: String,
     qsuser :: String,
-    qszone :: String
-} deriving (Generic, Show)
+    qszone :: String,
+    qssession :: String
+} | OpenSession | CloseSession {qssession :: String} deriving (Generic, Show)
 
 instance FromJSON ResultSet
 instance ToJSON ResultSet

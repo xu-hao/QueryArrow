@@ -50,6 +50,7 @@ executable QueryArrow
                    namespace,
                    lattices,
                    semibounded-lattices,
+                   stm,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

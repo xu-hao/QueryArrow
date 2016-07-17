@@ -46,7 +46,7 @@ import Config
 import Utils
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (empty, lookup, fromList, singleton, keys, toList, Map)
+import Data.Map.Strict (empty, lookup, fromList, singleton, keys, toList, Map, delete, insert, member)
 import Text.Parsec (runParser)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
@@ -78,6 +78,7 @@ import Logging
 import Data.Namespace.Path
 import Data.Namespace.Namespace
 import qualified Data.Set as Set
+import Control.Concurrent.STM
 
 main::IO()
 main = do
@@ -90,7 +91,7 @@ main = do
             ps <- getConfig (args2 !! 0)
             if (args2 !! 1) == "zmq"
                 then
-                    runzmq (args2 !! 2) ps
+                    runzmqmulti (args2 !! 2) ps
                 else
                     run2 (words (args2 !! 2)) (args2 !! 1) ps
 
@@ -136,6 +137,73 @@ runzmq addr ps = do
         replicateM_ 5 (async worker)
         proxy server workers Nothing
 
+newSessId :: Map String a -> String -> STM String
+newSessId m s = do
+    if s `member` m
+        then newSessId m (s ++ "a")
+        else return s
+
+runzmqmulti :: String -> TranslationInfo -> IO ()
+runzmqmulti addr ps = do
+    infoM "QA" ("listening at " ++ addr)
+    sessionmap <- newTVarIO empty
+    let worker = do
+        liftIO $ infoM "QA" "new worker"
+        receiver <- socket Rep
+        connect receiver "inproc://workers"
+        forever $ do
+            qus <- receive receiver
+            t0 <- liftIO $ getCurrentTime
+            let msg = CS.unpack qus
+            liftIO $ infoM "QA" ("received message " ++ msg)
+            let qs = decode (B.fromStrict qus)
+            (hdr, rep) <- case qs of
+                Nothing -> return (["error"], [singleton "error" "cannot decode message"])
+                Just qs -> case qs of
+                    OpenSession -> do
+                        tdb@(TransDB _ dbs   preds (qr, ir, dr) ) <- liftIO $ transDB "tdb" ps
+                        liftIO $ do
+                            mapM_ (debugM "QA" . show) qr
+                            mapM_ (debugM "QA" . show) ir
+                            mapM_ (debugM "QA" . show) dr
+                        t <- liftIO $ getCurrentTime
+                        let s = show t
+                        sessid <- liftIO $ atomically $ do
+                            m <- readTVar sessionmap
+                            sessid <- newSessId m s
+                            let m' = insert sessid tdb m
+                            writeTVar sessionmap m'
+                            return sessid
+                        return (["sessionid"], [singleton "sessionid" sessid])
+                    CloseSession sess -> do
+                        liftIO $ atomically $ modifyTVar sessionmap (delete sess)
+                        return ([], [])
+                    QuerySet _ _ _ _ _ -> do
+                        let user = qsuser qs
+                            zone = qszone qs
+                            qu = qsquery qs
+                            hdr = qsheaders qs
+                            sess = qssession qs
+                        m <- liftIO $ readTVarIO sessionmap
+                        case lookup sess m of
+                            Nothing -> return (["error"], [singleton "error" ("no session with session id " ++ sess)])
+                            Just tdb -> do
+                                ret <- liftIO $ try (liftIO $ run3 hdr qu tdb user zone)
+                                return (case ret of
+                                    Left e -> (["error"], [singleton "error" (show (e :: SomeException))])
+                                    Right pp -> pp)
+            t1 <- liftIO $ getCurrentTime
+            liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
+            send receiver [] (B.toStrict (encode (resultSet hdr rep)))
+    runZMQ $ do
+        server <- socket Router
+        bind server addr
+
+        workers <- socket Dealer
+        bind workers "inproc://workers"
+
+        replicateM_ 5 (async worker)
+        proxy server workers Nothing
 
 run2 :: [String] -> String -> TranslationInfo -> IO ()
 run2 hdr query ps = do
