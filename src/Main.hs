@@ -81,9 +81,10 @@ import qualified Data.Set as Set
 import Data.Conduit.Network
 import Network.JsonRpc
 import Control.Monad.Trans.Reader
-import Control.Monad.Logger
 import Data.String
+import Control.Monad.Logger
 import System.Log.FastLogger
+import Control.Monad.Logger.HSLogger
 
 main::IO()
 main = do
@@ -100,19 +101,6 @@ main = do
                 else
                     run2 (words (args2 !! 2)) (args2 !! 1) ps
 
-
-instance MonadLogger IO where
-  monadLoggerLog loc logsource loglevel msg = do
-      let priority = case loglevel of
-                          LevelDebug -> DEBUG
-                          LevelInfo -> INFO
-                          LevelWarn -> WARNING
-                          LevelError -> ERROR
-                          LevelOther _ -> NOTICE
-      logM (show logsource) priority (CS.unpack (fromLogStr (toLogStr msg)))
-
-instance MonadLoggerIO IO where
-  askLoggerIO = return monadLoggerLog
 
 runtcpmulti :: String -> Int -> TranslationInfo -> IO ()
 runtcpmulti addr port ps = do
@@ -146,7 +134,6 @@ runtcpmulti addr port ps = do
                                         zone = qszone qs
                                         qu = qsquery qs
                                         hdr = qsheaders qs
-                                        sess = qssession qs
                                     tdb@(TransDB _ dbs   preds (qr, ir, dr) ) <- liftIO $ transDB "tdb" ps
                                     liftIO $ mapM_ (debugM "QA" . show) qr
                                     liftIO $ mapM_ (debugM "QA" . show) ir
