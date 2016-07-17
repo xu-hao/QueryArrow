@@ -37,7 +37,6 @@ executable QueryArrow
                    conduit-combinators,
                    conduit,
                    resourcet,
-                   zeromq4-haskell,
                    async,
                    time,
                    cereal,
@@ -50,7 +49,11 @@ executable QueryArrow
                    namespace,
                    lattices,
                    semibounded-lattices,
-                   stm,
+                   network,
+                   json-rpc,
+                   conduit-extra,
+                   monad-logger,
+                   fast-logger,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
