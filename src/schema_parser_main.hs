@@ -21,9 +21,8 @@ showHaskellSQLMappingList l = "[\n" ++ intercalate ",\n" (map (\(p, (OneTable tn
 main :: IO ()
 main = do
       let s = $(fst schema)
-      let t = $(fst (snd schema))
-      let u = $(snd (snd schema))
+      let t = $(snd schema)
       writeFile "gen/ICATGen.hs" (
           "module ICATGen where\nimport FO.Data\nimport Data.Namespace.Namespace\nimport Data.Namespace.Path\npreds = " ++
               showHaskellList s)
-      writeFile "gen/SQL/ICATGen.hs" ( "module SQL.ICATGen where\nimport SQL.SQL\nimport Data.Namespace.Namespace\nimport Data.Namespace.Path\nmappings = " ++ showHaskellSQLMappingList t ++ "\nschemas = " ++ showHaskellList u)
+      writeFile "gen/SQL/ICATGen.hs" ( "module SQL.ICATGen where\nimport SQL.SQL\nimport Data.Namespace.Namespace\nimport Data.Namespace.Path\nmappings = " ++ showHaskellSQLMappingList t)

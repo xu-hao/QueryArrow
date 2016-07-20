@@ -193,7 +193,7 @@ generateICATMapping (Stmt tablename coldefs) = do
 generateICATMappings :: [Stmt2] -> Q Exp
 generateICATMappings = foldr (\stmt q2 -> [| $(generateICATMapping stmt ) ++ $q2 |]) [|[]|]
 
-generateICATSchema :: Stmt2 -> Q Exp
+{- generateICATSchema :: Stmt2 -> Q Exp
 generateICATSchema (Stmt tablename coldefs) = do
     let prefix = extractPrefix tablename
     let (keys, _) = findAllKeys prefix coldefs
@@ -203,12 +203,12 @@ generateICATSchema (Stmt tablename coldefs) = do
     [| ($(stringQ tn), ($colsq, $keysq)) |]
 
 generateICATSchemas :: [Stmt2] -> Q Exp
-generateICATSchemas = foldr (\stmt q2 -> [| $(generateICATSchema stmt) : $q2 |] ) [|[]|]
+generateICATSchemas = foldr (\stmt q2 -> [| $(generateICATSchema stmt) : $q2 |] ) [|[]|] -}
 
-schema :: ((Q Exp, (Q Exp, Q Exp)))
+schema :: (Q Exp, Q Exp)
 schema =
     let path = "gen/schema.sql"
         file = unsafePerformIO $ readFile path in
         case runParser prog () path file of
             Left err -> error (show err)
-            Right ast -> (generateICATDefs ast, (generateICATMappings ast, generateICATSchemas ast))
+            Right ast -> (generateICATDefs ast, generateICATMappings ast)
