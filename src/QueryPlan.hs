@@ -95,6 +95,8 @@ class DBStatementClose m stmt where
 
 -- database
 class (Monad m, DBStatementClose m stmt, DBStatementExec m row stmt) => Database_ db m row stmt | db -> m row stmt where
+    dbOpen :: db -> IO ()
+    dbClose :: db -> IO ()
     dbBegin :: db -> m ()
     dbPrepare :: db -> m Bool
     dbCommit :: db -> m Bool

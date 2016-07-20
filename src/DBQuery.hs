@@ -54,7 +54,7 @@ class DBConnection conn query  | conn -> query  where
     connPrepare :: conn -> DBAdapterMonad Bool
     connCommit :: conn -> DBAdapterMonad Bool
     connRollback :: conn -> DBAdapterMonad ()
-    connClose :: conn -> DBAdapterMonad ()
+    connClose :: conn -> IO ()
 
 class ExtractDomainSize m conn trans | conn -> m  where
     extractDomainSize :: conn -> trans -> Set Var -> Atom -> m (Set Var)
@@ -74,6 +74,9 @@ data SequenceDB conn trans where
     SequenceDB :: (DBConnection conn query , TranslateSequence trans query) => conn -> String -> String -> trans -> SequenceDB conn trans
 
 instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedStatement, [Var]) where
+    dbOpen _ = return ()
+    dbClose (GenericDB conn _ _ _) =
+        connClose conn
     dbBegin (GenericDB conn _ _ _) = do
         connBegin conn
     dbPrepare (GenericDB conn _ _ _) = do
@@ -122,6 +125,8 @@ instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement 
                 emptyResultStream
 
 instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans) where
+        dbOpen _ = return ()
+        dbClose _ = return ()
         dbBegin (SequenceDB _ _ _ _) = return ()
         dbPrepare (SequenceDB _ _ _ _) = return True
         dbCommit (SequenceDB _ _ _ _) = return True

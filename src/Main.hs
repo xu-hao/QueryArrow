@@ -111,6 +111,11 @@ runtcpmulti addr port ps = do
         (serverSettings port (fromString addr))
         (do
             liftIO $ infoM "QA" ("client connected")
+            tdb@(TransDB _ dbs   preds (qr, ir, dr) ) <- liftIO $ transDB "tdb" ps
+            liftIO $ mapM_ (debugM "QA" . show) qr
+            liftIO $ mapM_ (debugM "QA" . show) ir
+            liftIO $ mapM_ (debugM "QA" . show) dr
+            liftIO $ dbOpen tdb
             let worker = do
                     t0 <- liftIO $ getCurrentTime
                     req <- receiveRequest
@@ -134,10 +139,6 @@ runtcpmulti addr port ps = do
                                         zone = qszone qs
                                         qu = qsquery qs
                                         hdr = qsheaders qs
-                                    tdb@(TransDB _ dbs   preds (qr, ir, dr) ) <- liftIO $ transDB "tdb" ps
-                                    liftIO $ mapM_ (debugM "QA" . show) qr
-                                    liftIO $ mapM_ (debugM "QA" . show) ir
-                                    liftIO $ mapM_ (debugM "QA" . show) dr
                                     ret <- liftIO $ try (liftIO $ run3 hdr qu tdb user zone)
                                     case ret of
                                         Left e ->
@@ -157,6 +158,7 @@ runtcpmulti addr port ps = do
                             liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
                             worker
             worker
+            liftIO $ dbClose tdb
             liftIO $ infoM "QA" ("client connected")
             )
 
@@ -167,8 +169,11 @@ run2 hdr query ps = do
     mapM_ print qr
     mapM_ print ir
     mapM_ print dr
+    dbOpen tdb
     (hdr, pp) <- run3 hdr query tdb "rods" "tempZone"
     putStr (pprint hdr pp)
+    dbClose tdb
+
 
 run3 :: [String] -> String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
 run3 hdr query tdb user zone = do

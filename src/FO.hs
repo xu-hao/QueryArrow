@@ -101,6 +101,8 @@ instance (MonadIO m, MonadBaseControl IO m, ResultRow row, Num (ElemType row), O
     dbStmtExec qp vars rs = snd (execQueryPlan  (vars, rs) qp)
 
 instance (MonadIO m, MonadBaseControl IO m, ResultRow row, Num (ElemType row), Ord (ElemType row)) => Database_ (TransDB m row) m row (QueryPlan2 m row) where
+    dbOpen (TransDB _ dbs  _ _ ) = mapM_ (\(Database db) -> dbOpen db) dbs
+    dbClose (TransDB _ dbs  _ _ ) = mapM_ (\(Database db) -> dbClose db) dbs
     dbBegin (TransDB _ dbs  _ _ ) = mapM_ (\(Database db) -> dbBegin db) dbs
     dbCommit (TransDB _ dbs  _ _ ) =     all id <$> mapM (\(Database db) -> dbCommit db) dbs
     dbPrepare (TransDB _ dbs  _ _ ) =     all id <$> mapM (\(Database db) -> dbPrepare db) dbs
