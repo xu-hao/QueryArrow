@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings #-}
 
+module Test where
 import FO hiding (validateInsert, validate)
 import qualified FO
 import QueryPlan
@@ -31,6 +32,11 @@ import Control.Monad.Trans.Except
 import qualified Data.Text as T
 import Control.Monad.IO.Class
 import System.IO.Unsafe
+import Data.Namespace.Namespace
+import Data.Namespace.Path
+import Data.Maybe
+import Algebra.Lattice
+import qualified Data.Set as Set
 
 {- newtype Char2 = Char2 {unChar2 :: Char}
 
@@ -108,13 +114,20 @@ runQuery dbs query2 =
     case runParser progp (constructDBPredMap dbs) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
             Right (qu2, _) -> unsafePerformIO (getAllResults2 dbs  qu2)
-
+-}
 parseStandardQuery ::  String -> Query
 parseStandardQuery query2 =
-    case runParser progp standardPredMap "" query2 of
+    case runParser progp (mempty, standardPredMap, mempty) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right (qu2, _) -> qu2
-
+            Right (Left (qu2, _)) -> qu2
+            Right (Right Commit) -> error "query is commit"
+qParseStandardQuery ::  String -> String -> Query
+qParseStandardQuery ns query2 =
+    case runParser progp (mempty, qStandardPredsMap ns, mempty) "" query2 of
+            Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
+            Right (Left (qu2, _)) -> qu2
+            Right (Right Commit) -> error "query is commit"
+{-
 parseStandardInsert :: String -> Query
 parseStandardInsert  = parseStandardQuery
 
@@ -122,7 +135,7 @@ to1 :: Ord k => [k] -> [Map k t] -> [[t]]
 to1 vars  = map (\res -> [res ! var | var <- vars])
 
 to2 :: [(a,a)] -> [[a]]
-to2 = map (\(a,b) -> [a, b])
+to2 = map ((a,b) -> [a, b])
 
 db :: MapDB DBAdapterMonad
 db = MapDB "Container" "elem" [(StringValue "ObjA", StringValue "ObjB"),
@@ -191,9 +204,15 @@ test5 (LimitedMapDB db) = case db of
 
 testsFunc ::(Show a, Arbitrary a)=>(a-> Bool)->IO ()
 testsFunc = quickCheckWith stdArgs {maxSize = 5}
+ -}
+translateQuery2 :: SQLTrans -> Set.Set Var -> Query -> SQLQuery
+translateQuery2 trans vars qu = fst (translateQueryWithParams trans vars qu Set.empty)
+testTranslateSQLInsert :: String -> String -> String -> IO ()
+testTranslateSQLInsert ns qus sqls = do
+  let qu = qParseStandardQuery "cat" qus
+  let sql = translateQuery2 (sqlStandardTrans "cat") Set.empty qu
+  serialize ((\(_,x,_) -> x)sql) `shouldBe` sqls
 
-translateQuery2 trans qu = fst (translateQueryWithParams trans qu mempty)
-translateInsert trans qu = fst (translateQueryWithParams trans qu mempty) -}
 main :: IO ()
 main = hspec $ do
 {-    describe "tests" $ do
@@ -216,83 +235,130 @@ main = hspec $ do
                 return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty)))
             v1 `shouldBe` SQLVar "t"
             v2 `shouldBe` SQLVar "t0"
-        {- it "test parse query 0" $ do
-            let (Query vars formula) = parseStandardQuery "DATA_NAME(x, y) return x y"
-            vars `shouldBe` [Var "x", Var "y"]
-            formula `shouldBe` FAtomic (Atom (standardPredMap ! UQPredName "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y")])
+        it "test parse query 0" $ do
+            let (Query formula) = parseStandardQuery "DATA_NAME(x, y, z) return x y z"
+            formula `shouldBe`
+              FSequencing
+                (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")]))
+                (FReturn [Var "x", Var "y", Var "z"])
 
-        it "test translate sql query 0" $ do
-            let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
+        it "test parse query 1" $ do
+            let (Query formula) = parseStandardQuery "let a = count (DATA_NAME(x, y, z)) return a"
+            formula `shouldBe`
+              FSequencing
+                (Aggregate (Summarize [(Var "a", Count)]) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (FReturn [Var "a"])
+
+        it "test parse query 1.1" $ do
+            let (Query formula) = parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
+            formula `shouldBe`
+              FSequencing
+                (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))]) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (FReturn [Var "a"])
+
+        it "test translate sql query 0.1" $ do
+            let qu = qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
+            let sql = translateQuery2 (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y", Var "z"]) qu
+            sql `shouldBe` ([Var "x", Var "y", Var "z"], SQLQueryStmt (SQLQuery
+                    [
+                        (Var "x", SQLColExpr (SQLVar "r_data_main", "data_id")),
+                        (Var "y", SQLColExpr (SQLVar "r_data_main", "resc_name")),
+                        (Var "z", SQLColExpr (SQLVar "r_data_main", "data_name"))]
+                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                    SQLTrueCond
+                    []
+                    top), [])
+        it "test translate sql query 0.2" $ do
+            let qu = qParseStandardQuery "cat" "let a = count (cat.DATA_NAME(x, y, z))"
+            let sql = translateQuery2 (sqlStandardTrans "cat") (Set.fromList [Var "a"]) qu
+            sql `shouldBe` ([Var "a"], SQLQueryStmt (SQLQuery
+                    [
+                        (Var "a", SQLFuncExpr "count" [(SQLExprText "*")])]
+                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                    SQLTrueCond
+                    []
+                    top), [])
+        it "test translate sql query 0.2" $ do
+            let qu = qParseStandardQuery "cat" "let a = count, b = max x, c = min x (cat.DATA_NAME(x, y, z))"
+            let sql = translateQuery2 (sqlStandardTrans "cat") (Set.fromList [Var "a", Var "b", Var "c"]) qu
+            sql `shouldBe` ([Var "a", Var "b", Var "c"], SQLQueryStmt (SQLQuery
+                    [
+                        (Var "a", SQLFuncExpr "count" [SQLExprText "*"]),
+                        (Var "b", SQLFuncExpr "max" [SQLColExpr (SQLVar "r_data_main", "data_id")]),
+                        (Var "c", SQLFuncExpr "min" [SQLColExpr (SQLVar "r_data_main", "data_id")])]
+                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                    SQLTrueCond
+                    []
+                    top), [])
+        {- it "test translate sql query 0" $ do
+            let qu = parseStandardQuery "DATA_NAME(x, y, z) return x y"
             let sql = translateQuery2 (sqlStandardTrans "") qu
-            sql `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), [])
+            sql `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), []) -}
         it "test translate sql query with param" $ do
-            let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
-            let sql = translateQueryWithParams (sqlStandardTrans "") qu [Var "w"]
-            (fst sql) `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), [])
+            let qu = qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
+            let sql = translateQueryWithParams (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y", Var "z"]) qu (Set.fromList [Var "w"])
+            (fst sql) `shouldBe` ([Var "x", Var "y", Var "z"], SQLQueryStmt (SQLQuery
+                    [
+                        (Var "x", SQLColExpr (SQLVar "r_data_main", "data_id")),
+                        (Var "y", SQLColExpr (SQLVar "r_data_main", "resc_name")),
+                        (Var "z", SQLColExpr (SQLVar "r_data_main", "data_name"))]
+                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                    SQLTrueCond
+                    []
+                    top), [])
             (snd sql) `shouldBe` []
         it "test translate sql query with param 2" $ do
-            let qu = parseStandardQuery "DATA_NAME(x, y) return x"
-            let sql = translateQueryWithParams (sqlStandardTrans "") qu [Var "y"]
-            ((\(x,_,_) -> x) (fst sql)) `shouldBe` [Var "x"]
-            show ((\(_,x,_) -> x) (fst sql)) `shouldBe` "SELECT r_data_main.data_id FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
-            (snd sql) `shouldBe` [Var "y"]
+            let qu = qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
+            let sql = translateQueryWithParams (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y"]) qu (Set.fromList [Var "z"])
+            ((\(x,_,_) -> x) (fst sql)) `shouldBe` [Var "x", Var "y"]
+            serialize ((\(_,x,_) -> x) (fst sql)) `shouldBe` "SELECT r_data_main.data_id AS x,r_data_main.resc_name AS y FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
+            (snd sql) `shouldBe` [Var "z"]
         it "test translate sql insert 0" $ do
-            let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, y, \"foo\") insert cat.DATA_SIZE(x, y, 1000)" "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
         it "test translate sql insert 1" $ do
-            let qu = parseStandardInsert "insert DATA_OBJ(1) DATA_NAME(1, \"foo\") DATA_SIZE(1, 1000)"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) VALUES (1,'foo',1000)"
+            testTranslateSQLInsert "cat" "insert cat.DATA_OBJ(1, \"bar\") cat.DATA_NAME(1, \"bar\", \"foo\") cat.DATA_SIZE(1, \"bar\", 1000)" "INSERT INTO r_data_main (data_id,resc_name,data_name,data_size) VALUES (1,'bar','foo',1000)"
         it "test translate sql insert 2" $ do
-            let qu = parseStandardInsert "COLL_NAME(a,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main"
+            testTranslateSQLInsert "cat" "cat.COLL_NAME(a,c) insert cat.DATA_OBJ(1, \"foo\") cat.DATA_NAME(1, \"foo\", c) cat.DATA_SIZE(1, \"foo\", 1000)" "INSERT INTO r_data_main (data_id,resc_name,data_name,data_size) SELECT 1,\'foo\',r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main"
         it "test translate sql insert 3" $ do
-            let qu = parseStandardInsert "COLL_NAME(2,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "INSERT INTO r_data_main (data_id,data_name,data_size) SELECT 1,r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main WHERE r_coll_main.coll_id = 2"
+            testTranslateSQLInsert "cat" "cat.COLL_NAME(2,c) insert cat.DATA_OBJ(1, \"foo\") cat.DATA_NAME(1, \"foo\", c) cat.DATA_SIZE(1, \"foo\", 1000)" "INSERT INTO r_data_main (data_id,resc_name,data_name,data_size) SELECT 1,\'foo\',r_coll_main.coll_name,1000 FROM r_coll_main r_coll_main WHERE r_coll_main.coll_id = 2"
         it "test translate sql insert 4" $ do
-            let qu = parseStandardInsert "insert ~DATA_NAME(1, c)"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL"
+            testTranslateSQLInsert "cat" "insert ~cat.DATA_NAME(1, \"foo\", c)" "UPDATE r_data_main SET data_name = NULL WHERE (data_id = 1 AND resc_name = 'foo')"
+        it "test translate sql insert 4.01" $ do
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(1, y, c) insert ~cat.DATA_NAME(1, y, c)" "UPDATE r_data_main SET data_name = NULL WHERE data_id = 1"
+        it "test translate sql insert 4.1" $ do
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(1, \"foo\", c) insert ~cat.DATA_NAME(1, \"foo\", c)" "UPDATE r_data_main SET data_name = NULL WHERE (data_id = 1 AND resc_name = 'foo')"
+        it "test translate sql insert 4.2" $ do
+            testTranslateSQLInsert "cat" "cat.DATA_PATH(1, \"foo\", c) insert ~cat.DATA_NAME(1, \"foo\", c)" "UPDATE r_data_main SET data_name = NULL WHERE ((data_id = 1 AND resc_name = 'foo') AND data_name = data_path)"
         it "test translate sql insert 5" $ do
-            let qu = parseStandardInsert "insert ~DATA_NAME(1, c) DATA_NAME(1, \"foo\")"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
+            testTranslateSQLInsert "cat" "insert ~cat.DATA_NAME(1, \"bar\", c) cat.DATA_NAME(1, \"bar\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (data_id = 1 AND resc_name = 'bar')"
+        it "test translate sql insert 5.1" $ do
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(1, \"bar\", c) insert ~cat.DATA_NAME(1, \"bar\", c) cat.DATA_NAME(1, \"bar\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (data_id = 1 AND resc_name = 'bar')"
+        it "test translate sql insert 5.2" $ do
+            testTranslateSQLInsert "cat" "cat.DATA_PATH(1, \"bar\", c) insert ~cat.DATA_NAME(1, \"bar\", c) cat.DATA_NAME(1, \"bar\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (data_id = 1 AND resc_name = 'bar')"
         it "test translate sql insert 6" $ do
-            let qu = parseStandardInsert "insert ~DATA_NAME(x, c) DATA_NAME(x, \"foo\")"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
+            testTranslateSQLInsert "cat" "cat.DATA_OBJ(x, \"bar\") insert ~cat.DATA_NAME(x, \"bar\", c) cat.DATA_NAME(x, \"bar\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE resc_name = 'bar'"
         it "test translate sql insert 7" $ do
-            let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_NAME(x, \"foo\")"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") cat.DATA_NAME(x, \"bar\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (resc_name = 'bar' AND data_name = 'foo1')"
         it "test translate sql insert 7.1" $ do
-            let qu = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\")"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\")" "UPDATE r_data_main SET data_name = NULL WHERE (resc_name = 'bar' AND data_name = 'foo1')"
         it "test translate sql insert 7.2" $ do
-            let ins@(Query _ form) = parseStandardInsert "insert ~DATA_NAME(x, \"foo1\") DATA_SIZE(x, 1000)"
-            let sql = translateable (sqlStandardTrans "") form []
+            let qu@(Query form) = parseStandardQuery "insert ~DATA_NAME(x, \"bar\", \"foo1\") DATA_SIZE(x, \"bar\", 1000)"
+            let sql = translateable (sqlStandardTrans "") form Set.empty
             sql `shouldBe` False
             -- length sql `shouldBe` 2
             -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
             -- show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 8" $ do
-            let qu = parseStandardInsert "DATA_NAME(x, \"bar\") insert DATA_NAME(x, \"foo\")"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "UPDATE r_data_main SET data_name = 'foo' WHERE data_name = 'bar'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar1\", \"bar\") insert cat.DATA_NAME(x, \"bar1\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (resc_name = 'bar1' AND data_name = 'bar')"
         it "test translate sql insert 9" $ do
-            let qu = parseStandardInsert "insert ~DATA_OBJ(1)"
-            let sql = translateInsert (sqlStandardTrans "") qu
-            show ((\(_,x,_) -> x)sql) `shouldBe` "DELETE FROM r_data_main WHERE data_id = 1"
+            testTranslateSQLInsert "cat" "insert ~cat.DATA_OBJ(1, \"foo\")" "DELETE FROM r_data_main WHERE (data_id = 1 AND resc_name = 'foo')"
         it "test tranlate sql insert 10" $ (
-                let qu = parseStandardInsert "insert ~DATA_OBJ(x)"
-                    sql = translateInsert (sqlStandardTrans "") qu in                    print (show ((\(_,x,_) -> x)sql))
+            let qu = qParseStandardQuery "cat" "insert ~cat.DATA_OBJ(x, \"foo\")"
+                sql = translateQuery2 (sqlStandardTrans "cat") Set.empty qu in
+                print (show ((\(_,x,_) -> x)sql))
             ) `shouldThrow` anyException
-        it "test translate cypher query 0" $ do
-            let qu = parseStandardQuery "DATA_NAME(x, y) return x y"
+        {- it "test translate cypher query 0" $ do
+            let qu = parseStandardQuery "DATA_NAME(x, y, z) return x y"
             let (_, sql) = translateQuery2 (cypherTrans "") qu
             print sql
             show sql `shouldBe` "MATCH (var:DataObject) RETURN var.object_id,var.data_name"
@@ -389,100 +455,100 @@ main = hspec $ do
 
 
         {- it "test eprover 0" $ do
-            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "DATA_OBJ(x) insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier2)  [rule] i
             r `shouldBe` Just True
 
         it "test eprover 1" $ do
-            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier2)  [rule] i
             r `shouldNotBe` Just True
 
         it "test eprover 2" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "DATA_SIZE(x, 1000) insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier2)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test eprover 3" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "DATA_NAME(x, \"baz\") insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier2)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test eprover 4" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "insert ~DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier2)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test eprover 5" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
-            let i = parseStandardInsert "insert ~DATA_NAME(x, y) ~DATA_SIZE(x, 1000) "
+            let i = parseStandardInsert "insert ~DATA_NAME(x, y, z) ~DATA_SIZE(x, 1000) "
             r <- validateInsert (verifier2)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test eprover 6" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
-            let i = parseStandardInsert "insert ~DATA_NAME(x, y) ~DATA_OBJ(x)"
+            let i = parseStandardInsert "insert ~DATA_NAME(x, y, z) ~DATA_OBJ(x)"
             r <- validateInsert (verifier2)  [rule1, rule2] i
             r `shouldNotBe` Just True
         it "test eprover 7" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
-            let i = parseStandardInsert "insert ~DATA_NAME(x, y) ~DATA_SIZE(x, 1000) ~DATA_OBJ(x)"
+            let i = parseStandardInsert "insert ~DATA_NAME(x, y, z) ~DATA_SIZE(x, 1000) ~DATA_OBJ(x)"
             r <- validateInsert (verifier2)  [rule1, rule2] i
             r `shouldNotBe` Just True
 
         it "test cvc4 0" $ do
-            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "DATA_OBJ(x) insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier)  [rule] i
             r `shouldBe` Just True
 
         it "test cvc4 1" $ do
-            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier)  [rule] i
             r `shouldNotBe` Just True
 
         it "test cvc4 2" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
             let i = parseStandardInsert "DATA_SIZE(x, 1000) insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test cvc4 3" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
             let i@(Query _ (FSequencing [cond ,FInsert lits])) = parseStandardInsert "DATA_NAME(x, \"baz\") insert DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test cvc4 4" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
             let i@(Query _ (FInsert lits)) = parseStandardInsert "insert ~DATA_NAME(x, \"foo\")"
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test cvc4 5" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
-            let i@(Query _ (FInsert lits)) = parseStandardInsert "insert ~DATA_NAME(x, y) ~DATA_SIZE(x, 1000) "
+            let i@(Query _ (FInsert lits)) = parseStandardInsert "insert ~DATA_NAME(x, y, z) ~DATA_SIZE(x, 1000) "
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldBe` Just True
         it "test cvc4 6" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
-            let i@(Query _ (FInsert lits)) = parseStandardInsert "insert ~DATA_NAME(x, y) ~DATA_OBJ(x)"
+            let i@(Query _ (FInsert lits)) = parseStandardInsert "insert ~DATA_NAME(x, y, z) ~DATA_OBJ(x)"
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldNotBe` Just True
         it "test cvc4 7" $ do
-            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+            let (Query _ rule1) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
             let (Query _ rule2) = parseStandardQuery "~DATA_SIZE(x, y) | DATA_OBJ(x) return x y"
-            let i@(Query _ (FInsert  lits)) = parseStandardInsert "insert ~DATA_NAME(x, y) ~DATA_SIZE(x, 1000) ~DATA_OBJ(x)"
+            let i@(Query _ (FInsert  lits)) = parseStandardInsert "insert ~DATA_NAME(x, y, z) ~DATA_SIZE(x, 1000) ~DATA_OBJ(x)"
             r <- validateInsert (verifier)  [rule1, rule2] i
             r `shouldNotBe` Just True -}
 
@@ -491,7 +557,7 @@ main = hspec $ do
             val <- validate verifier2 qu
             val `shouldNotBe` Nothing
         -- it "test validate insert 1" $ do
-        --    let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y) | DATA_OBJ(x) return x y"
+        --    let (Query _ rule) = parseStandardQuery "~DATA_NAME(x, y, z) | DATA_OBJ(x) return x y"
         --    let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert ~DATA_OBJ(x)"
         --    let val = validate rule qu
         --    val `shouldBe` Nothing

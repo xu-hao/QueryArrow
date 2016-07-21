@@ -70,7 +70,7 @@ atomp = do
     predname <- prednamep
     arglist <- arglistp
     (_, predmap, _) <- getState
-    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname {- ++ ", available " ++ intercalate "\n" (map show (keys predmap)) -})) (lookupObject predname predmap)
+    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show predmap)) (lookupObject predname predmap)
     return (Atom thepred arglist)
 
 negp :: FOParser ()
