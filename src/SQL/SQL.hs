@@ -28,7 +28,7 @@ import Algebra.SemiBoundedLattice
 
 type Col = String
 type TableName = String
-data Table = OneTable TableName SQLVar deriving (Eq, Ord)
+data Table = OneTable TableName SQLVar deriving (Eq, Ord, Show)
 
 type SQLTableList = [Table]
 
@@ -37,7 +37,7 @@ type SQLTableList = [Table]
 mergeTables :: SQLTableList -> SQLTableList -> SQLTableList
 mergeTables = union
 
-newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord)
+newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord, Show)
 
 type SQLQualifiedCol = (SQLVar, Col)
 
@@ -50,7 +50,7 @@ data SQLExpr = SQLColExpr SQLQualifiedCol
              | SQLNullExpr
              | SQLParamExpr String
              | SQLExprText String
-             | SQLFuncExpr String [SQLExpr] deriving (Eq, Ord)
+             | SQLFuncExpr String [SQLExpr] deriving (Eq, Ord, Show)
 
 isSQLConstExpr :: SQLExpr -> Bool
 isSQLConstExpr (SQLIntConstExpr _ ) = True
@@ -65,7 +65,7 @@ data SQLCond = SQLCompCond SQLOper SQLExpr SQLExpr
              | SQLNotCond SQLCond
              | SQLTrueCond
              | SQLFalseCond
-             deriving (Eq, Ord)
+             deriving (Eq, Ord, Show)
 
 getSQLConjuncts :: SQLCond -> [SQLCond]
 getSQLConjuncts (SQLAndCond conj1 conj2) = getSQLConjuncts conj1 ++ getSQLConjuncts conj2
@@ -88,25 +88,25 @@ a .=. b = SQLCompCond "=" a b
 (.<>.) :: SQLExpr -> SQLExpr -> SQLCond
 a .<>. b = SQLCompCond "<>" a b
 
-data SQLOrder = ASC | DESC deriving (Eq, Ord)
+data SQLOrder = ASC | DESC deriving (Eq, Ord, Show)
 
 type IntLattice = Dropped (Ordered Int)
 pattern IntLattice a = Drop (Ordered a)
 
-data SQL = SQLQuery {sqlSelect :: [ (Var, SQLExpr) ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond, sqlOrderBy :: [(SQLExpr, SQLOrder)], sqlLimit :: IntLattice } deriving (Eq, Ord)
+data SQL = SQLQuery {sqlSelect :: [ (Var, SQLExpr) ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond, sqlOrderBy :: [(SQLExpr, SQLOrder)], sqlLimit :: IntLattice } deriving (Eq, Ord, Show)
 
 data SQLStmt = SQLQueryStmt SQL
     | SQLInsertStmt TableName [(Col,SQLExpr)] [Table] SQLCond
     | SQLUpdateStmt (TableName, SQLVar) [(Col,SQLExpr)] SQLCond
-    | SQLDeleteStmt (TableName, SQLVar) SQLCond deriving (Eq, Ord)
+    | SQLDeleteStmt (TableName, SQLVar) SQLCond deriving (Eq, Ord, Show)
 
-instance Show Table where
-    show (OneTable tablename var) = tablename ++ " " ++ show var
+instance Serialize Table where
+    serialize (OneTable tablename var) = tablename ++ " " ++ serialize var
 
-instance Show SQLCond where
-    show a = show2 a []
-instance Show SQLExpr where
-    show a = show2 a []
+instance Serialize SQLCond where
+    serialize a = show2 a []
+instance Serialize SQLExpr where
+    serialize a = show2 a []
 
 class Show2 a where
     show2 :: a -> [SQLVar] -> String
@@ -122,7 +122,7 @@ instance Show2 SQLCond where
 instance Show2 SQLExpr where
     show2 (SQLColExpr (var, col)) sqlvar = if var `elem` sqlvar
         then col
-        else show var ++ "." ++ col
+        else serialize var ++ "." ++ col
     show2 (SQLIntConstExpr i) _ = show i
     show2 (SQLStringConstExpr s) _ = "'" ++ sqlStringEscape (T.unpack s) ++ "'"
     show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
@@ -131,8 +131,8 @@ instance Show2 SQLExpr where
     show2 (SQLExprText s) _ = s
     show2 SQLNullExpr _ = "NULL"
 
-instance Show SQLVar where
-    show (SQLVar var) = var
+instance Serialize SQLVar where
+    serialize (SQLVar var) = var
 
 showWhereCond2 :: SQLCond -> [SQLVar] -> String
 showWhereCond2 cond sqlvar = case cond of
@@ -143,11 +143,11 @@ instance Show2 SQL where
     show2 (SQLQuery cols tables conds orderby limit) sqlvar = "SELECT " ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ show var) cols)) ++
             (if null tables
                 then ""
-                else " FROM " ++ intercalate "," (map show tables)) ++
+                else " FROM " ++ intercalate "," (map serialize tables)) ++
             (showWhereCond2 conds sqlvar) ++
             (if null orderby
                 then ""
-                else " ORDER BY " ++ intercalate "," (map (\(expr, ord) -> show expr ++ " " ++ case ord of
+                else " ORDER BY " ++ intercalate "," (map (\(expr, ord) -> serialize expr ++ " " ++ case ord of
                                                                                                     ASC -> "ASC"
                                                                                                     DESC -> "DESC") orderby)) ++
             (case limit of
@@ -155,21 +155,21 @@ instance Show2 SQL where
                 IntLattice n -> " LIMIT " ++ show n)
 
 
-instance Show SQLStmt where
-    show (SQLQueryStmt sql) = show2 sql []
+instance Serialize SQLStmt where
+    serialize (SQLQueryStmt sql) = show2 sql []
 
-    show (SQLInsertStmt tname colsexprs tables cond) =
+    serialize (SQLInsertStmt tname colsexprs tables cond) =
         let (cols, exprs) = unzip colsexprs in
             "INSERT INTO " ++ tname ++ " (" ++ intercalate "," cols ++ ")" ++
                 if null tables && all isSQLConstExpr exprs
                     then " VALUES (" ++ intercalate "," (map (\a -> show2 a []) exprs)++ ")"
                     else " SELECT " ++ intercalate "," (map (\a -> show2 a []) exprs) ++ (if null tables
                         then ""
-                        else " FROM " ++ intercalate "," (map show tables)) ++ showWhereCond2 cond []
-    show (SQLDeleteStmt (tname, sqlvar) cond)  =
+                        else " FROM " ++ intercalate "," (map serialize tables)) ++ showWhereCond2 cond []
+    serialize (SQLDeleteStmt (tname, sqlvar) cond)  =
         "DELETE FROM " ++ tname ++ showWhereCond2  cond [sqlvar]
 
-    show (SQLUpdateStmt (tname, sqlvar) colsexprs cond)  =
+    serialize (SQLUpdateStmt (tname, sqlvar) colsexprs cond)  =
         "UPDATE " ++ tname ++ " SET " ++ intercalate "," (map (\(col, expr)-> col ++ " = " ++ show2  expr [sqlvar]) colsexprs) ++ showWhereCond2  cond [sqlvar]
 
 sqlStringEscape :: String -> String
@@ -353,9 +353,10 @@ translateQueryToSQL :: [Var] -> Query -> TransMonad SQLQuery
 translateQueryToSQL vars qu@(Query formula) = do
     (vars, sql, vars2) <- if pureF formula
         then do
-            (SQLQuery _ tablelist cond1 orderby limit) <-  translateFormulaToSQL formula
+            (SQLQuery sels tablelist cond1 orderby limit) <-  translateFormulaToSQL formula
             ts <- get
-            let extractCol var = case lookup var (repmap ts) of
+            let map2 = fromList sels <> repmap ts
+            let extractCol var = case lookup var map2 of
                                     Just col -> col
                                     _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
             let cols = map extractCol vars
@@ -467,7 +468,7 @@ translateFormulaToSQL (Aggregate (Summarize funcs) conj) = do
             Min v2 -> do
                 rep <- findRep v2
                 return (v, SQLFuncExpr "min" [rep])
-            Count -> return (v, SQLExprText "count(*)")) funcs
+            Count -> return (v, SQLFuncExpr "count" [SQLExprText "*"])) funcs
     return (sqlsummarize funcs' sql)
 
 translateFormulaToSQL (Aggregate (Limit n) form) =

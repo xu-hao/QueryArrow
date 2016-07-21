@@ -128,10 +128,10 @@ formula1p = try (parens formulap)
        <|> (FAtomic <$> try atomp)
        <|> transactionp *> pure FTransaction
        <|> (Aggregate Not <$> (negp >> formula1p))
-       <|> (Aggregate Exists <$> (existsp >> formulap))
-       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> many letp)) <*> formulap)
-       <|> (Aggregate <$> (reserved "limit" >> Limit . fromIntegral <$> integer) <*> formulap)
-       <|> (Aggregate <$> (reserved "order" >> reserved "by" >> (try (OrderByAsc <$> varp <* reserved "asc") <|> (OrderByDesc <$> varp <* reserved "desc"))) <*> formulap)
+       <|> (Aggregate Exists <$> (existsp >> formula1p))
+       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> sepBy letp comma)) <*> formula1p)
+       <|> (Aggregate <$> (reserved "limit" >> Limit . fromIntegral <$> integer) <*> formula1p)
+       <|> (Aggregate <$> (reserved "order" >> reserved "by" >> (try (OrderByAsc <$> varp <* reserved "asc") <|> (OrderByDesc <$> varp <* reserved "desc"))) <*> formula1p)
        <|> onep *> pure FOne
        <|> zerop *> pure FZero
        <|> (fsequencing . map FInsert) <$> (reserved "insert" >> litsp)

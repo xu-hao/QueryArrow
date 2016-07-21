@@ -15,7 +15,7 @@ import Control.Monad.IO.Class
 import Database.HDBC.PostgreSQL
 
 instance HDBCConnection Connection where
-        showSQLQuery _ (vars, query, params) = show query
+        showSQLQuery _ (vars, query, params) = serialize query
         hdbcCommit conn = do
             liftIO $ commit conn
             return True

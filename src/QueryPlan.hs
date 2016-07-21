@@ -28,6 +28,9 @@ import Data.Ord (comparing, Down(..))
 
 type MSet a = Complemented (Set a)
 
+class Serialize a where
+    serialize :: a -> String
+
 -- result value
 data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show)
 
