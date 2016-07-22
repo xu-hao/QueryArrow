@@ -7,7 +7,6 @@ import Data.String
 import System.IO
 import System.Exit
 import System.Environment
-import System.ZMQ4.Monadic
 import Data.Map.Strict hiding (map)
 import Data.List (intercalate, transpose)
 import Data.Aeson
