@@ -174,10 +174,8 @@ getDB ps = case lookup (catalog_database_type ps) dbMap of
 
 transDB :: String -> TranslationInfo -> IO (TransDB DBAdapterMonad MapResultRow)
 transDB name transinfo = do
-    dbs <- concat <$> mapM (\(DBTrans ps) -> do
-            db <- getDB ps
-            return db) (db_plugins transinfo)
-    let sumdb = SumDB (name ++ "db") dbs
+    dbs <- concat <$> mapM (\(DBTrans ps) -> getDB ps) (db_plugins transinfo)
+    let sumdb = SumDB "sum" dbs
     let predmap0 = constructDBPredMap (Database sumdb)
     -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
     (rewriting, predmap0', exports) <- getRewriting predmap0 transinfo
@@ -192,7 +190,15 @@ transDB name transinfo = do
                         (([InsertRewritingRule atom (FAtomic atom1)], [InsertRewritingRule atom (FInsert (Lit Pos atom1))], [InsertRewritingRule atom (FInsert (Lit Neg atom1))]) <> rules0', pred0 : exportedpreds')
                 else
                     (rules0', pred1 : exportedpreds')) (([], [], []), []) (allObjects exports)
-
     -- trace (intercalate "\n" (map show (exports))) $ return ()
     -- trace (intercalate "\n" (map show (predmap1))) $ return ()
-    return (TransDB name sumdb exportedpreds (rewriting <> rules0) )
+    let repeats = findRepeats exportedpreds
+    unless (null repeats) $ error ("more than one export for predicates " ++ show repeats)
+    let rules1@(qr, ir, dr) = rules0 <> rewriting
+    let checkPatterns rules = do
+            let repeats = findRepeats (map (\(InsertRewritingRule (Atom p _) _) -> p) rules)
+            unless (null repeats) $ error ("more than one definition for predicates " ++ show repeats)
+    checkPatterns qr
+    checkPatterns ir
+    checkPatterns dr
+    return (TransDB name sumdb exportedpreds rules1)

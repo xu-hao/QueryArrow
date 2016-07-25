@@ -35,3 +35,10 @@ unions = foldl union []
 intersects :: Eq a => [[a]] -> [a]
 intersects [] = error "can't intersect zero lists"
 intersects (hd : tl) = foldl (\ as bs -> [ x | x <- as, x `elem` bs ]) hd tl
+
+findRepeats :: Eq a => [a] -> [a]
+findRepeats [] = []
+findRepeats (a : l) =
+        if a `elem` l
+            then a : findRepeats (l \\ [a])
+            else findRepeats l
