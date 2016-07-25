@@ -302,13 +302,15 @@ exportp = do
             return (importAllFromNamespace ns predmap workspace)
             )
         ) <|> (do
-        prednames <- many1 identifier
-        (do
-            reserved "from"
-            ns <- namespacepathp
-            return (importFromNamespace ns prednames predmap workspace)
-            ) <|> (return (importFromNamespace mempty prednames predmap2 workspace))
-        )
+            prednames <- many1 identifier
+            (do
+                reserved "from"
+                ns <- namespacepathp
+                return (importFromNamespace ns prednames predmap workspace)
+                ) <|> (
+                return (importFromNamespace mempty prednames predmap2 workspace)
+                )
+            )
     setState (predmap, predmap2, fromMaybe (error "export") exports')
 
 

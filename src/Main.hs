@@ -177,7 +177,7 @@ run2 hdr query ps = do
 
 run3 :: [String] -> String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
 run3 hdr query tdb user zone = do
-    let predmap = constructDBPredMap [Database tdb]
+    let predmap = constructDBPredMap (Database tdb)
     let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
 
 
