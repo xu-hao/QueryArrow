@@ -48,8 +48,8 @@ instance DBStatementExec DBAdapterMonad MapResultRow (PreparedStatement, [Var]) 
         row <- stream
         bracketPStream (return stmt) closePreparedStatement (\stmt -> execWithParams stmt (M.map convert row))
 
-class DBConnection conn query  | conn -> query  where
-    prepareQueryStatement :: conn -> query -> DBAdapterMonad PreparedStatement
+class DBConnection conn  where
+    prepareQueryStatement :: conn -> (Bool, [Var], String, [Var]) -> DBAdapterMonad PreparedStatement
     connBegin :: conn -> DBAdapterMonad ()
     connPrepare :: conn -> DBAdapterMonad Bool
     connCommit :: conn -> DBAdapterMonad Bool
@@ -59,19 +59,16 @@ class DBConnection conn query  | conn -> query  where
 class ExtractDomainSize m conn trans | conn -> m  where
     extractDomainSize :: conn -> trans -> Set Var -> Atom -> m (Set Var)
 
-class (Show query) => Translate trans row query  | trans -> row query  where
-    translateQueryWithParams :: trans -> Set Var -> Query -> Set Var -> (query, [Var])
+class Translate trans row  | trans -> row  where
+    translateQueryWithParams :: trans -> Set Var -> Query -> Set Var -> (Bool, [Var], String, [Var])
     translateable :: trans -> Formula -> Set Var -> Bool
 
-class (Show query) => TranslateSequence trans query | trans -> query where
-    translateSequenceQuery :: trans -> (query, Var)
+class TranslateSequence trans where
+    translateSequenceQuery :: trans -> (String, Var)
 
 
 data GenericDB conn trans where
-    GenericDB :: (ExtractDomainSize DBAdapterMonad conn trans, DBConnection conn query , Translate trans MapResultRow query ) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
-
-data SequenceDB conn trans where
-    SequenceDB :: (DBConnection conn query , TranslateSequence trans query) => conn -> String -> String -> trans -> SequenceDB conn trans
+    GenericDB :: (ExtractDomainSize DBAdapterMonad conn trans, DBConnection conn , Translate trans MapResultRow ) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
 
 instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedStatement, [Var]) where
     dbOpen _ = return ()
@@ -88,21 +85,15 @@ instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedS
     getName (GenericDB _ name _ _)= name
     getPreds (GenericDB _ _ preds _)= preds
     determinateVars (GenericDB conn _  _ trans) = extractDomainSize conn trans
-    prepareQuery (GenericDB conn _ _ trans) vars2 query vars  = do
-        let (sqlquery, params) = translateQueryWithParams trans vars2 query vars
-        stmt <- prepareQueryStatement conn sqlquery
+    prepareQuery (GenericDB conn _ _ _) vars2 query vars = do
+        let (_, _, sqlquery, params) = query
+        stmt <- prepareQueryStatement conn query
         return (stmt, params)
 
-
     supported (GenericDB _ _ _ trans) formula vars = translateable trans formula vars
-    translateQuery (GenericDB _ _ _ trans) vars2 qu vars  = first show (translateQueryWithParams trans vars2 qu vars)
+    translateQuery (GenericDB _ _ _ trans) vars2 query vars = translateQueryWithParams trans vars2 query vars
 
-data PreparedSequenceStatement conn trans where
-    PreparedSequenceStatement :: (DBConnection conn query , TranslateSequence trans query) =>  conn -> trans -> Set Var -> Var -> PreparedSequenceStatement conn trans
-
-instance DBStatementClose DBAdapterMonad (PreparedSequenceStatement conn trans)  where
-    dbStmtClose _ = return ()
-instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where
+{- instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where
     dbStmtExec (PreparedSequenceStatement conn trans vars v) vars2 stream = do
         row <- stream
         nextid <- do
@@ -134,11 +125,12 @@ instance Database_ (SequenceDB conn trans) DBAdapterMonad MapResultRow (Prepared
         getName (SequenceDB _ name _ _)= name
         getPreds (SequenceDB _ name predname _)= [Pred (QPredName name [] predname) (PredType ObjectPred [Key "Any"])]
         determinateVars (SequenceDB _ _ _ _)= \ _ (Atom _ [VarExpr v]) -> return (Set.singleton v)
-        prepareQuery (SequenceDB conn _ _ trans) vars (Query  (FAtomic (Atom _ [VarExpr v]))) _ =
-            return (PreparedSequenceStatement conn trans vars v)
+        prepareQuery (SequenceDB conn _ _ trans) vars (v, _) _ =
+            return (PreparedSequenceStatement conn trans vars (Var v))
         prepareQuery _ _ _ _ = error "not supported"
 
         supported (SequenceDB _ name predname _) (FAtomic (Atom (Pred predname2 _) [VarExpr _])) _ =
             predNameMatches (QPredName name [] predname) predname2
         supported _ _ _ = False
-        translateQuery (SequenceDB _ _ _ trans) _ _ _ = ( show (fst (translateSequenceQuery trans )), [])
+        translateQuery (SequenceDB _ _ _ trans) _ (Query (FAtomic (Atom _ [VarExpr (Var v)]))) _ = ( v, [])
+-}

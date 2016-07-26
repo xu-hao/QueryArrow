@@ -35,7 +35,6 @@ class HDBCConnection conn where
         hdbcPrepare :: conn -> DBAdapterMonad Bool
         hdbcCommit :: conn -> DBAdapterMonad Bool
         hdbcRollback :: conn -> DBAdapterMonad ()
-        showSQLQuery :: conn -> SQLQuery -> String
 
 instance PreparedStatement_ HDBCQueryStatement where
         execWithParams (HDBCQueryStatement ret vars stmt params) args = resultStream2 (do
@@ -59,18 +58,17 @@ instance PreparedStatement_ HDBCQueryStatement where
         closePreparedStatement _ = return ()
 
 
-prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> SQLQuery -> IO HDBCQueryStatement
-prepareHDBCQueryStatement conn sqlquery@(vars, query, params) = HDBCQueryStatement (case query of
-                                                                                        SQLQueryStmt _ -> True
-                                                                                        _ -> False) vars <$> prepare conn (showSQLQuery conn sqlquery) <*> pure params
+prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> (Bool, [Var], String, [Var]) -> IO HDBCQueryStatement
+prepareHDBCQueryStatement conn (ret, vars, query, params) = HDBCQueryStatement ret vars <$> prepare conn query <*> pure params
 
+newtype HDBCConnectionDBConnection conn = HDBCConnectionDBConnection conn
 
-instance (HDBCConnection conn, IConnection conn) => DBConnection conn SQLQuery  where
-        prepareQueryStatement conn query = liftIO $ PreparedStatement <$> prepareHDBCQueryStatement conn query
+instance (HDBCConnection conn, IConnection conn) => DBConnection (HDBCConnectionDBConnection conn)  where
+        prepareQueryStatement (HDBCConnectionDBConnection conn) query = liftIO $ PreparedStatement <$> prepareHDBCQueryStatement conn query
         connBegin _ = return ()
-        connCommit = hdbcCommit
-        connPrepare = hdbcPrepare
-        connRollback = hdbcRollback
-        connClose conn = liftIO $ disconnect conn
+        connCommit (HDBCConnectionDBConnection conn) = hdbcCommit conn
+        connPrepare (HDBCConnectionDBConnection conn) = hdbcPrepare conn
+        connRollback (HDBCConnectionDBConnection conn) = hdbcRollback conn
+        connClose (HDBCConnectionDBConnection conn) = liftIO $ disconnect conn
 
 -- the QueryDB instance is provided for each DB type

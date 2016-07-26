@@ -14,8 +14,8 @@ import Data.Map.Strict (empty, fromList, insert, lookup)
 import qualified Data.Text as T
 
 
-makeICATSQLDBAdapter :: DBConnection conn  SQLQuery   => String -> conn -> GenericDB conn SQLTrans
-makeICATSQLDBAdapter ns conn = GenericDB conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns) (sqlStandardTrans ns)
+makeICATSQLDBAdapter :: DBConnection conn   => String -> Maybe String -> conn -> GenericDB conn SQLTrans
+makeICATSQLDBAdapter ns nextid conn = GenericDB conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns) (sqlStandardTrans ns nextid)
 
 
 
@@ -28,8 +28,8 @@ sqlMapping ns =
                 Just pred1 -> pred1 in
         fromList (map (\(n, m) -> (lookupPred n, m)) mappings)
 
-sqlStandardTrans :: String -> SQLTrans
-sqlStandardTrans ns =
+sqlStandardTrans :: String -> Maybe String -> SQLTrans
+sqlStandardTrans ns nextid =
     let sqlStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
         lookupPred n = case lookupObject (QPredName ns [] n) sqlStandardBuiltInPredsMap of
                 Nothing -> error ("sqlStandardTrans: cannot find predicate " ++ n)
@@ -58,4 +58,4 @@ sqlStandardTrans ns =
                         Pos -> "~"
                         Neg -> "!~") (head args) (args !! 1)))))
             ]))
-            (sqlMapping ns))
+            (sqlMapping ns) nextid)

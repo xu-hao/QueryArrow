@@ -273,7 +273,8 @@ data TransState = TransState {
     builtin :: BuiltIn,
     predtablemap :: PredTableMap,
     repmap :: RepMap,
-    tablemap :: TableMap -- this is a list of free vars that appear in atoms to be deleted they must be linear
+    tablemap :: TableMap, -- this is a list of free vars that appear in atoms to be deleted they must be linear
+    nextid :: String
 }
 type TransMonad a = StateT TransState NewEnv a
 
@@ -349,21 +350,32 @@ instance Params (Var, SQLExpr) where
 instance Params SQLQuery where
     params (_, _, params) = params
 
+instance Serialize SQLQuery where
+    serialize (_, stmt, _) = show stmt
+
 translateQueryToSQL :: [Var] -> Query -> TransMonad SQLQuery
 translateQueryToSQL vars qu@(Query formula) = do
-    (vars, sql, vars2) <- if pureF formula
-        then do
-            (SQLQuery sels tablelist cond1 orderby limit) <-  translateFormulaToSQL formula
-            ts <- get
-            let map2 = fromList sels <> repmap ts
-            let extractCol var = case lookup var map2 of
-                                    Just col -> col
-                                    _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
-            let cols = map extractCol vars
-                sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit)
-            return (vars, sql, (params sql))
-        else translateInsertToSQL formula
-    return (vars, simplifySQLCond sql, vars2)
+    ts <- get
+    let nextid1 = nextid ts
+    case formula of
+        FAtomic (Atom (Pred nextid2 _) [VarExpr v]) | UQPredName nextid1 == nextid2 ->
+            if v `elem` vars
+                then error (show "translateQueryToSQL: nextid " ++ show v ++ " is already bound")
+                else return ([v], SQLQueryStmt (SQLQuery {sqlSelect = [(v, SQLFuncExpr "nextval" [SQLStringConstExpr (T.pack "R_ObjectId")])], sqlFrom = [], sqlWhere = SQLTrueCond}), [])
+        _ -> do
+            (vars, sql, vars2) <- if pureF formula
+                then do
+                    (SQLQuery sels tablelist cond1 orderby limit) <-  translateFormulaToSQL formula
+                    ts <- get
+                    let map2 = fromList sels <> repmap ts
+                    let extractCol var = case lookup var map2 of
+                                            Just col -> col
+                                            _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
+                    let cols = map extractCol vars
+                        sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit)
+                    return (vars, sql, (params sql))
+                else translateInsertToSQL formula
+            return (vars, simplifySQLCond sql, vars2)
 
 simplifySQLCond :: SQLStmt -> SQLStmt
 simplifySQLCond (SQLQueryStmt (SQLQuery s f cond orderby limit)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond) orderby limit)
@@ -715,7 +727,7 @@ qcolArgToSetNull (qcol@(var, col), arg) = do
             return ((col, SQLNullExpr), SQLTrueCond)
 
 
-data SQLTrans = SQLTrans  BuiltIn PredTableMap
+data SQLTrans = SQLTrans  BuiltIn PredTableMap (Maybe String)
 
 data KeyState = KeyState {
     queryKeys:: [(String, [Expr])],
@@ -728,7 +740,7 @@ data KeyState = KeyState {
 }
 
 pureOrExecF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-pureOrExecF  (SQLTrans  builtin predtablemap) (FAtomic (Atom n args)) = do
+pureOrExecF  (SQLTrans  builtin predtablemap _) (FAtomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift Nothing
@@ -760,7 +772,7 @@ pureOrExecF  trans (FChoice form1 form2) = do
             put ks {ksQuery = True}
             pureOrExecF  trans form1
             pureOrExecF  trans form2
-pureOrExecF  (SQLTrans  builtin predtablemap) (FInsert (Lit sign0 (Atom pred0 args))) = do
+pureOrExecF  (SQLTrans  builtin predtablemap _) (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
             if ksQuery ks
                 then lift Nothing
@@ -821,6 +833,12 @@ pureOrExecF _ (Aggregate _ _) =
   lift Nothing
 pureOrExecF trans (FReturn _) = lift Nothing
 
+
+sequenceF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
+sequenceF (SQLTrans _ _ (Just nextid1)) (FAtomic (Atom (Pred nextid2 _) [_])) | UQPredName nextid1 == nextid2 =
+                        return ()
+sequenceF _ _ = lift Nothing
+
 limitF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
 limitF trans (Aggregate (Limit _) form) = do
   ks <- get
@@ -844,13 +862,19 @@ summarizeF trans form = pureOrExecF trans form
 
 
 
-instance Translate SQLTrans MapResultRow SQLQuery where
+instance Translate SQLTrans MapResultRow where
     translateQueryWithParams trans ret query env =
-        let (SQLTrans  builtin predtablemap) = trans
+        let (SQLTrans  builtin predtablemap _) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql, ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
-            (sql, params sql)
-    translateable trans form vars = layeredF form && isJust (evalStateT (limitF  trans form) (KeyState [] Nothing [] False [] False (not (null vars))) )
+            (sql@(vars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
+            (case sqlquery of
+                SQLQueryStmt _ -> True
+                _ -> False, vars, serialize sql, params sql)
+
+    translateable trans form vars =
+        let initstate = KeyState [] Nothing [] False [] False (not (null vars)) in
+            layeredF form && (isJust (evalStateT (limitF  trans form) initstate )
+                                                            || isJust (evalStateT (sequenceF trans form) initstate))
 
 instance ExtractDomainSize DBAdapterMonad conn SQLTrans where
     extractDomainSize _ trans varDomainSize (Atom name args) =
@@ -862,4 +886,4 @@ instance ExtractDomainSize DBAdapterMonad conn SQLTrans where
                             _ -> bottom) args)
                     else bottom) where
                 isBuiltIn = name `member` builtin
-                (SQLTrans (BuiltIn builtin) predtablemap) = trans
+                (SQLTrans (BuiltIn builtin) predtablemap _) = trans
