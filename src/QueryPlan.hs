@@ -98,6 +98,7 @@ class DBStatementClose m stmt where
 
 -- database
 class (Monad m, DBStatementClose m stmt, DBStatementExec m row stmt) => Database_ db m row stmt | db -> m row stmt where
+    type TranslatedQuery db
     dbOpen :: db -> IO ()
     dbClose :: db -> IO ()
     dbBegin :: db -> m ()
@@ -108,9 +109,9 @@ class (Monad m, DBStatementClose m stmt, DBStatementExec m row stmt) => Database
     getPreds :: db -> [Pred]
     -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
     determinateVars :: db -> Set Var -> Atom -> m (Set Var)
-    prepareQuery :: db -> Set Var -> Query -> Set Var -> m stmt
+    prepareQuery :: db -> Set Var -> TranslatedQuery db -> Set Var -> m stmt
     supported :: db -> Formula -> Set Var -> Bool
-    translateQuery :: db -> Set Var -> Query -> Set Var -> (String, [Var])
+    translateQuery :: db -> Set Var -> Query -> Set Var -> TranslatedQuery db
 
 doQuery :: Database_ db m row stmt => db -> Set Var -> Query -> [Var] -> ResultStream (m) (row) -> ResultStream (m) (row)
 doQuery db vars2 qu vars rs = do
@@ -133,6 +134,7 @@ data QueryPlan = Exec Formula [Int]
 
 
 data AbstractDBStatement m row = forall stmt. (DBStatementClose m stmt, DBStatementExec m row stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
+data AbstractTranslatedQuery = forall db. AbstractTranslatedQuery {unAbstractTranslatedQuery :: TranslatedQuery db}
 
 data QueryPlanData m row  = QueryPlanData {
     linscopevs :: MSet Var,
@@ -143,6 +145,7 @@ data QueryPlanData m row  = QueryPlanData {
     returnvs :: Set Var, -- return vars
     combinedvs :: Set Var, -- combined return and available vars that are still in scope
     availablevs :: Set Var,
+    query :: Maybe AbstractTranslatedQuery,
     stmts :: Maybe [(AbstractDBStatement m row, String)], -- stmt, show
     tdb :: Maybe [Database m row]
 }
@@ -601,6 +604,41 @@ prepareTransaction dbs rdbxs qp@(qpd, QPTransaction2) =
     return (rdbxs, (qpd{tdb = Just (map (0dbs !!) rdbxs) }, QPTransaction2))
 prepareTransaction dbs rdbxs qp@(_, QPReturn2 _) = return (rdbxs, qp)
 -}
+translateQueryPlan :: (Monad m, ResultRow row) => [Database m row] -> QueryPlan2 m row  -> m (QueryPlan2 m row )
+translateQueryPlan _ (_, (Exec2  form [])) = error ("prepareQueryPlan: Exec2: no database" ++ show form)
+translateQueryPlan dbs (qpd, e@(Exec2  form (x : _))) =
+    if x >= length dbs || x < 0 then
+        error "index out of range"
+    else case dbs !! x of
+        Database db -> do
+            let vars = paramvs qpd
+                vars2 = returnvs qpd
+                qu = Query form
+                (stmtshow0, paramvars) = translateQuery db vars2 qu vars
+                stmtshow = "at " ++ show x ++ " " ++ "paramvs " ++ show paramvars ++ " " ++ stmtshow0 ++ " returnvs " ++ show vars2
+            stmt <- prepareQuery db vars2 qu vars
+            return (qpd {stmts = Just [(AbstractDBStatement stmt, stmtshow)]}, e)
+translateQueryPlan dbs  (qpd, QPChoice2 qp1 qp2) = do
+    qp1' <- translateQueryPlan dbs  qp1
+    qp2' <- translateQueryPlan dbs  qp2
+    return (qpd, QPChoice2 qp1' qp2')
+translateQueryPlan dbs  (qpd, QPPar2 qp1 qp2) = do
+    qp1' <- translateQueryPlan dbs  qp1
+    qp2' <- translateQueryPlan dbs  qp2
+    return (qpd, QPPar2 qp1' qp2')
+translateQueryPlan dbs  (qpd, QPSequencing2 qp1 qp2) = do
+    qp1' <- translateQueryPlan dbs  qp1
+    qp2' <- translateQueryPlan dbs  qp2
+    return (qpd, QPSequencing2 qp1' qp2')
+translateQueryPlan _ qp@(_, QPOne2) = return qp
+translateQueryPlan _ qp@(_, QPZero2) = return qp
+translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) = do
+    qp1' <- translateQueryPlan dbs  qp1
+    return (qpd, QPAggregate2 agg qp1')
+translateQueryPlan _ qp@(_, QPReturn2 _) = return qp
+translateQueryPlan dbs qp@(_, QPTransaction2) =
+    return qp
+
 prepareQueryPlan :: (Monad m, ResultRow row) => [Database m row] -> QueryPlan2 m row  -> m (QueryPlan2 m row )
 prepareQueryPlan _ (_, (Exec2  form [])) = error ("prepareQueryPlan: Exec2: no database" ++ show form)
 prepareQueryPlan dbs (qpd, e@(Exec2  form (x : _))) =
