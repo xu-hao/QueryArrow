@@ -1,12 +1,12 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies #-}
 module SQL.SQL where
 
-import QueryPlan
 import FO.Data hiding (Subst, subst)
 import FO.Domain
 import DBQuery
 import ListUtils
 import Utils
+import DB
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\),union, nub)
@@ -862,25 +862,25 @@ summarizeF trans form = pureOrExecF trans form
 
 
 
-instance Translate SQLTrans MapResultRow where
+instance Translate SQLTrans where
+    type TranslateQueryType SQLTrans = (Bool, [Var], String, [Var])
     translateQueryWithParams trans ret query env =
         let (SQLTrans  builtin predtablemap _) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql@(vars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
+            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
             (case sqlquery of
                 SQLQueryStmt _ -> True
-                _ -> False, vars, serialize sql, params sql)
+                _ -> False, retvars, serialize sqlquery, params sql)
 
     translateable trans form vars =
         let initstate = KeyState [] Nothing [] False [] False (not (null vars)) in
             layeredF form && (isJust (evalStateT (limitF  trans form) initstate )
                                                             || isJust (evalStateT (sequenceF trans form) initstate))
 
-instance ExtractDomainSize DBAdapterMonad conn SQLTrans where
-    extractDomainSize _ trans varDomainSize (Atom name args) =
+    extractDomainSize trans varDomainSize (Atom name args) =
         if isBuiltIn
-            then return bottom -- assume that builtins don't restrict domain size
-            else return (if name `member` predtablemap
+            then bottom -- assume that builtins don't restrict domain size
+            else (if name `member` predtablemap
                     then Set.unions (map (\arg -> case arg of
                             (VarExpr v) -> Set.singleton v
                             _ -> bottom) args)

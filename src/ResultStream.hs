@@ -12,12 +12,18 @@ import FO.Data
 import Data.Conduit
 import Data.Conduit.Combinators
 import Control.Monad.Trans.Resource
+import Data.Set
 
 class (Monoid row, Show row) => ResultRow row where
     type ElemType row
-    transform :: [Var] -> [Var] -> row -> row
+    transform :: Set Var -> row -> row
     ret :: Var -> ElemType row -> row
     ext :: Var -> row -> ElemType row
+
+class (Monad m, ResultRow (RowType rs)) => IResultStream rs m where
+    type RowType rs
+    getVars :: rs -> m (Set Var)
+    getStream :: rs -> m (ResultStream m (RowType rs))
 
 newtype ResultStream m row = ResultStream (Producer m row)
 

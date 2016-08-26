@@ -1,10 +1,10 @@
-{-# LANGUAGE TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances, RankNTypes, GADTs, TypeFamilies #-}
 module SQL.HDBC where
 
 import Prelude hiding (lookup)
 import DBQuery
 import SQL.SQL
-import QueryPlan
+import DB
 import ResultStream
 import FO.Data
 
@@ -31,12 +31,8 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
-class HDBCConnection conn where
-        hdbcPrepare :: conn -> DBAdapterMonad Bool
-        hdbcCommit :: conn -> DBAdapterMonad Bool
-        hdbcRollback :: conn -> DBAdapterMonad ()
 
-instance PreparedStatement_ HDBCQueryStatement where
+instance PreparedStatement HDBCQueryStatement where
         execWithParams (HDBCQueryStatement ret vars stmt params) args = resultStream2 (do
                 infoM "SQL" ("execute stmt")
                 rcode <- execute stmt (map (\v -> convertExprToSQL (case lookup v args of
@@ -58,17 +54,25 @@ instance PreparedStatement_ HDBCQueryStatement where
         closePreparedStatement _ = return ()
 
 
-prepareHDBCQueryStatement :: (HDBCConnection conn, IConnection conn) => conn -> (Bool, [Var], String, [Var]) -> IO HDBCQueryStatement
-prepareHDBCQueryStatement conn (ret, vars, query, params) = HDBCQueryStatement ret vars <$> prepare conn query <*> pure params
+prepareHDBCQueryStatement :: (IConnection conn) => conn -> (Bool, [Var], String, [Var]) -> IO HDBCQueryStatement
+prepareHDBCQueryStatement conn (ret, retvars, query, params) = HDBCQueryStatement ret retvars <$> prepare conn query <*> pure params
 
-newtype HDBCConnectionDBConnection conn = HDBCConnectionDBConnection conn
+data HDBCConnectionDBConnection where
+    HDBCConnectionDBConnection :: forall conn. (IConnection conn) => conn -> HDBCConnectionDBConnection
 
-instance (HDBCConnection conn, IConnection conn) => DBConnection (HDBCConnectionDBConnection conn)  where
-        prepareQueryStatement (HDBCConnectionDBConnection conn) query = liftIO $ PreparedStatement <$> prepareHDBCQueryStatement conn query
-        connBegin _ = return ()
-        connCommit (HDBCConnectionDBConnection conn) = hdbcCommit conn
-        connPrepare (HDBCConnectionDBConnection conn) = hdbcPrepare conn
-        connRollback (HDBCConnectionDBConnection conn) = hdbcRollback conn
-        connClose (HDBCConnectionDBConnection conn) = liftIO $ disconnect conn
+instance DBConnection0 HDBCConnectionDBConnection  where
+        dbBegin _ = return ()
+        dbCommit (HDBCConnectionDBConnection conn) =  do
+            commit conn
+            return True
+        dbPrepare (HDBCConnectionDBConnection conn) =
+            return True
+        dbRollback (HDBCConnectionDBConnection conn) = rollback conn
+        dbClose (HDBCConnectionDBConnection conn) = disconnect conn
+
+instance DBConnection HDBCConnectionDBConnection where
+        type StatementType HDBCConnectionDBConnection = PreparedDBStatement HDBCQueryStatement
+        type QueryType HDBCConnectionDBConnection = (Bool, [Var], String, [Var])
+        prepareQuery (HDBCConnectionDBConnection conn) _ query _ = PreparedDBStatement <$> prepareHDBCQueryStatement conn query
 
 -- the QueryDB instance is provided for each DB type

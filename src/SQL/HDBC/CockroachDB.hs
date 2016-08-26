@@ -2,7 +2,7 @@
 module SQL.HDBC.CockroachDB where
 
 import DBQuery
-import QueryPlan
+import DB
 import FO.Data
 import SQL.HDBC
 import ICAT
@@ -14,5 +14,5 @@ import Control.Monad.IO.Class
 
 import SQL.HDBC.PostgreSQL as PostgreSQL
 
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+getDB :: ICATDBConnInfo -> [AbstractDatabase MapResultRow]
 getDB = PostgreSQL.getDB

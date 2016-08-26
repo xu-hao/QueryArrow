@@ -2,7 +2,7 @@
 module SQL.ICAT where
 
 import Prelude hiding (lookup)
-import QueryPlan
+import DB
 import FO.Data
 import SQL.SQL
 import DBQuery
@@ -14,7 +14,7 @@ import Data.Map.Strict (empty, fromList, insert, lookup)
 import qualified Data.Text as T
 
 
-makeICATSQLDBAdapter :: DBConnection conn   => String -> Maybe String -> conn -> GenericDB conn SQLTrans
+makeICATSQLDBAdapter :: String -> Maybe String -> db -> GenericDB db SQLTrans
 makeICATSQLDBAdapter ns nextid conn = GenericDB conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns) (sqlStandardTrans ns nextid)
 
 

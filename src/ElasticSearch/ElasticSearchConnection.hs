@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeFamilies #-}
 
 module ElasticSearch.ElasticSearchConnection where
 
@@ -22,7 +22,7 @@ import Algebra.SemiBoundedLattice
 import FO.Domain
 import FO.Data
 import DBQuery
-import QueryPlan
+import DB
 import ResultStream
 import Config
 
@@ -34,6 +34,11 @@ import ElasticSearch.ESQL
 
 type ElasticSearchConnection = ESQ.ElasticSearchConnInfo
 data ElasticSearchStatement = ElasticSearchStatement ElasticSearchConnection ElasticSearchQuery
+type ElasticSearchDB = ESQ.ElasticSearchConnInfo
+
+instance GenericDatabase ElasticSearchDB where
+    type GenericDatabaseConnectionType ElasticSearchDB = ElasticSearchConnection
+    gdbOpen db = return db
 
 convertExprToString :: Expr -> String
 convertExprToString (IntExpr i) = show i
@@ -123,7 +128,7 @@ esResultStream esci type0 rec args = do
                         listResultStream rows <|> getrs (off + lim) lim
         getrs 0 page
 
-instance PreparedStatement_ ElasticSearchStatement where
+instance PreparedStatement ElasticSearchStatement where
     execWithParams (ElasticSearchStatement esci qu@(ElasticSearchQuery type0 rec)) args = do
         hit <- esResultStream esci type0 rec args
         return (convertHitToMapResultRow type0 rec hit)
@@ -162,17 +167,14 @@ instance PreparedStatement_ ElasticSearchStatement where
 
     closePreparedStatement _ = return ()
 
-instance DBConnection ElasticSearchConnection ElasticSearchQuery where
-        prepareQueryStatement conn query = return (PreparedStatement (ElasticSearchStatement conn query))
-        connClose _ = return ()
-        connCommit _ = return True
-        connPrepare _ = return True
-        connRollback _ = return ()
-        connBegin _ = return ()
+instance DBConnection0 ElasticSearchConnection  where
+        dbClose _ = return ()
+        dbCommit _ = return True
+        dbPrepare _ = return True
+        dbRollback _ = return ()
+        dbBegin _ = return ()
 
-
-instance DBConnection conn ElasticSearchQuery  => ExtractDomainSize DBAdapterMonad conn ESTrans where
-    extractDomainSize _ _ _ (Atom _ args) =
-        return (unions (map (\arg -> case arg of
-                (VarExpr v) -> singleton v
-                _ -> bottom) args))
+instance DBConnection ElasticSearchConnection  where
+        type QueryType ElasticSearchConnection = ElasticSearchQuery
+        type StatementType ElasticSearchConnection = PreparedDBStatement ElasticSearchStatement
+        prepareQuery conn _ query _ = return (PreparedDBStatement (ElasticSearchStatement conn query))

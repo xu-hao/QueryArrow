@@ -1,22 +1,20 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FunctionalDependencies, GADTs #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, GADTs, TypeFamilies #-}
 module DBQuery where
 
-import QueryPlan
+import DB
 import ResultStream
 import FO.Data
 import FO.Domain
 
 import Prelude hiding (lookup, foldl)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.State.Strict (StateT)
 import Data.Map.Strict (Map, (!), singleton, lookup)
 import Data.Convertible
 import qualified Data.Map as M
-import Data.Bifunctor
 import Control.Monad.Trans.Resource
 import Data.Set (Set, toAscList)
 import qualified Data.Set as Set
+import Data.Typeable
 
 data DBConnInfo = DBConnInfo {
     dbHost :: String,
@@ -26,71 +24,44 @@ data DBConnInfo = DBConnInfo {
     dbDB :: String
     }
 
-data DBAdapterState = DBAdapterState {
-    uuid :: Maybe String
-    }
-
-type DBAdapterMonad = StateT DBAdapterState (ResourceT IO)
-
-class PreparedStatement_ stmt where
-    execWithParams :: stmt -> Map Var Expr -> ResultStream DBAdapterMonad MapResultRow
+class PreparedStatement stmt where
+    execWithParams :: stmt -> Map Var Expr -> ResultStream (ResourceT IO) MapResultRow
     closePreparedStatement :: stmt -> IO ()
 
-data PreparedStatement = forall stmt. PreparedStatement_ stmt => PreparedStatement {
-    unPreparedStatement :: stmt
-}
+newtype PreparedDBStatement stmt = PreparedDBStatement stmt
 
-instance DBStatementClose DBAdapterMonad (PreparedStatement, [Var])  where
-    dbStmtClose (stmt, _) = case stmt of PreparedStatement s -> liftIO $ closePreparedStatement s
-
-instance DBStatementExec DBAdapterMonad MapResultRow (PreparedStatement, [Var])  where
-    dbStmtExec (PreparedStatement stmt, params) vars stream = do
+instance PreparedStatement stmt => DBStatement (PreparedDBStatement stmt) where
+    type RowType (PreparedDBStatement stmt) = MapResultRow
+    dbStmtClose (PreparedDBStatement stmt) = closePreparedStatement stmt
+    dbStmtExec (PreparedDBStatement stmt) vars stream = do
         row <- stream
-        bracketPStream (return stmt) closePreparedStatement (\stmt -> execWithParams stmt (M.map convert row))
+        execWithParams stmt (M.map convert row)
 
-class DBConnection conn  where
-    prepareQueryStatement :: conn -> (Bool, [Var], String, [Var]) -> DBAdapterMonad PreparedStatement
-    connBegin :: conn -> DBAdapterMonad ()
-    connPrepare :: conn -> DBAdapterMonad Bool
-    connCommit :: conn -> DBAdapterMonad Bool
-    connRollback :: conn -> DBAdapterMonad ()
-    connClose :: conn -> IO ()
-
-class ExtractDomainSize m conn trans | conn -> m  where
-    extractDomainSize :: conn -> trans -> Set Var -> Atom -> m (Set Var)
-
-class Translate trans row  | trans -> row  where
-    translateQueryWithParams :: trans -> Set Var -> Query -> Set Var -> (Bool, [Var], String, [Var])
+class Translate trans where
+    type TranslateQueryType trans
+    extractDomainSize :: trans -> Set Var -> Atom -> Set Var
+    translateQueryWithParams :: trans -> Set Var -> Query -> Set Var -> TranslateQueryType trans
     translateable :: trans -> Formula -> Set Var -> Bool
 
-class TranslateSequence trans where
-    translateSequenceQuery :: trans -> (String, Var)
+class GenericDatabase db where
+    type GenericDatabaseConnectionType db
+    gdbOpen :: db -> IO (GenericDatabaseConnectionType db)
 
+data GenericDB db trans where
+    GenericDB :: db -> String -> [Pred] -> trans -> GenericDB db trans
 
-data GenericDB conn trans where
-    GenericDB :: (ExtractDomainSize DBAdapterMonad conn trans, DBConnection conn , Translate trans MapResultRow ) => conn -> String -> [Pred] -> trans -> GenericDB conn trans
-
-instance Database_ (GenericDB conn trans) DBAdapterMonad MapResultRow (PreparedStatement, [Var]) where
-    dbOpen _ = return ()
-    dbClose (GenericDB conn _ _ _) =
-        connClose conn
-    dbBegin (GenericDB conn _ _ _) = do
-        connBegin conn
-    dbPrepare (GenericDB conn _ _ _) = do
-        connPrepare conn
-    dbCommit (GenericDB conn _ _ _) = do
-        connCommit conn
-    dbRollback (GenericDB conn _ _ _) = do
-        connRollback conn
-    getName (GenericDB _ name _ _)= name
-    getPreds (GenericDB _ _ preds _)= preds
-    determinateVars (GenericDB conn _  _ trans) = extractDomainSize conn trans
-    prepareQuery (GenericDB conn _ _ _) vars2 query vars = do
-        let (_, _, sqlquery, params) = query
-        stmt <- prepareQueryStatement conn query
-        return (stmt, params)
-
+instance Translate trans => Database0 (GenericDB db trans) where
+    getName (GenericDB _ name _ _) = name
+    getPreds (GenericDB _ _ preds _) = preds
+    determinateVars (GenericDB conn _  _ trans) = extractDomainSize trans
     supported (GenericDB _ _ _ trans) formula vars = translateable trans formula vars
+
+instance (GenericDatabase db,
+          DBConnection (GenericDatabaseConnectionType db),
+          Translate trans,
+          QueryType (GenericDatabaseConnectionType db) ~ TranslateQueryType trans) => Database (GenericDB db trans) where
+    type ConnectionType (GenericDB db trans) = GenericDatabaseConnectionType db
+    dbOpen (GenericDB db _ _ _) = gdbOpen db
     translateQuery (GenericDB _ _ _ trans) vars2 query vars = translateQueryWithParams trans vars2 query vars
 
 {- instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where

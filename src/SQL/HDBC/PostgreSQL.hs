@@ -1,8 +1,8 @@
-{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings #-}
+{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings, TypeFamilies #-}
 module SQL.HDBC.PostgreSQL where
 
 import DBQuery
-import QueryPlan
+import DB
 import FO.Data
 import SQL.HDBC
 import ICAT
@@ -14,15 +14,15 @@ import Control.Monad.IO.Class
 
 import Database.HDBC.PostgreSQL
 
-instance HDBCConnection Connection where
-        hdbcCommit conn = do
-            liftIO $ commit conn
-            return True
-        hdbcPrepare conn = return True
-        hdbcRollback conn = liftIO $ rollback conn
+data PostgreSQLDB = PostgreSQLDB ICATDBConnInfo
 
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
-getDB ps = do
-    conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_path ps !! 0++" user="++db_username ps++" password="++db_password ps)
-    let db = makeICATSQLDBAdapter (db_name ps !! 0) (Just "nextid") (HDBCConnectionDBConnection conn)
-    return [Database db]
+instance GenericDatabase PostgreSQLDB where
+    type GenericDatabaseConnectionType PostgreSQLDB = HDBCConnectionDBConnection
+    gdbOpen (PostgreSQLDB ps) = do
+        conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_path ps !! 0++" user="++db_username ps++" password="++db_password ps)
+        return (HDBCConnectionDBConnection conn)
+
+getDB :: ICATDBConnInfo -> [AbstractDatabase MapResultRow]
+getDB ps =
+    let db = makeICATSQLDBAdapter (db_name ps !! 0) (Just "nextid") (PostgreSQLDB ps) in
+        [AbstractDatabase db]

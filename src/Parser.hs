@@ -2,7 +2,7 @@
 module Parser (progp, rulesp) where
 
 import FO.Data
-import QueryPlan
+import DB
 import Rewriting
 
 import Prelude hiding (lookup)

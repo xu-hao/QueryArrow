@@ -34,7 +34,7 @@ import Algebra.SemiBoundedLattice
 
 -- basic definitions
 
-newtype CypherVar = CypherVar {unCypherVar::String} deriving (Eq, Ord)
+newtype CypherVar = CypherVar {unCypherVar::String} deriving (Eq, Ord, Show, Read)
 
 data CypherExpr = CypherVarExpr CypherVar
                 | CypherIntConstExpr Int
@@ -42,7 +42,7 @@ data CypherExpr = CypherVarExpr CypherVar
                 | CypherParamExpr String
                 | CypherDotExpr CypherExpr PropertyKey
                 | CypherAppExpr String [CypherExpr]
-                | CypherNullExpr deriving (Eq, Ord)
+                | CypherNullExpr deriving (Eq, Ord, Show, Read)
 
 extractVarFromExpr :: CypherExpr -> CypherVar
 extractVarFromExpr (CypherVarExpr var) = var
@@ -55,7 +55,7 @@ type CypherOper = String
 
 data CypherValue = CypherIntValue Int
                  | CypherStringValue String
-                 | CypherNullValue
+                 | CypherNullValue deriving (Show, Read)
 
 data CypherCond = CypherCompCond CypherOper CypherExpr CypherExpr Sign
                 | CypherAndCond CypherCond CypherCond
@@ -65,7 +65,7 @@ data CypherCond = CypherCompCond CypherOper CypherExpr CypherExpr Sign
                 -- | CypherNotCond CypherCond
                 -- | CypherExistsCond CypherCond
                 -- | CypherNotExistsCond CypherCond
-                | CypherPatternCond GraphPattern deriving Eq
+                | CypherPatternCond GraphPattern deriving (Eq, Show, Read)
 
 getConjuncts :: CypherCond -> [CypherCond]
 getConjuncts (CypherAndCond c1 c2) = getConjuncts c1 ++ getConjuncts c2
@@ -103,16 +103,16 @@ a .<>. b = CypherCompCond "<>" a b Pos
 
 data Cypher = Cypher {cypherReturn :: [ (CypherExpr, CypherVar) ], cypherMatch :: GraphPattern,
                         cypherWhere :: CypherCond, cypherSet :: [(CypherExpr, CypherExpr)],
-                        cypherCreate :: GraphPattern, cypherDelete :: [CypherVar] } deriving Eq
+                        cypherCreate :: GraphPattern, cypherDelete :: [CypherVar] } deriving (Eq, Show, Read)
 -- graph patterns
 
 type Label = String
-newtype PropertyKey = PropertyKey String deriving (Eq, Ord, Show)
+newtype PropertyKey = PropertyKey String deriving (Eq, Ord, Show, Read)
 type Properties = [(PropertyKey, CypherExpr)]
-data NodePattern = NodePattern (Maybe CypherVar) (Maybe Label) Properties deriving Eq
-data GraphPattern = GraphPattern [OneGraphPattern] deriving (Show, Eq)
+data NodePattern = NodePattern (Maybe CypherVar) (Maybe Label) Properties deriving (Eq, Show, Read)
+data GraphPattern = GraphPattern [OneGraphPattern] deriving (Show, Read, Eq)
 data OneGraphPattern = GraphEdgePattern NodePattern NodePattern NodePattern
-                     | GraphNodePattern NodePattern deriving Eq
+                     | GraphNodePattern NodePattern deriving (Eq, Show, Read)
 
 instance Monoid GraphPattern where
     mempty = GraphPattern []
@@ -197,36 +197,36 @@ splitGraphPattern (GraphPattern ps) = map (\p -> GraphPattern [p]) ps
 
 
 -- show
-instance Show OneGraphPattern where
-    show (GraphNodePattern nodepattern) = show nodepattern
-    show (GraphEdgePattern nodepatternsrc label nodepatterntgt) =
-        show nodepatternsrc ++ "-[" ++ trimBrackest (show label) ++ "]->" ++ show nodepatterntgt
+instance Serialize OneGraphPattern where
+    serialize (GraphNodePattern nodepattern) = serialize nodepattern
+    serialize (GraphEdgePattern nodepatternsrc label nodepatterntgt) =
+        serialize nodepatternsrc ++ "-[" ++ trimBrackest (serialize label) ++ "]->" ++ serialize nodepatterntgt
         where
             trimBrackest ('(' : t) = take (length t - 1) t
             trimBrackest t = t
 
-instance Show NodePattern where
-    show (NodePattern var label props) =
+instance Serialize NodePattern where
+    serialize (NodePattern var label props) =
         "(" ++ (case var of
-            Just v -> show v
+            Just v -> serialize v
             Nothing -> "") ++ (case label of
             Just l -> ":" ++ l
             Nothing -> "") ++ (if not (null props)
             then "{" ++ intercalate "," (f props) ++ "}"
             else "") ++ ")" where
-        f = map (\(PropertyKey key, value) -> key ++ ":" ++ show value)
+        f = map (\(PropertyKey key, value) -> key ++ ":" ++ serialize value)
 
-instance Show CypherExpr where
-    show (CypherVarExpr var) = show var
-    show (CypherIntConstExpr i) = show i
-    show (CypherStringConstExpr s) = "'" ++ cypherStringEscape (T.unpack s) ++ "'"
-    show (CypherParamExpr m) = "{" ++ m ++ "}"
-    show (CypherDotExpr expr (PropertyKey prop)) = show expr ++ "." ++ prop
-    show (CypherAppExpr f args) = f ++ "(" ++ intercalate "," (map show args) ++ ")"
-    show (CypherNullExpr) = "NULL"
+instance Serialize CypherExpr where
+    serialize (CypherVarExpr var) = serialize var
+    serialize (CypherIntConstExpr i) = show i
+    serialize (CypherStringConstExpr s) = "'" ++ cypherStringEscape (T.unpack s) ++ "'"
+    serialize (CypherParamExpr m) = "{" ++ m ++ "}"
+    serialize (CypherDotExpr expr (PropertyKey prop)) = serialize expr ++ "." ++ prop
+    serialize (CypherAppExpr f args) = f ++ "(" ++ intercalate "," (map serialize args) ++ ")"
+    serialize (CypherNullExpr) = "NULL"
 
-instance Show CypherVar where
-    show (CypherVar var) = var
+instance Serialize CypherVar where
+    serialize (CypherVar var) = var
 
 cypherStringEscape :: String -> String
 cypherStringEscape = concatMap f where
@@ -240,58 +240,58 @@ cypherStringEscape = concatMap f where
     f '\\' = "\\\\"
     f a = [a]
 
-showN _ 0 = "..."
+{- showN _ 0 = "..."
 showN (CypherCompCond op lhs rhs s) n = case s of
     Pos -> show lhs ++ " " ++ op ++ " " ++ show rhs
     Neg -> "NOT (" ++ show lhs ++ " " ++ op ++ " " ++ show rhs ++ ")"
 showN (CypherTrueCond) _ = "@True"
 showN (CypherPatternCond (GraphPattern [])) _ = "@Graph"
 showN (CypherPatternCond (GraphPattern as)) n = "(" ++ intercalate " AND " (map show (as)) ++ ")"
-showN (CypherAndCond a b) n = "(" ++ showN a (n-1) ++ " AND " ++ showN b (n-1) ++ ")"
-instance Show CypherCond where
-    show (CypherCompCond op lhs rhs s) = case s of
-        Pos -> show lhs ++ " " ++ op ++ " " ++ show rhs
-        Neg -> "NOT (" ++ show lhs ++ " " ++ op ++ " " ++ show rhs ++ ")"
-    show (CypherTrueCond) = "@True"
-    show (CypherAndCond a b) = "(" ++ show a ++ " AND " ++ show b ++ ")"
-    show (CypherPatternCond (GraphPattern [])) = "@Graph"
-    show (CypherPatternCond (GraphPattern as)) = "(" ++ intercalate " AND " (map show (as)) ++ ")"
+showN (CypherAndCond a b) n = "(" ++ showN a (n-1) ++ " AND " ++ showN b (n-1) ++ ")" -}
+instance Serialize CypherCond where
+    serialize (CypherCompCond op lhs rhs s) = case s of
+        Pos -> serialize lhs ++ " " ++ op ++ " " ++ serialize rhs
+        Neg -> "NOT (" ++ serialize lhs ++ " " ++ op ++ " " ++ serialize rhs ++ ")"
+    serialize (CypherTrueCond) = "@True"
+    serialize (CypherAndCond a b) = "(" ++ serialize a ++ " AND " ++ serialize b ++ ")"
+    serialize (CypherPatternCond (GraphPattern [])) = "@Graph"
+    serialize (CypherPatternCond (GraphPattern as)) = "(" ++ intercalate " AND " (map serialize (as)) ++ ")"
 
-instance Show CypherValue where
-    show (CypherIntValue i) = show i
-    show (CypherStringValue s)=s
-    show (CypherNullValue) = "NULL"
+instance Serialize CypherValue where
+    serialize (CypherIntValue i) = show i
+    serialize (CypherStringValue s)=s
+    serialize (CypherNullValue) = "NULL"
 
-instance Show Cypher where
-    show (Cypher vars (GraphPattern patterns) conds sets (GraphPattern creates) deletes) =
+instance Serialize Cypher where
+    serialize (Cypher vars (GraphPattern patterns) conds sets (GraphPattern creates) deletes) =
             unwords (filter (not . null) [
                 case patterns of
                     []-> ""
-                    _ -> "MATCH " ++ intercalate "," (map show patterns),
+                    _ -> "MATCH " ++ intercalate "," (map serialize patterns),
                 case conds of
                     CypherTrueCond -> ""
-                    _ -> "WHERE " ++ show conds,
+                    _ -> "WHERE " ++ serialize conds,
                 case sets of
                     [] -> ""
-                    _ -> "SET " ++ intercalate "," (map (\(a, b)-> show a ++ " = " ++ show b) sets),
+                    _ -> "SET " ++ intercalate "," (map (\(a, b)-> serialize a ++ " = " ++ serialize b) sets),
                 case creates of
                     [] -> ""
-                    _ -> "CREATE " ++ intercalate "," (map show creates),
+                    _ -> "CREATE " ++ intercalate "," (map serialize creates),
                 case deletes of
                     [] -> ""
-                    _ -> "DELETE " ++ intercalate "," (map show deletes),
+                    _ -> "DELETE " ++ intercalate "," (map serialize deletes),
                 case vars of
                     [] -> ""
-                    _ -> "WITH " ++ intercalate "," (map (\(expr, var) -> show expr ++ " AS " ++ show var) vars)])
+                    _ -> "WITH " ++ intercalate "," (map (\(expr, var) -> serialize expr ++ " AS " ++ serialize var) vars)])
 
-instance Show CypherQuery where
-    show (CypherQuery rvars cyphers params) =
+instance Serialize CypherQuery where
+    serialize (CypherQuery rvars cyphers params) =
         (case params of
             [] -> ""
-            _ -> "WITH " ++ intercalate "," (map (\x -> "{"++show x++"} AS " ++ show x) params) ++ " "
-        ) ++ unwords (map show cyphers) ++ " " ++ case rvars of
+            _ -> "WITH " ++ intercalate "," (map (\x -> "{"++serialize x++"} AS " ++ serialize x) params) ++ " "
+        ) ++ unwords (map serialize cyphers) ++ " " ++ case rvars of
             [] -> "RETURN 1"
-            _ -> "RETURN " ++ intercalate "," (map show rvars)
+            _ -> "RETURN " ++ intercalate "," (map serialize rvars)
 
 
 -- auxiliary functions
@@ -446,7 +446,7 @@ instance Subst Char where
 
 -- translation
 
-data CypherQuery = CypherQuery [Var] [Cypher] [Var]
+data CypherQuery = CypherQuery [Var] [Cypher] [Var] deriving (Show, Read)
 
 -- mapping from predicate to a cypher query
 type CypherMapping = ([CypherVar], GraphPattern, GraphPattern, Dependencies)
@@ -492,7 +492,7 @@ extractPropertyVarInMatch2 env as vmap =
 extractPropertyVarInNodePattern :: [CypherVar] -> NodePattern -> CypherVarExprMap -> (CypherCond, NodePattern, CypherVarExprMap)
 extractPropertyVarInNodePattern env n@(NodePattern v l p) (CypherVarExprMap vmap) =
     case v of
-        Nothing -> error ("extractPropertyVarInNodePattern: node with no variable " ++ show n)
+        Nothing -> error ("extractPropertyVarInNodePattern: node with no variable " ++ serialize n)
         Just var ->
             let (cond', props', vmap') = foldl (\(cond', props, vmap') (prop, expr) ->
                     case expr of
@@ -694,9 +694,9 @@ translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
 translateableCypher trans (Aggregate _ _)  = lift $ Nothing
 
-instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn CypherTrans where
-    extractDomainSize conn trans varDomainSize (Atom name args) =
-        return (if isBuiltIn
+instance ExtractDomainSize CypherTrans where
+    extractDomainSize trans varDomainSize (Atom name args) =
+        (if isBuiltIn
             then bottom
             else if name `member` predtablemap
                 then Set.unions (map (\arg -> case arg of
@@ -706,11 +706,11 @@ instance DBConnection conn CypherQuery  => ExtractDomainSize DBAdapterMonad conn
                     isBuiltIn = name `member` builtin
                     (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
-instance Translate CypherTrans MapResultRow CypherQuery where
+instance Translate CypherTrans MapResultRow where
     translateQueryWithParams trans vars query env =
         let (CypherTrans builtin _ predtablemap) = trans
             sql = runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap)) in
-            (sql,  toAscList env)
+            (True, toAscList vars, show sql,  toAscList env)
     translateable trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
 
 instance New CypherVar CypherExpr where
@@ -760,7 +760,7 @@ doMergeCreateAndSet2 = foldM doMergeCreateAndOneSet [] where
                                             let n' = addPropToPattern3 n p r
                                             put (insert v n' map1, map2, map3)
                                             return sets
-                                        Nothing -> error ("mergeCreateAndSet: node to edge map is incorrectly constructed: " ++ show v ++ " maps to " ++ show v1 ++ " but edge is not in map")
+                                        Nothing -> error ("mergeCreateAndSet: node to edge map is incorrectly constructed: " ++ serialize v ++ " maps to " ++ serialize v1 ++ " but edge is not in map")
                     Nothing -> return (sets ++ [set])
             Just n -> do
                 let n' = addPropToPattern n p r

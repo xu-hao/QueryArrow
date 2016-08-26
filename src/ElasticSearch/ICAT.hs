@@ -16,7 +16,7 @@ import Data.Aeson (Value (String, Number))
 import FO.Domain
 import FO.Data
 import DBQuery
-import QueryPlan
+import DB
 import ResultStream
 import Config
 
@@ -33,8 +33,8 @@ esMetaPred ns = Pred (QPredName ns [] "ES_META") (PredType ObjectPred [Key "Int"
 makeElasticSearchDBAdapter :: String -> ESQ.ElasticSearchConnInfo -> GenericDB   ElasticSearchConnection ESTrans
 makeElasticSearchDBAdapter ns conn = GenericDB conn ns [esMetaPred ns] (ESTrans  (fromList [(esMetaPred ns, (pack "ES_META", [pack "obj_id", pack "meta_id", pack "attribute", pack "value", pack "unit"]))]))
 
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+getDB :: ICATDBConnInfo -> IO [AbstractDatabase MapResultRow]
 getDB ps = do
     let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_path ps !! 0))
     let db = makeElasticSearchDBAdapter (db_name ps !! 0) conn
-    return [Database db]
+    return [AbstractDatabase db]

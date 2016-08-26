@@ -54,34 +54,34 @@ mmin = unionWith min
 mmaxs :: [DomainSizeMap] -> DomainSizeMap
 mmaxs = foldl1 (intersectionWith max) -- must have at least one
 
-type DomainSizeFunction m a = Set Var -> a -> m (Set Var)
+type DomainSizeFunction a = Set Var -> a -> Set Var
 
 class DeterminedVars a where
-    determinedVars :: Monad m => DomainSizeFunction m Atom -> DomainSizeFunction m a
+    determinedVars :: DomainSizeFunction Atom -> DomainSizeFunction a
 
 instance DeterminedVars Atom where
     determinedVars dsp = dsp
 
 instance DeterminedVars Formula where
     determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
-    determinedVars _  _ (FInsert _) = return bottom
-    determinedVars dsp _ (FTransaction ) = return bottom
-    determinedVars dsp vars (FSequencing form1 form2) = do
-        map1 <- determinedVars dsp vars form1
-        map2 <- determinedVars dsp (vars \/ map1) form2
-        return (vars \/ map1 \/ map2)
-    determinedVars dsp vars (FChoice form1 form2) = do
-        map1 <- determinedVars dsp vars form1
-        map2 <- determinedVars dsp vars form2
-        return (map1 /\ map2)
-    determinedVars dsp vars (FPar form1 form2) = do
-        map1 <- determinedVars dsp vars form1
-        map2 <- determinedVars dsp vars form2
-        return (map1 /\ map2)
-    determinedVars _ _ (Aggregate Not _) = return bottom
-    determinedVars _ _ (Aggregate Exists _) = return bottom
-    determinedVars _ _ (Aggregate (Summarize funcs) _) = return (fromList (fst (unzip funcs)))
+    determinedVars _  _ (FInsert _) = bottom
+    determinedVars dsp _ (FTransaction ) = bottom
+    determinedVars dsp vars (FSequencing form1 form2) =
+        let map1 = determinedVars dsp vars form1
+            map2 = determinedVars dsp (vars \/ map1) form2 in
+            (vars \/ map1 \/ map2)
+    determinedVars dsp vars (FChoice form1 form2) =
+        let map1 = determinedVars dsp vars form1
+            map2 = determinedVars dsp vars form2 in
+            (map1 /\ map2)
+    determinedVars dsp vars (FPar form1 form2) =
+        let map1 = determinedVars dsp vars form1
+            map2 = determinedVars dsp vars form2 in
+            (map1 /\ map2)
+    determinedVars _ _ (Aggregate Not _) = bottom
+    determinedVars _ _ (Aggregate Exists _) = bottom
+    determinedVars _ _ (Aggregate (Summarize funcs) _) = (fromList (fst (unzip funcs)))
     determinedVars dsp vars (Aggregate (Limit _) form) = determinedVars dsp vars form
     determinedVars dsp vars (Aggregate (OrderByAsc _) form) = determinedVars dsp vars form
     determinedVars dsp vars (Aggregate (OrderByDesc _) form) = determinedVars dsp vars form
-    determinedVars _ _ _ = return bottom
+    determinedVars _ _ _ = bottom

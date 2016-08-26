@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances,
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, StandaloneDeriving,
    RankNTypes, FlexibleContexts, GADTs, PatternSynonyms #-}
 
 module FO.Data where
@@ -22,36 +22,40 @@ import Algebra.SemiBoundedLattice
 -- variable types
 type Type = String
 
-data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show)
+data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
 
 -- predicate types
-data PredType = PredType PredKind [ParamType] deriving (Eq, Ord, Show)
+data PredType = PredType PredKind [ParamType] deriving (Eq, Ord, Show, Read)
 
 data ParamType = Key Type
-               | Property Type deriving (Eq, Ord, Show)
+               | Property Type deriving (Eq, Ord, Show, Read)
 
 -- predicate
 type PredName = ObjectPath String
 
-data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Ord, Show)
+deriving instance (Key a, Read a) => Read (ObjectPath a)
+deriving instance (Key a, Read a) => Read (NamespacePath a)
+
+
+data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Ord, Show, Read)
 
 -- variables
-newtype Var = Var {unVar :: String} deriving (Eq, Ord)
+newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
 -- expression
-data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text deriving (Eq, Ord)
+data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text deriving (Eq, Ord, Show, Read)
 
 -- atoms
-data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } deriving (Eq, Ord)
+data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } deriving (Eq, Ord, Show, Read)
 
 -- sign of literal
-data Sign = Pos | Neg deriving (Eq, Ord)
+data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
 
 -- literals
-data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord)
+data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord, Show, Read)
 
-data Summary = Max Var | Min Var | Count deriving (Eq, Ord)
-data Aggregator = Summarize [(Var, Summary)] | Limit Int | OrderByAsc Var | OrderByDesc Var | Not | Exists deriving (Eq, Ord, Show)
+data Summary = Max Var | Min Var | Count deriving (Eq, Ord, Show, Read)
+data Aggregator = Summarize [(Var, Summary)] | Limit Int | OrderByAsc Var | OrderByDesc Var | Not | Exists deriving (Eq, Ord, Show, Read)
 
 data Formula = FTransaction
              | FReturn [Var]
@@ -62,7 +66,7 @@ data Formula = FTransaction
              | FPar Formula Formula
              | FOne
              | FZero
-             | Aggregate Aggregator Formula deriving (Eq, Ord)
+             | Aggregate Aggregator Formula deriving (Eq, Ord, Show, Read)
 
 unique :: [a] -> a
 unique as = if length as /= 1
@@ -284,44 +288,47 @@ setPureFormulaNamespace ns CFalse = CFalse -}
 --     show (Key type1) = "KEY " ++ type1
 --     show (Property type1) = "PROP " ++ type1
 
-instance Show Atom where
-    show (Atom (Pred name _) args) = (predNameToString name) ++ "(" ++ intercalate "," (map show args) ++ ")"
+class Serialize a where
+    serialize :: a -> String
 
-instance Show Expr where
-    show (VarExpr var) = show var
-    show (IntExpr i) = show i
-    show (StringExpr s) = show s
-    show (PatternExpr p) = show p
+instance Serialize Atom where
+    serialize (Atom (Pred name _) args) = (predNameToString name) ++ "(" ++ intercalate "," (map serialize args) ++ ")"
 
-instance Show Var where
-    show (Var s) = s
+instance Serialize Expr where
+    serialize (VarExpr var) = serialize var
+    serialize (IntExpr i) = show i
+    serialize (StringExpr s) = show s
+    serialize (PatternExpr p) = show p
 
-instance Show Lit where
-    show (Lit thesign theatom) = case thesign of
-        Pos -> show theatom
-        Neg -> "¬" ++ show theatom
+instance Serialize Var where
+    serialize (Var s) = s
 
-instance Show Summary where
-    show (Max v) = "max " ++ show v
-    show (Min v) = "min " ++ show v
-    show (Count) = "count"
+instance Serialize Lit where
+    serialize (Lit thesign theatom) = case thesign of
+        Pos -> serialize theatom
+        Neg -> "¬" ++ serialize theatom
 
-instance Show Formula where
-    show (FReturn vars) = "(return " ++ unwords (map show vars) ++ ")"
-    show (FAtomic a) = show a
-    show (FInsert lits) = "(insert " ++ show lits ++ ")"
-    show (FTransaction ) = "transactional"
-    show form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map show (getFsequencings' form)) ++ ")"
-    show form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map show (getFchoices' form)) ++ ")"
-    show form@(FPar _ _) = "(" ++ intercalate " ‖ " (map show (getFpars' form)) ++ ")"
-    show (FOne) = "𝟏"
-    show (FZero) = "𝟎"
-    show (Aggregate Exists form) = "∃" ++ show form
-    show (Aggregate Not form) = "¬" ++ show form
-    show (Aggregate (Summarize funcs) form) = "(let " ++ unwords (map (\(var1, func1) -> show var1 ++ " = " ++ show func1) funcs) ++ " " ++ show form ++ ")"
-    show (Aggregate (Limit n) form) = "(limit " ++ show n ++ " " ++ show form ++ ")"
-    show (Aggregate (OrderByAsc var1) form) = "(order by " ++ show var1 ++ " asc " ++ show form ++ ")"
-    show (Aggregate (OrderByDesc var1) form) = "(order by " ++ show var1 ++ " desc " ++ show form ++ ")"
+instance Serialize Summary where
+    serialize (Max v) = "max " ++ serialize v
+    serialize (Min v) = "min " ++ serialize v
+    serialize (Count) = "count"
+
+instance Serialize Formula where
+    serialize (FReturn vars) = "(return " ++ unwords (map serialize vars) ++ ")"
+    serialize (FAtomic a) = serialize a
+    serialize (FInsert lits) = "(insert " ++ serialize lits ++ ")"
+    serialize (FTransaction ) = "transactional"
+    serialize form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map serialize (getFsequencings' form)) ++ ")"
+    serialize form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map serialize (getFchoices' form)) ++ ")"
+    serialize form@(FPar _ _) = "(" ++ intercalate " ‖ " (map serialize (getFpars' form)) ++ ")"
+    serialize (FOne) = "𝟏"
+    serialize (FZero) = "𝟎"
+    serialize (Aggregate Exists form) = "∃" ++ serialize form
+    serialize (Aggregate Not form) = "¬" ++ serialize form
+    serialize (Aggregate (Summarize funcs) form) = "(let " ++ unwords (map (\(var1, func1) -> serialize var1 ++ " = " ++ serialize func1) funcs) ++ " " ++ serialize form ++ ")"
+    serialize (Aggregate (Limit n) form) = "(limit " ++ show n ++ " " ++ serialize form ++ ")"
+    serialize (Aggregate (OrderByAsc var1) form) = "(order by " ++ serialize var1 ++ " asc " ++ serialize form ++ ")"
+    serialize (Aggregate (OrderByDesc var1) form) = "(order by " ++ serialize var1 ++ " desc " ++ serialize form ++ ")"
 
 -- rule
 

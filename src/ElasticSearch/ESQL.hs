@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeFamilies #-}
 
 module ElasticSearch.ESQL where
 
@@ -12,12 +12,13 @@ import Data.Char (toLower)
 import Data.Convertible
 import Data.Scientific (toBoundedInteger)
 import Data.Aeson (Value (String, Number))
-import Data.Set (toAscList)
+import Data.Set (toAscList, unions, singleton)
+import Algebra.Lattice
 
 import FO.Domain
 import FO.Data
 import DBQuery
-import QueryPlan
+import DB
 import ResultStream
 import Config
 
@@ -32,13 +33,13 @@ data ElasticSearchQueryExpr =
     ElasticSearchQueryParam Var
     | ElasticSearchQueryVar Var
     | ElasticSearchQueryIntVal Int
-    | ElasticSearchQueryStrVal Text deriving Show
+    | ElasticSearchQueryStrVal Text deriving (Show, Read)
 
 data ElasticSearchQuery = ElasticSearchQuery Text (Map Text ElasticSearchQueryExpr)
                         | ElasticSearchInsert Text (Map Text ElasticSearchQueryExpr)
                         | ElasticSearchUpdateProperty Text (Map Text ElasticSearchQueryExpr) (Map Text ElasticSearchQueryExpr)
                         | ElasticSearchDelete Text (Map Text ElasticSearchQueryExpr)
-                        | ElasticSearchDeleteProperty Text (Map Text ElasticSearchQueryExpr) [Text] deriving Show
+                        | ElasticSearchDeleteProperty Text (Map Text ElasticSearchQueryExpr) [Text] deriving (Show, Read)
 
 data ESTrans = ESTrans (Map Pred (Text, [Text]))
 
@@ -100,7 +101,8 @@ translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPr
         propprops = propComponents pred0 props in
         (ElasticSearchDeleteProperty type0 (fromList (zip keyprops keyargs)) propprops, params)
 
-instance Translate ESTrans MapResultRow ElasticSearchQuery where
+instance Translate ESTrans where
+    type TranslateQueryType ESTrans = (ElasticSearchQuery, [Var])
     translateQueryWithParams trans vars (Query  (FAtomic (Atom pred1 args))) env =
         translateQueryToElasticSearch trans (toAscList vars) pred1 args (toAscList env)
     translateQueryWithParams trans vars (Query  (FInsert (Lit Pos (Atom pred1 args)))) env =
@@ -113,3 +115,7 @@ instance Translate ESTrans MapResultRow ElasticSearchQuery where
     translateable _ (FAtomic _) _ = True
     translateable _ (FInsert _) _ = True
     translateable _ _ _ = False
+    extractDomainSize _ _ (Atom _ args) =
+        (unions (map (\arg -> case arg of
+                (VarExpr v) -> singleton v
+                _ -> bottom) args))

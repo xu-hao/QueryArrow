@@ -5,7 +5,7 @@ module Utils where
 import ResultStream
 import FO.Data
 import ListUtils
-import QueryPlan
+import DB
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, alter, lookup)
@@ -21,21 +21,22 @@ intResultStream i = return (insert (Var "i") (IntValue i) empty)
 -- map from predicate name to database names
 type PredDBMap = Map Pred [String]
 
-constructDBPredMap :: Database m row -> PredMap
-constructDBPredMap (Database db) = foldr addPredToMap mempty preds where
+constructDBPredMap :: AbstractDatabase row -> PredMap
+constructDBPredMap (AbstractDatabase db) = foldr addPredToMap mempty preds where
         addPredToMap thepred map1 =
             insertObject (predName thepred) thepred map1
         preds = getPreds db
 
 -- construct map from predicates to db names
-constructPredDBMap :: [Database m row ] -> PredDBMap
+constructPredDBMap :: [AbstractDatabase row ] -> PredDBMap
 constructPredDBMap = foldr addPredFromDBToMap empty where
-    addPredFromDBToMap (Database db) predmap = foldr addPredToMap predmap preds where
-        dbname = getName db
-        addPredToMap thepred = alter alterValue  thepred where
+        addPredFromDBToMap :: AbstractDatabase row -> PredDBMap -> PredDBMap
+        addPredFromDBToMap (AbstractDatabase db) predmap = foldr addPredToMap predmap preds where
+            dbname = getName db
+            addPredToMap thepred = alter alterValue  thepred
             alterValue Nothing = Just [dbname]
             alterValue (Just dbnames) = Just (dbname : dbnames)
-        preds = getPreds db
+            preds = getPreds db
 
 
 combineLits :: [Lit] -> ([Atom] -> [Atom] -> a) -> ([Atom] -> a) -> (Atom -> a) -> a

@@ -63,8 +63,8 @@ instance PreparedStatement_ Neo4jQueryStatement where
                 ) (return ())
         closePreparedStatement _ = return ()
 
-instance DBConnection Neo4jConnection CypherQuery where
-        prepareQueryStatement conn query = return (PreparedStatement (Neo4jQueryStatement conn query))
+instance DBConnection Neo4jConnection where
+        prepareQueryStatement conn (_, _, query, _) = return (PreparedStatement (Neo4jQueryStatement conn (read query)))
         connClose _ = return ()
         connCommit _ = return True
         connPrepare _ = return True
