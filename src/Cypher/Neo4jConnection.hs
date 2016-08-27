@@ -2,8 +2,8 @@
 module Cypher.Neo4jConnection where
 
 import FO.Data
-import DBQuery
-import ResultStream
+import DB.GenericDatabase
+import DB.ResultStream
 import Cypher.Cypher
 import QueryPlan
 

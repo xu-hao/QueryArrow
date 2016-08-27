@@ -1,8 +1,8 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, GADTs, TypeFamilies #-}
-module DBQuery where
+module DB.ParametrizedStatement where
 
-import DB
-import ResultStream
+import DB.DB
+import DB.ResultStream
 import FO.Data
 import FO.Domain
 
@@ -16,53 +16,24 @@ import Data.Set (Set, toAscList)
 import qualified Data.Set as Set
 import Data.Typeable
 
-data DBConnInfo = DBConnInfo {
-    dbHost :: String,
-    dbPort :: Int,
-    dbUser :: String,
-    dbPassword :: String,
-    dbDB :: String
-    }
+-- interface
+class (Convertible (PSRowType stmt) (ParameterType stmt)) => IPSDBStatement stmt where
+    type PSRowType stmt
+    type ParameterType stmt   -- Map Var Expr
+    execWithParams :: stmt -> ParameterType stmt -> DBResultStream (PSRowType stmt)
+    psdbStmtClose :: stmt -> IO ()
 
-class PreparedStatement stmt where
-    execWithParams :: stmt -> Map Var Expr -> ResultStream (ResourceT IO) MapResultRow
-    closePreparedStatement :: stmt -> IO ()
+-- statement
 
-newtype PreparedDBStatement stmt = PreparedDBStatement stmt
+newtype PSDBStatement stmt = PSDBStatement stmt
 
-instance PreparedStatement stmt => DBStatement (PreparedDBStatement stmt) where
-    type RowType (PreparedDBStatement stmt) = MapResultRow
-    dbStmtClose (PreparedDBStatement stmt) = closePreparedStatement stmt
-    dbStmtExec (PreparedDBStatement stmt) vars stream = do
+instance IPSDBStatement stmt => IDBStatement (PSDBStatement stmt) where
+    type RowType (PSDBStatement stmt) = PSRowType stmt
+    dbStmtClose (PSDBStatement stmt) = psdbStmtClose stmt
+    dbStmtExec (PSDBStatement stmt) stream = do
         row <- stream
-        execWithParams stmt (M.map convert row)
+        execWithParams stmt (convert row)
 
-class Translate trans where
-    type TranslateQueryType trans
-    extractDomainSize :: trans -> Set Var -> Atom -> Set Var
-    translateQueryWithParams :: trans -> Set Var -> Query -> Set Var -> TranslateQueryType trans
-    translateable :: trans -> Formula -> Set Var -> Bool
-
-class GenericDatabase db where
-    type GenericDatabaseConnectionType db
-    gdbOpen :: db -> IO (GenericDatabaseConnectionType db)
-
-data GenericDB db trans where
-    GenericDB :: db -> String -> [Pred] -> trans -> GenericDB db trans
-
-instance Translate trans => Database0 (GenericDB db trans) where
-    getName (GenericDB _ name _ _) = name
-    getPreds (GenericDB _ _ preds _) = preds
-    determinateVars (GenericDB conn _  _ trans) = extractDomainSize trans
-    supported (GenericDB _ _ _ trans) formula vars = translateable trans formula vars
-
-instance (GenericDatabase db,
-          DBConnection (GenericDatabaseConnectionType db),
-          Translate trans,
-          QueryType (GenericDatabaseConnectionType db) ~ TranslateQueryType trans) => Database (GenericDB db trans) where
-    type ConnectionType (GenericDB db trans) = GenericDatabaseConnectionType db
-    dbOpen (GenericDB db _ _ _) = gdbOpen db
-    translateQuery (GenericDB _ _ _ trans) vars2 query vars = translateQueryWithParams trans vars2 query vars
 
 {- instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where
     dbStmtExec (PreparedSequenceStatement conn trans vars v) vars2 stream = do

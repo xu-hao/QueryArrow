@@ -33,23 +33,11 @@ import Data.IORef
 
 -- interface
 
-class (IDatabase0 db, INPSDBConnection (NPSConnectionType db)) => INPSDatabase db where
-    type NPSConnectionType db
-    npsdbOpen :: db -> NPSConnectionType db
-
 class (IDBConnection0 conn) => INPSDBConnection conn where
     type NPSResultStreamType conn
     type NPSStatementType conn
     type NPSQueryType conn
     npsdbStmtExec :: conn -> NPSQueryType conn -> NPSResultStreamType conn -> NPSResultStreamType conn
-
--- instance for IDatabase
-
-newtype NPSDatabase db = NPSDatabase db
-
-instance (INPSDatabase0 db) => IDatabase (NPSDatabase db) where
-    type ConnectionType (NPSDatabase db) = NPSConnectionType db
-    dbOpen (NPSDatabase db) = npsdbOpen db
 
 -- instance for IDBConnection
 

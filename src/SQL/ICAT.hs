@@ -2,22 +2,22 @@
 module SQL.ICAT where
 
 import Prelude hiding (lookup)
-import DB
+import DB.DB
+import DB.GenericDatabase
 import FO.Data
 import SQL.SQL
-import DBQuery
+import DB.ParametrizedStatement
 import ICAT
 import SQL.ICATGen
 import Data.Namespace.Namespace
+import Config
 
 import Data.Map.Strict (empty, fromList, insert, lookup)
 import qualified Data.Text as T
 
 
-makeICATSQLDBAdapter :: String -> Maybe String -> db -> GenericDB db SQLTrans
-makeICATSQLDBAdapter ns nextid conn = GenericDB conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns) (sqlStandardTrans ns nextid)
-
-
+makeICATSQLDBAdapter :: String -> Maybe String -> a -> GenericDatabase  SQLTrans a
+makeICATSQLDBAdapter ns nextid conninfo = GenericDatabase (sqlStandardTrans ns nextid) conninfo ns (qStandardPreds ns ++ qStandardBuiltInPreds ns)
 
 
 sqlMapping :: String -> PredTableMap

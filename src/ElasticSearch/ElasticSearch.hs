@@ -15,9 +15,9 @@ import Data.Aeson (Value (String, Number))
 
 import FO.Domain
 import FO.Data
-import DBQuery
+import DB.GenericDatabase
 import QueryPlan
-import ResultStream
+import DB.ResultStream
 import Config
 
 import ElasticSearch.Record

@@ -1,12 +1,12 @@
 {-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
 module QueryPlan where
 
-import ResultStream
+import DB.ResultStream
 import FO.Data
 import FO.Domain
 import ListUtils
 import Algebra.SemiBoundedLattice
-import DB
+import DB.DB
 
 import Prelude  hiding (lookup, null)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete, singleton)
@@ -42,8 +42,6 @@ data QueryPlan = Exec Formula Int
                 | QPOne
                 | QPAggregate Aggregator QueryPlan deriving Show
 
-
-data AbstractDBStatement row = forall stmt. (DBStatement stmt, row ~ RowType stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
 
 data QueryPlanData row  = QueryPlanData {
     linscopevs :: MSet Var,
@@ -486,7 +484,7 @@ addTransaction qp@(_, QPOne2) = (False, qp)
 addTransaction qp@(_, QPReturn2 _) = (False, qp)
 -}
 
-prepareTransaction :: (ResultRow row) => [Int] -> QueryPlan2 row  -> ([Int], QueryPlan2 row )
+prepareTransaction :: (IResultRow row) => [Int] -> QueryPlan2 row  -> ([Int], QueryPlan2 row )
 prepareTransaction rdbxs qp@(_, (Exec2 _ x)) =
     (x : rdbxs, qp)
 prepareTransaction rdbxs (qpd, QPChoice2 qp1 qp2) =
@@ -510,7 +508,7 @@ prepareTransaction rdbxs qp@(qpd, QPTransaction2) =
     (rdbxs, (qpd{tdb = Just rdbxs }, QPTransaction2))
 prepareTransaction rdbxs qp@(_, QPReturn2 _) =  (rdbxs, qp)
 
-translateQueryPlan :: (ResultRow row) => [AbstractDatabase row] -> QueryPlan2 row  -> (QueryPlan2 row )
+translateQueryPlan :: (IResultRow row) => [AbstractDatabase row] -> QueryPlan2 row  -> (QueryPlan2 row )
 
 translateQueryPlan dbs (qpd, e@(Exec2  form x)) =
     if x >= length dbs || x < 0 then
@@ -542,7 +540,7 @@ translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) =
 translateQueryPlan _ qp@(_, QPReturn2 _) = qp
 translateQueryPlan dbs qp@(_, QPTransaction2) = qp
 
-prepareQueryPlan :: (ResultRow row) => [AbstractDBConnection row] -> QueryPlan2 row  -> IO (QueryPlan2 row )
+prepareQueryPlan :: (IResultRow row) => [AbstractDBConnection row] -> QueryPlan2 row  -> IO (QueryPlan2 row )
 prepareQueryPlan dbs (qpd, e@(Exec2  form x)) =
     if x >= length dbs || x < 0 then
         error "index out of range"
@@ -578,7 +576,7 @@ prepareQueryPlan dbs qp@(_, QPTransaction2) =
 addCleanupRS :: Monad m => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
 
-execQueryPlan :: (ResultRow row, Ord (ElemType row), Num (ElemType row)) => [AbstractDBConnection row] -> ([Var], ResultStream (ResourceT IO) row) -> QueryPlan2 row  ->   ([Var], ResultStream (ResourceT IO) row     )
+execQueryPlan :: (IResultRow row, Ord (ElemType row), Num (ElemType row)) => [AbstractDBConnection row] -> ([Var], ResultStream (ResourceT IO) row) -> QueryPlan2 row  ->   ([Var], ResultStream (ResourceT IO) row     )
 execQueryPlan conns (vars, rs) (qpd, Exec2 _ _) = do
     let (stmt, stmtshow) = fromJust (stmts qpd)
     case stmt of

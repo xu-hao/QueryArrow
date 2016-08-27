@@ -49,9 +49,9 @@ instance Convertible Expr ResultValue where
 -- result row
 type MapResultRow = Map Var ResultValue
 
-instance ResultRow MapResultRow where
+instance IResultRow MapResultRow where
     type ElemType MapResultRow = ResultValue
-    transform _ vars2 map1 = foldr (\var map2 -> case lookup var map1 of
+    transform vars2 map1 = foldr (\var map2 -> case lookup var map1 of
                                                         Nothing -> insert var Null map2
                                                         Just rv -> insert var rv map2) empty vars2
     ext v map1 = fromMaybe (error ("cannot find key " ++ show v)) (lookup v map1)
@@ -94,10 +94,15 @@ instance Show Query where
     instance B a b => A (C a) b
 -}
 
-class IResultStream (ResultStreamType stmt) (ResourceT IO) => IDBStatement stmt where
-    type ResultStreamType stmt
-    dbStmtExec :: stmt -> ResultStreamType stmt -> ResultStreamType stmt
+type DBResultStream = ResultStream (ResourceT IO)
+
+class IDBStatement stmt where
+    type RowType stmt
+    dbStmtExec :: stmt -> DBResultStream (RowType stmt) -> DBResultStream (RowType stmt)
     dbStmtClose :: stmt -> IO ()
+
+data AbstractDBStatement row = forall stmt. (IDBStatement stmt, row ~ RowType stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
+
 
 -- connection
 class IDBConnection0 conn where
@@ -107,12 +112,12 @@ class IDBConnection0 conn where
     dbCommit :: conn -> IO Bool
     dbRollback :: conn -> IO ()
 
-class (IDBConnection0 conn, IDBStatement (StatementType conn), Show (QueryType conn), Typeable (QueryType conn)) => DBConnection conn where
+class (IDBConnection0 conn, IDBStatement (StatementType conn)) => IDBConnection conn where
     type QueryType conn
     type StatementType conn
     prepareQuery :: conn -> QueryType conn -> IO (StatementType conn)
 
-data AbstractDBConnection row = forall conn. (IDBConnection conn, row ~ RowType (ResultStreamType (StatementType conn))) => AbstractDBConnection { unAbstractDBConnection :: conn }
+data AbstractDBConnection row = forall conn. (IDBConnection conn, row ~ RowType (StatementType conn)) => AbstractDBConnection { unAbstractDBConnection :: conn }
 
 instance IDBConnection0 (AbstractDBConnection row) where
     dbClose (AbstractDBConnection conn) = dbClose conn
@@ -123,31 +128,31 @@ instance IDBConnection0 (AbstractDBConnection row) where
 
 -- database
 class IDatabase0 db where
+    type DBQueryType db
     getName :: db -> String
     getPreds :: db -> [Pred]
     -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
     determinateVars :: db -> Set Var -> Atom -> Set Var
     supported :: db -> Formula -> Set Var -> Bool
+    translateQuery :: db -> Set Var -> Query -> Set Var -> DBQueryType db
 
-class (IDatabase0 db, IDBConnection (ConnectionType db)) => IDatabase db where
+class (IDBConnection (ConnectionType db)) => IDatabase1 db where
     type ConnectionType db
     dbOpen :: db -> IO (ConnectionType db)
-    translateQuery :: db -> Set Var -> Query -> Set Var -> QueryType (ConnectionType db)
 
-doQuery :: (IDatabase db) => db -> Set Var -> Query -> [Var] -> ResultStreamType (StatementType (ConnectionType db)) -> ResultStreamType (StatementType (ConnectionType db))
-doQuery db vars2 qu vars rs = do
-        let vars' = fromList vars
-        conn <- liftIO $ dbOpen db
-        stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars')
-        res <- dbStmtExec stmt vars rs
-        liftIO $ dbClose conn
-        return res
+class (IDatabase0 db, IDatabase1 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db where
 
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data AbstractDatabase row = forall db conn stmt query. (IDatabase db, row ~ RowType (ResultStreamType (StatementType (ConnectionType db)))) => AbstractDatabase { unAbstractDatabase :: db }
+data AbstractDatabase row = forall db conn stmt query. (IDatabase db, row ~ RowType (StatementType (ConnectionType db))) => AbstractDatabase { unAbstractDatabase :: db }
 
 instance IDatabase0 (AbstractDatabase row) where
     getName (AbstractDatabase db) = getName db
     getPreds (AbstractDatabase db) = getPreds db
     determinateVars (AbstractDatabase db) = determinateVars db
     supported (AbstractDatabase db) = supported db
+
+doQuery :: (IDatabase db) => db -> Set Var -> Query -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+doQuery db vars2 qu vars rs =
+        bracketPStream (dbOpen db) (\conn -> dbClose conn) (\conn -> do
+            stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
+            dbStmtExec stmt rs)

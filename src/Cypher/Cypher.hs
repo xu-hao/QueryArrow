@@ -9,7 +9,7 @@ module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
 import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, conj, disj, Unify,unify)
 import qualified FO.Data as FO
 import FO.Domain
-import DBQuery
+import DB.GenericDatabase
 import QueryPlan
 import ListUtils
 

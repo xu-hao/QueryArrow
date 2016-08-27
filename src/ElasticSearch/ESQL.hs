@@ -17,9 +17,9 @@ import Algebra.Lattice
 
 import FO.Domain
 import FO.Data
-import DBQuery
-import DB
-import ResultStream
+import DB.GenericDatabase
+import DB.DB
+import DB.ResultStream
 import Config
 
 import ElasticSearch.Record

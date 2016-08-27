@@ -2,14 +2,14 @@
    RankNTypes, FlexibleContexts, GADTs, DeriveGeneric #-}
 module FO where
 
-import ResultStream
+import DB.ResultStream
 import FO.Data
 import FO.Domain
 import QueryPlan
 import Rewriting
 import Config
 import Parser
-import DBQuery
+import DB.GenericDatabase
 import Utils
 import ListUtils
 -- import Plugins

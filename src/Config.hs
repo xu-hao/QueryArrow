@@ -17,8 +17,8 @@ data DBTrans = DBTrans {
 data ICATDBConnInfo = ICATDBConnInfo {
     db_host :: String,
     db_password :: String,
-    db_name :: [String],
-    db_path :: [String],
+    db_namespace :: String,
+    db_name :: String,
     catalog_database_type :: String,
     db_port :: Int,
     db_username :: String

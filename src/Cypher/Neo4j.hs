@@ -3,7 +3,7 @@ module Cypher.Neo4j where
 
 import Config
 import QueryPlan
-import DBQuery
+import DB.GenericDatabase
 import ICAT
 import Cypher.ICAT
 

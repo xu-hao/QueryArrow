@@ -2,10 +2,10 @@
    RankNTypes, FlexibleContexts, GADTs, DeriveGeneric #-}
 module Utils where
 
-import ResultStream
+import DB.ResultStream
 import FO.Data
 import ListUtils
-import DB
+import DB.DB
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, alter, lookup)

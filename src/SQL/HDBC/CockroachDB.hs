@@ -1,8 +1,8 @@
 {-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings #-}
 module SQL.HDBC.CockroachDB where
 
-import DBQuery
-import DB
+import DB.GenericDatabase
+import DB.DB
 import FO.Data
 import SQL.HDBC
 import ICAT

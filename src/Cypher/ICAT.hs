@@ -6,7 +6,7 @@ import Cypher.Neo4jConnection
 import Cypher.Cypher
 import Cypher.SQLToCypher
 import Utils
-import DBQuery
+import DB.GenericDatabase
 import ICAT
 import SQL.ICAT
 

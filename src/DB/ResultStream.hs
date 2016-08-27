@@ -1,7 +1,8 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
    RankNTypes, FlexibleContexts, GADTs #-}
-module ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream, closeResultStream,
-    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, mapResultStream, ResultRow(..), resultStream2, bracketPStream) where
+module DB.ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream, closeResultStream,
+    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, mapResultStream, IResultRow(..), resultStream2, bracketPStream)
+    where
 
 import Prelude  hiding (lookup, take, map, null, mapM)
 import Control.Applicative (empty, (<|>), Alternative)
@@ -12,18 +13,13 @@ import FO.Data
 import Data.Conduit
 import Data.Conduit.Combinators
 import Control.Monad.Trans.Resource
-import Data.Set
+import Data.Set (Set)
 
-class (Monoid row, Show row) => ResultRow row where
+class (Monoid row, Show row) => IResultRow row where
     type ElemType row
     transform :: Set Var -> row -> row
     ret :: Var -> ElemType row -> row
     ext :: Var -> row -> ElemType row
-
-class (Monad m, ResultRow (RowType rs)) => IResultStream rs m where
-    type RowType rs
-    getVars :: rs -> m (Set Var)
-    getStream :: rs -> m (ResultStream m (RowType rs))
 
 newtype ResultStream m row = ResultStream (Producer m row)
 
@@ -78,13 +74,13 @@ instance (Monad m) => Alternative (ResultStream m) where
         rs1
         rs2)
 
-transformResultStream :: (Monad m, ResultRow row) => [Var] -> [Var] -> ResultStream m row -> ResultStream m row
-transformResultStream vars1 vars2 (ResultStream rs) = ResultStream (rs =$= map (transform vars1 vars2))
+transformResultStream :: (Monad m, IResultRow row) => Set Var -> ResultStream m row -> ResultStream m row
+transformResultStream vars1 (ResultStream rs) = ResultStream (rs =$= map (transform vars1))
 
-filterResultStream :: (Monad m, ResultRow row) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
+filterResultStream :: (Monad m, IResultRow row) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
 filterResultStream (ResultStream rs) p = ResultStream (rs =$= filterM p)
 
-mapResultStream :: (Monad m, ResultRow row) => ResultStream m row -> (row -> m row) -> ResultStream m row
+mapResultStream :: (Monad m, IResultRow row) => ResultStream m row -> (row -> m row) -> ResultStream m row
 mapResultStream (ResultStream rs) p = ResultStream (rs =$= mapM p)
 
 instance (MonadIO m) => MonadIO (ResultStream m) where

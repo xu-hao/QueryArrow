@@ -33,10 +33,9 @@ module Main where
 --        print a
 import FO
 import QueryPlan hiding (Null)
-import ResultStream
+import DB.ResultStream
 import FO.Data
 import Parser
-import DBQuery
 import ICAT
 -- import Plugins
 -- import SQL.HDBC.PostgreSQL

@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
 module SQL.HDBC.Sqlite3 where
 
-import DBQuery
+import DB.GenericDatabase
 import Config
 import QueryPlan
 import FO.Data
