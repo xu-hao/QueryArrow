@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables, TypeApplications, DataKinds #-}
 module QueryPlan where
 
 import DB.ResultStream
@@ -7,6 +7,7 @@ import FO.Domain
 import ListUtils
 import Algebra.SemiBoundedLattice
 import DB.DB
+import Data.Heterogeneous.List
 
 import Prelude  hiding (lookup, null)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete, singleton)
@@ -29,6 +30,7 @@ import Data.Ord (comparing, Down(..))
 import Data.Dynamic
 import Data.Typeable
 import Control.Monad.Trans.Resource
+import Data.Coerce
 
 type MSet a = Complemented (Set a)
 
@@ -43,7 +45,7 @@ data QueryPlan = Exec Formula Int
                 | QPAggregate Aggregator QueryPlan deriving Show
 
 
-data QueryPlanData row  = QueryPlanData {
+data QueryPlanData  = QueryPlanData {
     linscopevs :: MSet Var,
     rinscopevs :: MSet Var,
     freevs :: Set Var,
@@ -51,41 +53,62 @@ data QueryPlanData row  = QueryPlanData {
     paramvs :: Set Var, -- parameter vars
     returnvs :: Set Var, -- return vars
     combinedvs :: Set Var, -- combined return and available vars that are still in scope
-    availablevs :: Set Var,
-    query :: Maybe Dynamic,
-    stmts :: Maybe (AbstractDBStatement row, String), -- stmt, show
-    tdb :: Maybe [Int]
+    availablevs :: Set Var
 }
 
-dqdb :: QueryPlanData row
-dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom Nothing Nothing Nothing
+dqdb :: QueryPlanData
+dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom
 
-data QueryPlanNode2 row  = Exec2 Formula Int
+data QueryPlanNode2   = Exec2 Formula Int
                 | QPReturn2 [Var]
-                | QPTransaction2
-                | QPChoice2 (QueryPlan2 row ) (QueryPlan2 row )
-                | QPPar2 (QueryPlan2 row ) (QueryPlan2 row )
-                | QPSequencing2 (QueryPlan2 row ) (QueryPlan2 row )
+                | QPTransaction2 [Int]
+                | QPChoice2 QueryPlan2 QueryPlan2
+                | QPPar2 QueryPlan2 QueryPlan2
+                | QPSequencing2 QueryPlan2 QueryPlan2
                 | QPZero2
                 | QPOne2
-                | QPAggregate2 Aggregator (QueryPlan2 row )
+                | QPAggregate2 Aggregator QueryPlan2
 
-type QueryPlan2 row  =  (QueryPlanData row , QueryPlanNode2 row )
+type QueryPlan2  =  (QueryPlanData , QueryPlanNode2 )
 
 class ToTree a where
     toTree :: a -> Tree String
-instance Show (QueryPlanData row ) where
+instance Show QueryPlanData where
     show qp = "[" ++ show (availablevs qp) ++ "|" ++ show (linscopevs qp) ++ "|" ++ show (paramvs qp) ++ "|" ++ show (freevs qp) ++ "|" ++ show (determinevs qp) ++ "|"++ show (returnvs qp) ++ "|" ++ show (combinedvs qp) ++ "|" ++ show (rinscopevs qp) ++ "]"
-instance ToTree (QueryPlan2 row ) where
-    toTree (qpd, Exec2 f  dbs) = Node ("exec " ++ show f ++ " at " ++ show dbs ++ show qpd ) []
+instance ToTree QueryPlan2 where
+    toTree (qpd, Exec2 f dbs) = Node ("exec " ++ show f ++ " at " ++ show dbs ++ show qpd ) []
     toTree (qpd, QPReturn2 vars) = Node ("return "++ unwords (map show vars) ) []
     toTree (qpd, QPSequencing2 qp1 qp2) = Node ("sequencing"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPChoice2 qp1 qp2) = Node ("choice"++ show qpd ) [toTree qp1, toTree qp2]
     toTree (qpd, QPPar2 qp1 qp2) = Node ("parallel"++ show qpd ) [toTree qp1, toTree qp2]
-    toTree (qpd, QPTransaction2 ) = Node ("transaction" ++ show qpd) []
+    toTree (qpd, QPTransaction2 _) = Node ("transaction" ++ show qpd) []
     toTree (qpd, QPZero2) = Node ("zero"++ show qpd ) []
     toTree (qpd, QPOne2) = Node ("one"++ show qpd ) []
     toTree (qpd, QPAggregate2 agg qp1) = Node ("aggregate " ++ show agg ++ " " ++ show qpd) [toTree qp1]
+
+
+data QueryPlan3 row = Exec3 (Set Var) (AbstractDBStatement row) String
+                | QPReturn3 [Var]
+                | QPTransaction3 [Int]
+                | QPChoice3 (QueryPlan3 row) (QueryPlan3 row)
+                | QPPar3 (QueryPlan3 row) (QueryPlan3 row)
+                | QPSequencing3 (QueryPlan3 row) (QueryPlan3 row)
+                | QPZero3
+                | QPOne3
+                | QPAggregate3 (Set Var) Aggregator (QueryPlan3 row)
+
+data QueryPlanT l = ExecT (Set Var) (HVariant' DBQueryTypeIso l) String
+                | QPReturnT [Var]
+                | QPTransactionT [Int]
+                | QPChoiceT (QueryPlanT l) (QueryPlanT l)
+                | QPParT (QueryPlanT l) (QueryPlanT l)
+                | QPSequencingT (QueryPlanT l) (QueryPlanT l)
+                | QPZeroT
+                | QPOneT
+                | QPAggregateT (Set Var) Aggregator (QueryPlanT l)
+
+
+
 
 findDB pred0 dbs =
     let dbxs = filter (\x -> pred0 `elem` getPreds (dbs !! x)) [0..(length dbs-1)] in
@@ -100,7 +123,7 @@ formulaToQueryPlan _  (FReturn vars) =
     QPReturn vars
 formulaToQueryPlan _ FOne = QPOne
 formulaToQueryPlan _ FZero = QPZero
-formulaToQueryPlan dbs  (FTransaction ) = QPTransaction
+formulaToQueryPlan dbs  FTransaction = QPTransaction
 formulaToQueryPlan dbs  (FChoice form1 form2) = QPChoice (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (FPar form1 form2) = QPPar (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (FSequencing form1 form2) = QPSequencing (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
@@ -147,12 +170,12 @@ simplifyQueryPlan  (QPAggregate Not qp1) =
 simplifyQueryPlan  (QPAggregate agg qp1) =
     let qp1' = simplifyQueryPlan  qp1 in
         QPAggregate agg qp1'
-simplifyQueryPlan  (QPTransaction ) =
+simplifyQueryPlan  QPTransaction =
     QPTransaction
 simplifyQueryPlan qp@(QPReturn _) = qp
 simplifyQueryPlan  qp = qp
 
-combineQPSequencingData :: QueryPlanData row -> QueryPlanData row -> QueryPlanData row
+combineQPSequencingData :: QueryPlanData  -> QueryPlanData  -> QueryPlanData
 combineQPSequencingData qp1 qp2 =
     QueryPlanData {
         availablevs = availablevs qp1,
@@ -162,13 +185,10 @@ combineQPSequencingData qp1 qp2 =
         returnvs = (returnvs qp1 \/ returnvs qp2) /\\ rinscopevs qp2,
         rinscopevs = rinscopevs qp2,
         linscopevs = linscopevs qp1,
-        combinedvs = (combinedvs qp1 \/ combinedvs qp2) /\\ rinscopevs qp2,
-        query = Nothing,
-        stmts = Nothing,
-        tdb = Nothing
+        combinedvs = (combinedvs qp1 \/ combinedvs qp2) /\\ rinscopevs qp2
     }
 
-combineQPChoiceData :: QueryPlanData row -> QueryPlanData row -> QueryPlanData row
+combineQPChoiceData :: QueryPlanData -> QueryPlanData -> QueryPlanData
 combineQPChoiceData qp1 qp2 =
     QueryPlanData {
         availablevs = availablevs qp1,
@@ -178,13 +198,10 @@ combineQPChoiceData qp1 qp2 =
         returnvs = returnvs qp1 \/ returnvs qp2,
         rinscopevs = rinscopevs qp1 \/ linscopevs qp2,
         linscopevs = linscopevs qp1 \/ linscopevs qp2,
-        combinedvs = combinedvs qp2 \/ combinedvs qp2,
-        query = Nothing,
-        stmts = Nothing,
-        tdb = Nothing
+        combinedvs = combinedvs qp2 \/ combinedvs qp2
     }
 
-combineQPParData :: QueryPlanData row -> QueryPlanData row -> QueryPlanData row
+combineQPParData :: QueryPlanData -> QueryPlanData -> QueryPlanData
 combineQPParData qp1 qp2 =
     QueryPlanData {
         availablevs = availablevs qp1,
@@ -194,13 +211,10 @@ combineQPParData qp1 qp2 =
         returnvs = returnvs qp1 \/ returnvs qp2,
         rinscopevs = rinscopevs qp1 \/ linscopevs qp2,
         linscopevs = linscopevs qp1 \/ linscopevs qp2,
-        combinedvs = combinedvs qp2 \/ combinedvs qp2,
-        query = Nothing,
-        stmts = Nothing,
-        tdb = Nothing
+        combinedvs = combinedvs qp2 \/ combinedvs qp2
     }
 
-optimizeQueryPlan :: [AbstractDatabase row] -> QueryPlan2 row -> QueryPlan2 row
+optimizeQueryPlan :: [AbstractDatabase row] -> QueryPlan2 -> QueryPlan2
 optimizeQueryPlan _ qp@(_, Exec2 _ _) = qp
 
 optimizeQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
@@ -259,7 +273,7 @@ optimizeQueryPlan dbsx (qpd, QPPar2 qp1 qp2) =
             ((qpd1, QPPar2 qp11 qp12@(qpd3, _)), (_, QPPar2 qp21@(qpd4, _) qp22)) ->
                 (qpd, QPPar2 (combineQPParData qpd1 qpd4, QPPar2 qp11 (optimizeQueryPlan dbsx (combineQPParData qpd3 qpd4, QPPar2 qp12 qp21))) qp22)
             _ -> (qpd, QPPar2 qp1' qp2')
-optimizeQueryPlan _ qp@(_, QPTransaction2) =
+optimizeQueryPlan _ qp@(_, QPTransaction2 _) =
     qp
 optimizeQueryPlan _ qp@(_, QPOne2) = qp
 optimizeQueryPlan _ qp@(_, QPZero2) = qp
@@ -282,7 +296,7 @@ domainSizeFormula vars (AbstractDatabase db_) form =
         let map1' = determinedVars (determinateVars db_ ) vars form in
             (vars \/ map1')
 
-checkQueryPlan :: [AbstractDatabase row] -> QueryPlan2 row -> Except String ()
+checkQueryPlan :: [AbstractDatabase row] -> QueryPlan2 -> Except String ()
 checkQueryPlan dbs (qpd, Exec2 form x) = do
     let par0 = paramvs qpd
         det0 = determinevs qpd
@@ -346,14 +360,14 @@ checkQueryPlan _ (qpd, QPReturn2 vars) = do
         then return ()
         else throwError ("checkQueryPlan': unbounded vars: " ++ show (fromList vars \\\ par0) ++ " " ++ show (FReturn vars))
 
-checkQueryPlan dbs (_, QPTransaction2) =
+checkQueryPlan dbs (_, QPTransaction2 _) =
     return ()
 
 
-calculateVars :: Set Var -> MSet Var -> QueryPlan -> QueryPlan2 row
+calculateVars :: Set Var -> MSet Var -> QueryPlan -> QueryPlan2
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
 
-calculateVars1 :: MSet Var -> QueryPlan -> QueryPlan2 row
+calculateVars1 :: MSet Var -> QueryPlan -> QueryPlan2
 calculateVars1  rvars (Exec form dbxs) =
     let fvs = freeVars form in
         ( dqdb{freevs =  fvs, determinevs =  fvs, linscopevs = Include fvs \/ rvars, rinscopevs = rvars}, (Exec2  form dbxs))
@@ -415,11 +429,11 @@ calculateVars1 rvars  (QPReturn vars) =
         rinscopevs = rvars /\ Include (fromList vars)
         } , QPReturn2 vars)
 calculateVars1 rvars  (QPTransaction) =
-        (dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars} , QPTransaction2)
+        (dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars} , QPTransaction2 [])
 
 
 
-calculateVars2 :: Set Var -> QueryPlan2 row  -> QueryPlan2 row
+calculateVars2 :: Set Var -> QueryPlan2 -> QueryPlan2
 calculateVars2  lvars (qpd, Exec2 form dbxs) =
             ( qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd \\\ lvars), combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars) }, (Exec2  form dbxs))
 calculateVars2  lvars (qpd, QPChoice2 qp1 qp2) =
@@ -441,8 +455,8 @@ calculateVars2 lvars  (qpd, QPAggregate2 agg qp1) =
             let qp1' = calculateVars2 lvars qp1 in
                 ( qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} , (QPAggregate2 agg qp1'))
 calculateVars2 lvars  (qpd, QPReturn2 vars) = (dqdb{availablevs = lvars, paramvs = lvars /\ fromList vars, returnvs = rinscopevs qpd //\ (lvars /\ fromList vars), combinedvs = rinscopevs qpd //\ (lvars /\ fromList vars)} , QPReturn2 vars)
-calculateVars2 lvars  (qpd, QPTransaction2) =
-    (qpd{availablevs = lvars, paramvs = bottom, returnvs = bottom,combinedvs = rinscopevs qpd //\ lvars} , QPTransaction2)
+calculateVars2 lvars  (qpd, QPTransaction2 a) =
+    (qpd{availablevs = lvars, paramvs = bottom, returnvs = bottom,combinedvs = rinscopevs qpd //\ lvars} , QPTransaction2 a)
 
 
 
@@ -484,7 +498,7 @@ addTransaction qp@(_, QPOne2) = (False, qp)
 addTransaction qp@(_, QPReturn2 _) = (False, qp)
 -}
 
-prepareTransaction :: (IResultRow row) => [Int] -> QueryPlan2 row  -> ([Int], QueryPlan2 row )
+prepareTransaction :: [Int] -> QueryPlan2 -> ([Int], QueryPlan2)
 prepareTransaction rdbxs qp@(_, (Exec2 _ x)) =
     (x : rdbxs, qp)
 prepareTransaction rdbxs (qpd, QPChoice2 qp1 qp2) =
@@ -504,190 +518,182 @@ prepareTransaction rdbxs qp@(_, QPZero2) =  (rdbxs, qp)
 prepareTransaction rdbxs (qpd, QPAggregate2 agg qp1) =
     let (dbxs, qp1') = prepareTransaction rdbxs qp1 in
         (dbxs, (qpd, QPAggregate2 agg qp1'))
-prepareTransaction rdbxs qp@(qpd, QPTransaction2) =
-    (rdbxs, (qpd{tdb = Just rdbxs }, QPTransaction2))
+prepareTransaction rdbxs qp@(qpd, QPTransaction2 _) =
+    (rdbxs, (qpd, QPTransaction2 rdbxs))
 prepareTransaction rdbxs qp@(_, QPReturn2 _) =  (rdbxs, qp)
 
-translateQueryPlan :: (IResultRow row) => [AbstractDatabase row] -> QueryPlan2 row  -> (QueryPlan2 row )
+translateQueryPlan :: (HMapConstraint IDatabase l) => HList l -> QueryPlan2 -> QueryPlanT l
 
 translateQueryPlan dbs (qpd, e@(Exec2  form x)) =
-    if x >= length dbs || x < 0 then
-        error "index out of range"
-    else case dbs !! x of
-        AbstractDatabase db ->
-            let vars = paramvs qpd
-                vars2 = returnvs qpd
-                qu = Query form
-                qu' = toDyn (translateQuery db vars2 qu vars) in
-            (qpd {query = Just qu'}, e)
+        let vars = paramvs qpd
+            vars2 = returnvs qpd
+            qu = Query form
+            trans :: (IDatabase db) => db -> DBQueryTypeIso db
+            trans db = DBQueryTypeIso (translateQuery db vars2 qu vars)
+            qu' = fromMaybe (error "index out of range") (hApplyCULV @IDatabase @DBQueryTypeIso trans x dbs) in
+            ExecT (combinedvs qpd) qu' (show qu)
 translateQueryPlan dbs  (qpd, QPChoice2 qp1 qp2) =
     let qp1' = translateQueryPlan dbs  qp1
         qp2' = translateQueryPlan dbs  qp2 in
-        (qpd, QPChoice2 qp1' qp2')
+        QPChoiceT qp1' qp2'
 translateQueryPlan dbs  (qpd, QPPar2 qp1 qp2) =
     let qp1' = translateQueryPlan dbs  qp1
         qp2' = translateQueryPlan dbs  qp2 in
-        (qpd, QPPar2 qp1' qp2')
+        QPParT qp1' qp2'
 translateQueryPlan dbs  (qpd, QPSequencing2 qp1 qp2) =
     let qp1' = translateQueryPlan dbs  qp1
         qp2' = translateQueryPlan dbs  qp2 in
-        (qpd, QPSequencing2 qp1' qp2')
-translateQueryPlan _ qp@(_, QPOne2) = qp
-translateQueryPlan _ qp@(_, QPZero2) = qp
+        QPSequencingT qp1' qp2'
+translateQueryPlan _ qp@(_, QPOne2) = QPOneT
+translateQueryPlan _ qp@(_, QPZero2) = QPZeroT
 translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) =
     let qp1' = translateQueryPlan dbs  qp1 in
-        (qpd, QPAggregate2 agg qp1')
-translateQueryPlan _ qp@(_, QPReturn2 _) = qp
-translateQueryPlan dbs qp@(_, QPTransaction2) = qp
+        QPAggregateT (combinedvs qpd) agg qp1'
+translateQueryPlan _ qp@(_, QPReturn2 vars) = QPReturnT vars
+translateQueryPlan dbs qp@(_, QPTransaction2 dbxs) = QPTransactionT dbxs
 
-prepareQueryPlan :: (IResultRow row) => [AbstractDBConnection row] -> QueryPlan2 row  -> IO (QueryPlan2 row )
-prepareQueryPlan dbs (qpd, e@(Exec2  form x)) =
-    if x >= length dbs || x < 0 then
-        error "index out of range"
-    else case dbs !! x of
-        AbstractDBConnection db -> do
-            let vars = paramvs qpd
-                vars2 = returnvs qpd
-                qu = fromDyn  (fromMaybe (error "query not translated") (query qpd)) (error "prepareQueryPlan: error converting dynamic")
-                stmtshow = show qu
-            stmt <- prepareQuery db vars2 qu vars
-            return (qpd {stmts = Just (AbstractDBStatement stmt, stmtshow)}, e)
-prepareQueryPlan dbs  (qpd, QPChoice2 qp1 qp2) = do
+hDbOpen :: (HMapConstraint IDatabase l) => HList l -> IO (HList' ConnectionType l)
+hDbOpen dbs =
+    let dbo :: (IDatabase db) => db -> IO (ConnectionType db)
+        dbo db = dbOpen db in
+        hMapACULL @IDatabase @ConnectionType dbo dbs
+
+class (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDBConnectionUniformRow row conn where
+
+prepareQueryPlan :: forall (row :: *) (l :: [*]). (IResultRow row, HMapConstraint (IDBConnectionUniformRow row) l) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlan3 row )
+prepareQueryPlan conns (ExecT combinedvs qu stmtshow) = do
+            let pq :: (IDBConnectionUniformRow row conn) => ConnectionType conn -> DBQueryTypeIso conn -> IO (AbstractDBStatement row)
+                pq conn (DBQueryTypeIso qu) = AbstractDBStatement <$> prepareQuery conn qu
+            stmt <- hApply2CULV' @(IDBConnectionUniformRow row) @ConnectionType @DBQueryTypeIso pq conns qu
+            return (Exec3 combinedvs stmt stmtshow)
+prepareQueryPlan dbs  (QPChoiceT qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1
     qp2' <- prepareQueryPlan dbs  qp2
-    return (qpd, QPChoice2 qp1' qp2')
-prepareQueryPlan dbs  (qpd, QPPar2 qp1 qp2) = do
+    return (QPChoice3 qp1' qp2')
+prepareQueryPlan dbs  (QPParT qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1
     qp2' <- prepareQueryPlan dbs  qp2
-    return (qpd, QPPar2 qp1' qp2')
-prepareQueryPlan dbs  (qpd, QPSequencing2 qp1 qp2) = do
+    return (QPPar3 qp1' qp2')
+prepareQueryPlan dbs  (QPSequencingT qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1
     qp2' <- prepareQueryPlan dbs  qp2
-    return (qpd, QPSequencing2 qp1' qp2')
-prepareQueryPlan _ qp@(_, QPOne2) = return qp
-prepareQueryPlan _ qp@(_, QPZero2) = return qp
-prepareQueryPlan dbs  (qpd, QPAggregate2 agg qp1) = do
+    return (QPSequencing3 qp1' qp2')
+prepareQueryPlan _ QPOneT = return QPOne3
+prepareQueryPlan _ QPZeroT = return QPOne3
+prepareQueryPlan dbs  (QPAggregateT combinedvs agg qp1) = do
     qp1' <- prepareQueryPlan dbs  qp1
-    return (qpd, QPAggregate2 agg qp1')
-prepareQueryPlan _ qp@(_, QPReturn2 _) = return qp
-prepareQueryPlan dbs qp@(_, QPTransaction2) =
-    return qp
+    return (QPAggregate3 combinedvs agg qp1')
+prepareQueryPlan _ (QPReturnT vars) = return (QPReturn3 vars)
+prepareQueryPlan dbs (QPTransactionT dbxs) =
+    return (QPTransaction3 dbxs)
 
 addCleanupRS :: Monad m => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
 
-execQueryPlan :: (IResultRow row, Ord (ElemType row), Num (ElemType row)) => [AbstractDBConnection row] -> ([Var], ResultStream (ResourceT IO) row) -> QueryPlan2 row  ->   ([Var], ResultStream (ResourceT IO) row     )
-execQueryPlan conns (vars, rs) (qpd, Exec2 _ _) = do
-    let (stmt, stmtshow) = fromJust (stmts qpd)
+execQueryPlan :: (IResultRow row, Ord (ElemType row), Num (ElemType row)) => [AbstractDBConnection row] -> DBResultStream row -> QueryPlan3 row -> DBResultStream row
+execQueryPlan conns rs (Exec3 combinedvs stmt stmtshow) =
     case stmt of
-        AbstractDBStatement stmt0 -> do
-            (toAscList (combinedvs qpd), bracketPStream (return ()) (\_ -> dbStmtClose stmt0) (\_ -> do
+        AbstractDBStatement stmt0 -> bracketPStream (return ()) (\_ -> dbStmtClose stmt0) (\_ -> do
                         row <- rs
                         liftIO $ infoM "QA" ("current row " ++ show row)
                         liftIO $ infoM "QA" ("execute " ++ stmtshow)
-                        row2 <- dbStmtExec stmt0 vars (pure row)
+                        row2 <- dbStmtExec stmt0 (pure row)
                         liftIO $ infoM "QA" ("returns row")
-                        return (transform vars (toAscList (combinedvs qpd)) (row <> row2))))
+                        return (transform combinedvs (row <> row2)))
 
-execQueryPlan conns r (qpd, QPSequencing2 qp1 qp2) =
-    (toAscList (combinedvs qpd), do
+execQueryPlan conns r (QPSequencing3  qp1 qp2) =
         let r1 = execQueryPlan conns r qp1
-            (vars2, rs2) = execQueryPlan conns r1 qp2 in
-            transformResultStream vars2 (toAscList (combinedvs qpd)) rs2)
+            rs2 = execQueryPlan conns r1 qp2 in
+            rs2
 
-execQueryPlan conns (vars, rs) (qpd, QPChoice2 qp1 qp2) =
-    (toAscList (combinedvs qpd), do
+execQueryPlan conns rs (QPChoice3 qp1 qp2) = do
+    row <- rs
+    let rs1 = execQueryPlan conns (pure row) qp1
+        rs2 = execQueryPlan conns (pure row) qp2 in
+        rs1 <|> rs2
+
+execQueryPlan conns rs (QPPar3 qp1 qp2) = do
+    row <- rs
+    let rs1 = execQueryPlan conns (pure row) qp1
+        rs2 = execQueryPlan conns (pure row) qp2
+    (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
+    listResultStream rs1' <|> listResultStream rs2'
+
+execQueryPlan conns rs (QPTransaction3 dbs) = do
+    let (begin, prepare, commit, rollback) =
+                (mapM_ (\db -> dbBegin (conns !! db)) dbs,
+                mapM (\db -> dbPrepare (conns !! db)) dbs,
+                mapM (\db -> dbCommit (conns !! db)) dbs,
+                mapM_ (\db -> dbRollback (conns !! db)) dbs)
+    row <- rs
+    let commitCleanup = do
+            b' <- prepare
+            if and b'
+                then do
+                    b'' <- commit
+                    if and b''
+                        then return ()
+                        else do
+                            rollback
+                            liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
+                else do
+                    rollback
+                    liftIO $ errorM "QA" ("execQueryPlan: prepare failed rollback " ++ show b')
+    let rollbackCleanup = do
+            rollback
+            liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")
+    liftIO begin
+    ResultStream (do
+        yieldOr row (liftIO rollbackCleanup)
+        liftIO commitCleanup)
+
+execQueryPlan conns r QPOne3 = r
+execQueryPlan conns rs (QPReturn3 vars) = rs
+execQueryPlan conns rs QPZero3 = closeResultStream rs
+execQueryPlan conns rs (QPAggregate3 combinedvs Not qp) = -- assume no unbounded vars under not
+    transformResultStream combinedvs (filterResultStream rs (\row -> do
+        let rs2 = execQueryPlan conns (pure row) qp
+        isResultStreamEmpty rs2))
+execQueryPlan conns rs (QPAggregate3 combinedvs Exists qp) = -- assume no unbounded vars under exists
+    transformResultStream combinedvs (filterResultStream rs (\row -> do
+        let rs2 = execQueryPlan conns (pure row) qp
+        emp <- isResultStreamEmpty rs2
+        return (not emp)))
+execQueryPlan conns rs (QPAggregate3 combinedvs (Summarize funcs) qp) = -- assume no unbounded vars under not
+    transformResultStream combinedvs (mapResultStream rs (\row -> do
+        let rs2 = execQueryPlan conns (pure row) qp
+        rows <- getAllResultsInStream rs2
+        let rows2 = map (\(v1, func1) ->
+                      let m = case func1 of
+                                Max v2 ->
+                                    if List.null rows
+                                        then error "max of empty list"
+                                        else maximum (map (ext v2) rows)
+                                Min v2 ->
+                                    if List.null rows
+                                        then error "min of empty list"
+                                        else minimum (map (ext v2) rows)
+                                Count ->
+                                    fromInteger (toInteger (length rows)) in
+                          ret v1 m) funcs
+
+        return (mconcat (reverse rows2) <> row)))
+execQueryPlan conns rs (QPAggregate3 combinedvs (Limit n) qp) =
+    transformResultStream combinedvs (do
         row <- rs
-        let (vars1, rs1) = execQueryPlan conns (vars, pure row) qp1
-            (vars2, rs2) = execQueryPlan conns (vars, pure row) qp2 in
-            transformResultStream vars1 (toAscList (combinedvs qpd)) rs1 <|> transformResultStream vars2 (toAscList (combinedvs qpd)) rs2)
-
-execQueryPlan conns (vars, rs) (qpd, QPPar2 qp1 qp2) =
-    (toAscList (combinedvs qpd), do
+        let rs2 = execQueryPlan conns (pure row) qp
+        takeResultStream n rs)
+execQueryPlan conns rs (QPAggregate3 combinedvs (OrderByAsc v1) qp) =
+    transformResultStream combinedvs (do
         row <- rs
-        let (vars1, rs1) = execQueryPlan conns (vars, pure row) qp1
-            (vars2, rs2) = execQueryPlan conns (vars, pure row) qp2
-        (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
-        transformResultStream vars1 (toAscList (combinedvs qpd)) (listResultStream rs1') <|> transformResultStream vars2 (toAscList (combinedvs qpd)) (listResultStream rs2'))
-
-execQueryPlan conns (vars, rs) (qpd, QPTransaction2 ) =
-    (toAscList (combinedvs qpd), do
-        let (begin, prepare, commit, rollback) = case tdb qpd of
-                Nothing -> error "execQueryPlan: tranaction without db"
-                Just dbs ->
-                    (mapM_ (\db -> dbBegin (conns !! db)) dbs,
-                    mapM (\db -> dbPrepare (conns !! db)) dbs,
-                    mapM (\db -> dbCommit (conns !! db)) dbs,
-                    mapM_ (\db -> dbRollback (conns !! db)) dbs)
+        let rs2 = execQueryPlan conns (pure row) qp
+        rows <- lift $ getAllResultsInStream rs2
+        let rows' = sortBy (\row1 row2 -> compare (ext v1 row1) (ext v1 row2)) rows
+        listResultStream rows')
+execQueryPlan conns rs (QPAggregate3 combinedvs (OrderByDesc v1) qp) =
+    transformResultStream combinedvs (do
         row <- rs
-        let commitCleanup = do
-                b' <- prepare
-                if and b'
-                    then do
-                        b'' <- commit
-                        if and b''
-                            then return ()
-                            else do
-                                rollback
-                                liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
-                    else do
-                        rollback
-                        liftIO $ errorM "QA" ("execQueryPlan: prepare failed rollback " ++ show b')
-        let rollbackCleanup = do
-                rollback
-                liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")
-        liftIO begin
-        ResultStream (do
-            yieldOr row (liftIO rollbackCleanup)
-            liftIO commitCleanup))
-
-execQueryPlan conns r (_, QPOne2) = r
-execQueryPlan conns (vars', rs) (_, QPReturn2 vars) = (vars, transformResultStream vars' vars rs)
-execQueryPlan conns (vars, rs) (_, QPZero2) = (vars, closeResultStream rs)
-execQueryPlan conns (vars, rs) (_, QPAggregate2 Not qp) = -- assume no unbounded vars under not
-            (vars, filterResultStream rs (\row -> do
-                let (_, rs2) = execQueryPlan conns (vars, (pure row)) qp
-                isResultStreamEmpty rs2))
-execQueryPlan conns (vars, rs) (_, QPAggregate2 Exists qp) = -- assume no unbounded vars under exists
-            (vars, filterResultStream rs (\row -> do
-                let (_, rs2) = execQueryPlan conns (vars, (pure row)) qp
-                emp <- isResultStreamEmpty rs2
-                return (not emp)))
-execQueryPlan conns (vars, rs) (_, QPAggregate2 (Summarize funcs) qp) = -- assume no unbounded vars under not
-            (vars, mapResultStream rs (\row -> do
-                let (vars2, rs2) = execQueryPlan conns (vars, (pure row)) qp
-                rows <- getAllResultsInStream rs2
-                let rows2 = map (\(v1, func1) ->
-                              let m = case func1 of
-                                        Max v2 ->
-                                            if length rows == 0
-                                                then error "max of empty list"
-                                                else foldl1 max (map (ext v2) rows)
-                                        Min v2 ->
-                                            if length rows == 0
-                                                then error "min of empty list"
-                                                else foldl1 min (map (ext v2) rows)
-                                        Count ->
-                                            fromInteger (toInteger (length rows)) in
-                                  ret v1 m) funcs
-
-                return (mconcat (reverse rows2) <> row)))
-execQueryPlan conns (vars, rs) (_, QPAggregate2 (Limit n) qp) = -- assume no unbounded vars under exists
-            (vars, do
-                row <- rs
-                let (_, rs2) = execQueryPlan conns (vars, (pure row)) qp
-                takeResultStream n rs)
-execQueryPlan conns (vars, rs) (_, QPAggregate2 (OrderByAsc v1) qp) = -- assume no unbounded vars under not
-            (vars, do
-                row <- rs
-                let (_, rs2) = execQueryPlan conns (vars, (pure row)) qp
-                rows <- lift $ getAllResultsInStream rs2
-                let rows' = sortBy (\row1 row2 -> compare (ext v1 row1) (ext v1 row2)) rows
-                listResultStream rows')
-execQueryPlan conns (vars, rs) (_, QPAggregate2 (OrderByDesc v1) qp) = -- assume no unbounded vars under exists
-            (vars, do
-                row <- rs
-                let (_, rs2) = execQueryPlan conns (vars, (pure row)) qp
-                rows <- lift $ getAllResultsInStream rs2
-                let rows' = sortBy (\row1 row2 -> comparing Down (ext v1 row1) (ext v1 row2)) rows
-                listResultStream rows')
+        let rs2 = execQueryPlan conns (pure row) qp
+        rows <- lift $ getAllResultsInStream rs2
+        let rows' = sortBy (\row1 row2 -> comparing Down (ext v1 row1) (ext v1 row2)) rows
+        listResultStream rows')

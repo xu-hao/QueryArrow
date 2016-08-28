@@ -29,7 +29,6 @@ import Debug.Trace
 data MapDB = MapDB String String [(ResultValue, ResultValue)] deriving Show
 
 instance IDatabase0 MapDB where
-    type DBQueryType MapDB = (Set Var, Query, Set Var)
     getName (MapDB name _ _) = name
     getPreds (MapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     determinateVars db vars (Atom thepred args)
@@ -40,10 +39,13 @@ instance IDatabase0 MapDB where
     determinateVars _ _ _ = bottom
     supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name [] predname) p = True
     supported _ _ _ = False
+
+instance IDatabase1 MapDB where
+    type DBQueryType MapDB = (Set Var, Query, Set Var)
     translateQuery _ vars qu vars2 = (vars, qu, vars2)
 
 
-instance INoConnectionDatabase1 MapDB where
+instance INoConnectionDatabase2 MapDB where
     type NoConnectionQueryType MapDB = (Set Var, Query, Set Var)
     type NoConnectionRowType MapDB = MapResultRow
     noConnectionDBStmtExec (MapDB _ _ rows) (vars, (Query (FAtomic (Atom _ args))), _) stream  = do
@@ -59,7 +61,6 @@ instance Show (IORef a) where
 data StateMapDB = StateMapDB String String (IORef ([(ResultValue, ResultValue)])) deriving Show
 
 instance IDatabase0 StateMapDB where
-    type DBQueryType StateMapDB = (Set Var, Query, Set Var)
     getName (StateMapDB name _ _) = name
     getPreds (StateMapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
     determinateVars db vars  (Atom thepred args)
@@ -70,9 +71,12 @@ instance IDatabase0 StateMapDB where
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
     supported _ _ _ = False
+
+instance IDatabase1 StateMapDB where
+    type DBQueryType StateMapDB = (Set Var, Query, Set Var)
     translateQuery _ vars qu vars2 = (vars, qu, vars2)
 
-instance INoConnectionDatabase1 StateMapDB where
+instance INoConnectionDatabase2 StateMapDB where
     type NoConnectionQueryType StateMapDB = (Set Var, Query, Set Var)
     type NoConnectionRowType StateMapDB = MapResultRow
     noConnectionDBStmtExec (StateMapDB name _ map1) (vars, Query (form@(FAtomic (Atom _ args))), _) stream  = do
@@ -139,19 +143,20 @@ data RegexDB = RegexDB String
 pattern RegexPred ns = Pred (QPredName ns [] "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"])
 
 instance IDatabase0 RegexDB where
-    type DBQueryType RegexDB = (Set Var, Query, Set Var)
     getName (RegexDB name) = name
     getPreds db = [ RegexPred (getName db)]
     determinateVars _ _ _ = bottom
     supported _ (FAtomic (Atom (RegexPred _) _)) _ = True
     supported _ _ _ = False
+instance IDatabase1 RegexDB where
+    type DBQueryType RegexDB = (Set Var, Query, Set Var)
     translateQuery _ vars qu vars2 = (vars, qu, vars2)
 
 extractStringFromExpr :: ResultValue -> String
 extractStringFromExpr (StringValue s) = unpack s
 extractStringFromExpr a = error "cannot extract string from nonstring"
 
-instance INoConnectionDatabase1 RegexDB where
+instance INoConnectionDatabase2 RegexDB where
     type NoConnectionQueryType RegexDB = (Set Var, Query, Set Var)
     type NoConnectionRowType RegexDB = MapResultRow
     noConnectionDBStmtExec (RegexDB _) (_, Query (FAtomic (Atom _ [a, b])), _) stream = do
@@ -169,12 +174,14 @@ data EqDB = EqDB String
 pattern EqPred ns = Pred (QPredName ns [] "eq") (PredType ObjectPred [Key "Any", Key "Any"])
 
 instance IDatabase0 EqDB where
-    type DBQueryType EqDB = (Set Var, Query, Set Var)
     getName (EqDB name) = name
     getPreds db = [ EqPred (getName db)]
     determinateVars _ _ _ = bottom
     supported _ (FAtomic (Atom (EqPred _) _)) _ = True
     supported _ _ _ = False
+
+instance IDatabase1 EqDB where
+    type DBQueryType EqDB = (Set Var, Query, Set Var)
     translateQuery _ vars qu vars2 = (vars, qu, vars2)
 
 evalExpr :: MapResultRow -> Expr -> ResultValue
@@ -185,7 +192,7 @@ evalExpr row (VarExpr v) = case lookup v row of
     Just r -> r
 evalExpr row expr = error ("evalExpr: unsupported expr " ++ show expr)
 
-instance INoConnectionDatabase1 EqDB where
+instance INoConnectionDatabase2 EqDB where
     type NoConnectionQueryType EqDB = (Set Var, Query, Set Var)
     type NoConnectionRowType EqDB = MapResultRow
     noConnectionDBStmtExec (EqDB _) (_, Query (FAtomic (Atom _ [a, b])), _) stream = do
@@ -203,15 +210,16 @@ data UtilsDB = UtilsDB String
 pattern SleepPred ns = Pred (QPredName ns [] "sleep") (PredType ObjectPred [Key "Number"])
 
 instance IDatabase0 UtilsDB where
-    type DBQueryType UtilsDB = (Set Var, Query, Set Var)
     getName (UtilsDB name) = name
     getPreds db = [ SleepPred (getName db)]
     determinateVars _ _ _ = bottom
     supported _ (FAtomic (Atom (SleepPred _) [_])) _ = True
     supported _ _ _ = False
+instance IDatabase1 UtilsDB where
+    type DBQueryType UtilsDB = (Set Var, Query, Set Var)
     translateQuery _ vars qu vars2 = (vars, qu, vars2)
 
-instance INoConnectionDatabase1 UtilsDB where
+instance INoConnectionDatabase2 UtilsDB where
     type NoConnectionQueryType UtilsDB = (Set Var, Query, Set Var)
     type NoConnectionRowType UtilsDB = MapResultRow
     noConnectionDBStmtExec (UtilsDB _) (_, Query (FAtomic (Atom (SleepPred _) [qu])), _) stream = do

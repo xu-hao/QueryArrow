@@ -1,20 +1,9 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, GADTs, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
 module DB.ParametrizedStatement where
 
 import DB.DB
-import DB.ResultStream
-import FO.Data
-import FO.Domain
 
-import Prelude hiding (lookup, foldl)
-import Control.Monad.IO.Class (liftIO)
-import Data.Map.Strict (Map, (!), singleton, lookup)
 import Data.Convertible
-import qualified Data.Map as M
-import Control.Monad.Trans.Resource
-import Data.Set (Set, toAscList)
-import qualified Data.Set as Set
-import Data.Typeable
 
 -- interface
 class (Convertible (PSRowType stmt) (ParameterType stmt)) => IPSDBStatement stmt where

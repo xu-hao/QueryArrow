@@ -3,31 +3,15 @@ module DB.DB where
 
 import DB.ResultStream
 import FO.Data
-import FO.Domain
-import ListUtils
-import Algebra.SemiBoundedLattice
 
 import Prelude  hiding (lookup, null)
 import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete, singleton)
-import Data.List (intercalate, find, elem, union, intersect, sortBy)
-import qualified Data.List as List
 import Control.Monad.Except
-import Control.Applicative ((<|>))
 import Data.Convertible.Base
 import Data.Maybe
-import Data.Monoid  ((<>))
-import Data.Tree
-import Data.Conduit
-import Control.Monad.Trans.Control
-import Control.Concurrent.Async.Lifted
 import Control.Monad.Trans.Resource
 import qualified Data.Text as T
-import System.Log.Logger
-import Algebra.Lattice
 import Data.Set (Set, fromList, toAscList, null, isSubsetOf, member)
-import Data.Ord (comparing, Down(..))
-import Data.Dynamic
-import Data.Typeable
 
 -- result value
 data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show)
@@ -128,22 +112,24 @@ instance IDBConnection0 (AbstractDBConnection row) where
 
 -- database
 class IDatabase0 db where
-    type DBQueryType db
     getName :: db -> String
     getPreds :: db -> [Pred]
     -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
     determinateVars :: db -> Set Var -> Atom -> Set Var
     supported :: db -> Formula -> Set Var -> Bool
+
+class IDatabase1 db where
+    type DBQueryType db
     translateQuery :: db -> Set Var -> Query -> Set Var -> DBQueryType db
 
-class (IDBConnection (ConnectionType db)) => IDatabase1 db where
-    type ConnectionType db
+class (IDBConnection (ConnectionType db)) => IDatabase2 db where
+    data ConnectionType db
     dbOpen :: db -> IO (ConnectionType db)
 
-class (IDatabase0 db, IDatabase1 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db where
+class (IDatabase0 db, IDatabase1 db, IDatabase2 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db where
 
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data AbstractDatabase row = forall db conn stmt query. (IDatabase db, row ~ RowType (StatementType (ConnectionType db))) => AbstractDatabase { unAbstractDatabase :: db }
+data AbstractDatabase row = forall db. (IDatabase db, row ~ RowType (StatementType (ConnectionType db))) => AbstractDatabase { unAbstractDatabase :: db }
 
 instance IDatabase0 (AbstractDatabase row) where
     getName (AbstractDatabase db) = getName db
@@ -153,6 +139,10 @@ instance IDatabase0 (AbstractDatabase row) where
 
 doQuery :: (IDatabase db) => db -> Set Var -> Query -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQuery db vars2 qu vars rs =
-        bracketPStream (dbOpen db) (\conn -> dbClose conn) (\conn -> do
+        bracketPStream (dbOpen db) dbClose (\conn -> do
             stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
             dbStmtExec stmt rs)
+
+newtype ConnectionTypeIso db = ConnectionTypeIso (ConnectionType db)
+newtype QueryTypeIso conn = QueryTypeIso (QueryType conn)
+newtype DBQueryTypeIso db = DBQueryTypeIso (DBQueryType db)

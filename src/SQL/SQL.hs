@@ -862,7 +862,7 @@ summarizeF trans form = pureOrExecF trans form
 
 
 
-instance IGenericDatabase0 SQLTrans where
+instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], String, [Var])
     gTranslateQuery trans ret query env =
         let (SQLTrans  builtin predtablemap _) = trans

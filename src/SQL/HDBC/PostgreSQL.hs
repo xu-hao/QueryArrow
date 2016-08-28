@@ -16,7 +16,7 @@ import Database.HDBC.PostgreSQL
 
 newtype PostgreSQLDB = PostgreSQLDB ICATDBConnInfo
 
-instance IDatabase1 (GenericDatabase  SQLTrans PostgreSQLDB) where
+instance IDatabase2 (GenericDatabase  SQLTrans PostgreSQLDB) where
     type ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB) = HDBCDBConnection
     dbOpen (GenericDatabase  _ (PostgreSQLDB ps) _ _) = do
         conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_name ps++" user="++db_username ps++" password="++db_password ps)
