@@ -2,6 +2,7 @@
 module Data.Heterogeneous.List where
 
 import Data.Constraint
+import Data.Functor.Compose
 {- a simplified version of hlist -}
 
 data HList (l :: [*]) where
@@ -35,8 +36,6 @@ hCoerceLL c (HCons' e l) = HCons (c e) (hCoerceLL c l)
 hCoerceVV :: forall (f :: * -> *) (l :: [*]). (forall a . f a -> a) -> HVariant' f l -> HVariant l
 hCoerceVV c (HLeft' e) = HLeft (c e)
 hCoerceVV c (HRight' l) = HRight (hCoerceVV c l)
-
-newtype Compose f g a = Compose (f (g a))
 
 hComposeCoerceLL' :: HList' (Compose f g) l -> HList' f (HMap g l)
 hComposeCoerceLL' HNil' = HNil'
