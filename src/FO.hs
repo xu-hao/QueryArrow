@@ -155,7 +155,7 @@ getRewriting predmap ps = do
         Right ((qr, ir, dr), predmap, exports) ->
             return ((qr, ir, dr), predmap, exports)
 
-dbMap :: Map String (ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow])
+dbMap :: Map String (ICATDBConnInfo -> IO [AbstractDatabase MapResultRow])
 dbMap = fromList [
     ("SQL/HDBC/PostgreSQL", PostgreSQL.getDB),
     ("SQL/HDBC/CockroachDB", CockroachDB.getDB),
@@ -166,15 +166,27 @@ dbMap = fromList [
     ("ElasticSearch/ElasticSearch", ElasticSearch.getDB)
     ];
 
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+getDB :: ICATDBConnInfo -> IO [AbstractDatabase MapResultRow]
 getDB ps = case lookup (catalog_database_type ps) dbMap of
     Just getDBFunc -> getDBFunc ps
     Nothing -> error ("unimplemented database type " ++ (catalog_database_type ps))
 
+data AbstractDBList row where
+    AbstractDBList :: (IDatabaseUniformRow row l) => HList l -> AbstractDBList row
+
+getDBs :: TranslationInfo -> IO AbstractDBList
+getDBs transinfo =
+    getDBs2 (db_plugins transinfo) where
+      getDBs2 [] = return (AbstractDBList HNil)
+      getDBs2 (DBTrans ps : l) = do
+          (AbstractDatabase db) <- getDB ps
+          (AbstractDBList dbs) <- getDBs l
+          return (AbstractDBList (HCons db dbs))
+
 
 transDB :: String -> TranslationInfo -> IO (TransDB DBAdapterMonad MapResultRow)
 transDB name transinfo = do
-    dbs <- concat <$> mapM (\(DBTrans ps) -> getDB ps) (db_plugins transinfo)
+    dbs <- getDBs transinfo
     let sumdb = SumDB "sum" dbs
     let predmap0 = constructDBPredMap (Database sumdb)
     -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()

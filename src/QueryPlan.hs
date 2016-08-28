@@ -518,6 +518,8 @@ prepareTransaction rdbxs qp@(_, QPZero2) =  (rdbxs, qp)
 prepareTransaction rdbxs (qpd, QPAggregate2 agg qp1) =
     let (dbxs, qp1') = prepareTransaction rdbxs qp1 in
         (dbxs, (qpd, QPAggregate2 agg qp1'))
+prepareTransaction rdbxs qp@(qpd, QPTransaction2 _) =
+    (rdbxs, (qpd, QPTransaction2 rdbxs))
 prepareTransaction rdbxs qp@(_, QPReturn2 _) =  (rdbxs, qp)
 
 translateQueryPlan :: (HMapConstraint IDatabase l) => HList l -> QueryPlan2 -> QueryPlanT l
@@ -548,6 +550,7 @@ translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) =
     let qp1' = translateQueryPlan dbs  qp1 in
         QPAggregateT (combinedvs qpd) agg qp1'
 translateQueryPlan _ qp@(_, QPReturn2 vars) = QPReturnT vars
+translateQueryPlan dbs qp@(_, QPTransaction2 dbxs) = QPTransactionT dbxs
 
 hDbOpen :: (HMapConstraint IDatabase l) => HList l -> IO (HList' ConnectionType l)
 hDbOpen dbs =
@@ -555,13 +558,13 @@ hDbOpen dbs =
         dbo db = dbOpen db in
         hMapACULL @IDatabase @ConnectionType dbo dbs
 
-class (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDBConnectionUniformRow row conn where
+class (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDatabaseUniformRow row conn where
 
-prepareQueryPlan :: forall (row :: *) (l :: [*]). (IResultRow row, HMapConstraint (IDBConnectionUniformRow row) l) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlan3 row )
+prepareQueryPlan :: forall (row :: *) (l :: [*]). (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlan3 row )
 prepareQueryPlan conns (ExecT combinedvs qu stmtshow) = do
-            let pq :: (IDBConnectionUniformRow row conn) => ConnectionType conn -> DBQueryTypeIso conn -> IO (AbstractDBStatement row)
+            let pq :: (IDatabaseUniformRow row conn) => ConnectionType conn -> DBQueryTypeIso conn -> IO (AbstractDBStatement row)
                 pq conn (DBQueryTypeIso qu) = AbstractDBStatement <$> prepareQuery conn qu
-            stmt <- hApply2CULV' @(IDBConnectionUniformRow row) @ConnectionType @DBQueryTypeIso pq conns qu
+            stmt <- hApply2CULV' @(IDatabaseUniformRow row) @ConnectionType @DBQueryTypeIso pq conns qu
             return (Exec3 combinedvs stmt stmtshow)
 prepareQueryPlan dbs  (QPChoiceT qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1
@@ -581,6 +584,8 @@ prepareQueryPlan dbs  (QPAggregateT combinedvs agg qp1) = do
     qp1' <- prepareQueryPlan dbs  qp1
     return (QPAggregate3 combinedvs agg qp1')
 prepareQueryPlan _ (QPReturnT vars) = return (QPReturn3 vars)
+prepareQueryPlan dbs (QPTransactionT dbxs) =
+    return (QPTransaction3 dbxs)
 
 addCleanupRS :: Monad m => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
@@ -614,33 +619,33 @@ execQueryPlan conns rs (QPPar3 qp1 qp2) = do
     (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
     listResultStream rs1' <|> listResultStream rs2'
 
--- execQueryPlan conns rs (QPTransaction3 dbs) = do
---     let (begin, prepare, commit, rollback) =
---                 (mapM_ (\db -> dbBegin (conns !! db)) dbs,
---                 mapM (\db -> dbPrepare (conns !! db)) dbs,
---                 mapM (\db -> dbCommit (conns !! db)) dbs,
---                 mapM_ (\db -> dbRollback (conns !! db)) dbs)
---     row <- rs
---     let commitCleanup = do
---             b' <- prepare
---             if and b'
---                 then do
---                     b'' <- commit
---                     if and b''
---                         then return ()
---                         else do
---                             rollback
---                             liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
---                 else do
---                     rollback
---                     liftIO $ errorM "QA" ("execQueryPlan: prepare failed rollback " ++ show b')
---     let rollbackCleanup = do
---             rollback
---             liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")
---     liftIO begin
---     ResultStream (do
---         yieldOr row (liftIO rollbackCleanup)
---         liftIO commitCleanup)
+execQueryPlan conns rs (QPTransaction3 dbs) = do
+    let (begin, prepare, commit, rollback) =
+                (mapM_ (\db -> dbBegin (conns !! db)) dbs,
+                mapM (\db -> dbPrepare (conns !! db)) dbs,
+                mapM (\db -> dbCommit (conns !! db)) dbs,
+                mapM_ (\db -> dbRollback (conns !! db)) dbs)
+    row <- rs
+    let commitCleanup = do
+            b' <- prepare
+            if and b'
+                then do
+                    b'' <- commit
+                    if and b''
+                        then return ()
+                        else do
+                            rollback
+                            liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
+                else do
+                    rollback
+                    liftIO $ errorM "QA" ("execQueryPlan: prepare failed rollback " ++ show b')
+    let rollbackCleanup = do
+            rollback
+            liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")
+    liftIO begin
+    ResultStream (do
+        yieldOr row (liftIO rollbackCleanup)
+        liftIO commitCleanup)
 
 execQueryPlan conns r QPOne3 = r
 execQueryPlan conns rs (QPReturn3 vars) = rs
