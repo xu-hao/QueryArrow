@@ -1,28 +1,38 @@
-{-# LANGUAGE GADTs, TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, FlexibleInstances #-}
 module SQL.HDBC.Sqlite3 where
 
 import DB.GenericDatabase
+import DB.DB
 import Config
-import QueryPlan
-import FO.Data
 import SQL.HDBC
-import Database.HDBC
-import ICAT
+import SQL.SQL
 import SQL.ICAT
-import Control.Monad.IO.Class
 
 import Database.HDBC.Sqlite3
 
-instance HDBCConnection Connection where
-        showSQLQuery _ (vars, query, params) = serialize query
-        hdbcCommit conn = do
-            liftIO $ commit conn
-            return True
-        hdbcPrepare conn = return True
-        hdbcRollback conn = liftIO $ rollback conn
+newtype SQLiteDB = SQLiteDB ICATDBConnInfo
 
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+instance IDatabase2 (GenericDatabase  SQLTrans SQLiteDB) where
+    newtype ConnectionType (GenericDatabase  SQLTrans SQLiteDB) = SQLite HDBCDBConnection
+    dbOpen (GenericDatabase  _ (SQLiteDB ps) _ _) = do
+        conn <- connectSqlite3 (db_name ps)
+        return (SQLite (HDBCDBConnection conn))
+
+instance IDBConnection0 (ConnectionType (GenericDatabase  SQLTrans SQLiteDB)) where
+    dbBegin (SQLite conn) = dbBegin conn
+    dbPrepare (SQLite conn) = dbPrepare conn
+    dbRollback (SQLite conn) = dbRollback conn
+    dbCommit (SQLite conn) = dbCommit conn
+    dbClose (SQLite conn) = dbClose conn
+
+instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans SQLiteDB)) where
+    type QueryType (ConnectionType (GenericDatabase  SQLTrans SQLiteDB)) = QueryType HDBCDBConnection
+    type StatementType (ConnectionType (GenericDatabase  SQLTrans SQLiteDB)) = StatementType HDBCDBConnection
+    prepareQuery (SQLite conn) = prepareQuery conn
+
+instance IDatabase (GenericDatabase  SQLTrans SQLiteDB)
+
+getDB :: ICATDBConnInfo -> IO [AbstractDatabase MapResultRow]
 getDB ps = do
-    conn <- connectSqlite3 (db_name ps)
-    let db = makeICATSQLDBAdapter (db_name ps) conn
-    return [Database db]
+    let db = makeICATSQLDBAdapter (db_namespace ps) Nothing (SQLiteDB ps)
+    return [AbstractDatabase db]

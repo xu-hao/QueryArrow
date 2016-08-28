@@ -12,9 +12,7 @@ class INoConnectionDatabase2 db where
 
 -- instance for IDatabase
 
-newtype NoConnectionDatabase db = NoConnectionDatabase db
-
-instance (IDatabase0 db) => (IDatabase0 (NoConnectionDatabase db)) where
+newtype NoConnectionDatabase db = NoConnectionDatabase db deriving IDatabase0 db) => (IDatabase0 (NoConnectionDatabase db)) where
     getName (NoConnectionDatabase db) = getName db
     getPreds (NoConnectionDatabase db) = getPreds db
     determinateVars (NoConnectionDatabase db) = determinateVars db

@@ -9,11 +9,17 @@ import DB.DB
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, alter, lookup)
+import qualified Data.Map.Strict as M
 import Data.List ((\\), intercalate, transpose)
+import Data.Convertible
 import Control.Monad.Catch
 
 import Data.Namespace.Path
 import Data.Namespace.Namespace
+
+instance Convertible MapResultRow (Map Var Expr) where
+    safeConvert = Right . M.map convert
+
 
 intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
 intResultStream i = return (insert (Var "i") (IntValue i) empty)

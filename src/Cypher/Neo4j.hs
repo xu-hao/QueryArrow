@@ -2,15 +2,12 @@
 module Cypher.Neo4j where
 
 import Config
-import QueryPlan
-import DB.GenericDatabase
-import ICAT
+import DB.DB
 import Cypher.ICAT
 
 -- db
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+getDB :: ICATDBConnInfo -> IO [AbstractDatabase MapResultRow]
 getDB ps = do
-    conn <- return (db_host ps, db_port ps, db_username ps, db_password ps)
-    let db = makeICATCypherDBAdapter (db_name ps !! 0) conn
-    case db of
-      GenericDB _ _ _ trans -> return [Database db]
+    let conn = (db_host ps, db_port ps, db_username ps, db_password ps)
+    let db = makeICATCypherDBAdapter (db_name ps) conn
+    return [AbstractDatabase db]

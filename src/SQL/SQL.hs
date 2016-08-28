@@ -2,7 +2,6 @@
 module SQL.SQL where
 
 import FO.Data hiding (Subst, subst)
-import FO.Domain
 import DB.GenericDatabase
 import ListUtils
 import Utils
@@ -15,16 +14,13 @@ import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, alter, toList, elems, size, delete)
 import Data.Monoid
 import Data.Maybe
-import Control.Monad.Trans.Except
 import Debug.Trace
-import Data.Convertible
 import qualified Data.Text as T
 import Data.Set (toAscList)
 import qualified Data.Set as Set
 import Algebra.Lattice
 import Algebra.Lattice.Dropped
 import Algebra.Lattice.Ordered
-import Algebra.SemiBoundedLattice
 
 type Col = String
 type TableName = String

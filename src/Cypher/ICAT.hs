@@ -5,14 +5,12 @@ import FO.Data
 import Cypher.Neo4jConnection
 import Cypher.Cypher
 import Cypher.SQLToCypher
-import Utils
 import DB.GenericDatabase
+import DB.NoConnection
 import ICAT
 import SQL.ICAT
 
-import qualified Data.Text as T
 import Prelude hiding (lookup)
-import Control.Applicative ((<$>),(<*>))
 import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)
 
 import Data.Namespace.Namespace
@@ -75,5 +73,5 @@ cypherTrans ns = CypherTrans (cypherBuiltIn ns)  ["DATA_OBJ", "COLL_OBJ", "META_
         ] -}
 
 
-makeICATCypherDBAdapter :: String -> Neo4jConnection -> GenericDB   Neo4jConnection CypherTrans
-makeICATCypherDBAdapter ns conn = GenericDB conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns) (cypherTrans ns)
+makeICATCypherDBAdapter :: String -> Neo4jDatabase -> NoConnectionDatabase (GenericDatabase CypherTrans Neo4jDatabase  )
+makeICATCypherDBAdapter ns conn = NoConnectionDatabase (GenericDatabase  (cypherTrans ns) conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns))

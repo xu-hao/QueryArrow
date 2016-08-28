@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, TypeFamilies #-}
 module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
     CypherMapping, translateQueryToCypher,
     CypherCond(..), CypherQuery(..), GraphPattern(..), NodePattern(..), PropertyKey(..), Cypher(..), cypherVarExprMap, CypherVarExprMap(..),
@@ -6,11 +6,9 @@ module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cwhere, creturn) where
 
-import FO.Data hiding (getConjuncts, getDisjuncts, Subst, subst, instantiate, conj, disj, Unify,unify)
-import qualified FO.Data as FO
-import FO.Domain
+import FO.Data hiding (Subst, subst, Unify,unify)
 import DB.GenericDatabase
-import QueryPlan
+import DB.DB
 import ListUtils
 
 import Prelude hiding (lookup)
@@ -26,11 +24,9 @@ import Data.Maybe
 import Control.Applicative ((<$>))
 import Control.Monad.Trans.Class
 import qualified Data.Text as T
-import System.Log.Logger
 import Data.Set (toAscList)
 import qualified Data.Set as Set
 import Algebra.Lattice
-import Algebra.SemiBoundedLattice
 
 -- basic definitions
 
@@ -694,8 +690,9 @@ translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
 translateableCypher trans (Aggregate _ _)  = lift $ Nothing
 
-instance ExtractDomainSize CypherTrans where
-    extractDomainSize trans varDomainSize (Atom name args) =
+instance IGenericDatabase01 CypherTrans where
+    type GDBQueryType CypherTrans = CypherQuery
+    gDeterminateVars trans varDomainSize (Atom name args) =
         (if isBuiltIn
             then bottom
             else if name `member` predtablemap
@@ -706,12 +703,10 @@ instance ExtractDomainSize CypherTrans where
                     isBuiltIn = name `member` builtin
                     (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
-instance Translate CypherTrans MapResultRow where
-    translateQueryWithParams trans vars query env =
-        let (CypherTrans builtin _ predtablemap) = trans
-            sql = runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap)) in
-            (True, toAscList vars, show sql,  toAscList env)
-    translateable trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
+    gTranslateQuery trans vars query env =
+        let (CypherTrans builtin _ predtablemap) = trans in
+            runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap))
+    gSupported trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

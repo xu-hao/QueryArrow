@@ -8,6 +8,7 @@ import DB.DB
 import DB.GenericDatabase
 import DB.ResultStream
 import FO.Data
+import Utils
 
 import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
@@ -33,9 +34,6 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         SqlString _ -> StringValue (fromSql sqlvalue)
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
-
-instance Convertible MapResultRow (Map Var Expr) where
-    safeConvert = Right . M.map convert
 
 instance IPSDBStatement HDBCStatement where
         type ParameterType HDBCStatement = Map Var Expr
