@@ -1,19 +1,15 @@
-{-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 module SQL.ICAT where
 
 import Prelude hiding (lookup)
-import DB.DB
 import DB.GenericDatabase
 import FO.Data
 import SQL.SQL
-import DB.ParametrizedStatement
 import ICAT
 import SQL.ICATGen
 import Data.Namespace.Namespace
-import Config
 
-import Data.Map.Strict (empty, fromList, insert, lookup)
-import qualified Data.Text as T
+import Data.Map.Strict (fromList)
 
 
 makeICATSQLDBAdapter :: String -> Maybe String -> a -> GenericDatabase  SQLTrans a

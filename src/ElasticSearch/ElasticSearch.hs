@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
-
 module ElasticSearch.ElasticSearch where
 
 -- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152

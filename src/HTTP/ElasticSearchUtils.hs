@@ -7,11 +7,9 @@ import Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as B8
 import Data.Aeson
-import Control.Applicative
-import Control.Monad.Trans
 
 get::(MonadIO m) => String -> m BL.ByteString
-get url = simpleHttp $ url
+get url = simpleHttp url
 
 
 -- http://stackoverflow.com/questions/33983629/basic-way-of-sending-http-post-in-haskell-using-http-conduit

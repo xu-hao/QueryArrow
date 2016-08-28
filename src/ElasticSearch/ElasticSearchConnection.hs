@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, TypeFamilies #-}
 
 module ElasticSearch.ElasticSearchConnection where
 
