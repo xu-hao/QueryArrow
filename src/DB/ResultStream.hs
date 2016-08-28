@@ -1,5 +1,5 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
-   RankNTypes, FlexibleContexts, GADTs #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances,
+   RankNTypes, FlexibleContexts #-}
 module DB.ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream, closeResultStream,
     resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, mapResultStream, IResultRow(..), resultStream2, bracketPStream)
     where
@@ -28,20 +28,20 @@ listResultStream results  = ResultStream (yieldMany results)
 
 depleteResultStream :: (Monad m) => ResultStream m row -> m ()
 depleteResultStream (ResultStream rs) =
-    (runConduit (rs =$ sinkNull))
+    runConduit (rs =$ sinkNull)
 
 closeResultStream :: (Monad m) => ResultStream m row -> ResultStream m row
 closeResultStream (ResultStream rs) =
     ResultStream (rs =$ sinkNull)
 
-getAllResultsInStream :: (Monad m, Show row) => ResultStream m row -> m [row]
+getAllResultsInStream :: (Monad m) => ResultStream m row -> m [row]
 getAllResultsInStream (ResultStream stream) =
-    (runConduit (stream =$ sinkList))
+    runConduit (stream =$ sinkList)
 
 takeResultStream :: (Monad m) => Int -> ResultStream m row -> ResultStream m row
 takeResultStream n (ResultStream stream) = ResultStream (stream =$= take n)
 
-resultStreamTake :: (Monad m, Show row) => Int -> ResultStream m row -> m [row]
+resultStreamTake :: (Monad m) => Int -> ResultStream m row -> m [row]
 resultStreamTake n =
     getAllResultsInStream . takeResultStream n
 
@@ -50,10 +50,10 @@ emptyResultStream :: (Monad m) => ResultStream m a
 emptyResultStream = listResultStream []
 
 isResultStreamEmpty :: (Monad m) => ResultStream m a -> m Bool
-isResultStreamEmpty (ResultStream rs) = (runConduit (rs =$ null))
+isResultStreamEmpty (ResultStream rs) = runConduit (rs =$ null)
 
-eos :: (Monad m, Show a) => ResultStream m a -> ResultStream m Bool
-eos stream = ResultStream (replicateM 1 ((isResultStreamEmpty stream)))
+eos :: (Monad m) => ResultStream m a -> ResultStream m Bool
+eos stream = ResultStream (replicateM 1 (isResultStreamEmpty stream))
 
 instance MonadTrans ResultStream where
     lift f = ResultStream (replicateM 1 f)
@@ -77,10 +77,10 @@ instance (Monad m) => Alternative (ResultStream m) where
 transformResultStream :: (Monad m, IResultRow row) => Set Var -> ResultStream m row -> ResultStream m row
 transformResultStream vars1 (ResultStream rs) = ResultStream (rs =$= map (transform vars1))
 
-filterResultStream :: (Monad m, IResultRow row) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
+filterResultStream :: (Monad m) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
 filterResultStream (ResultStream rs) p = ResultStream (rs =$= filterM p)
 
-mapResultStream :: (Monad m, IResultRow row) => ResultStream m row -> (row -> m row) -> ResultStream m row
+mapResultStream :: (Monad m) => ResultStream m row -> (row -> m row) -> ResultStream m row
 mapResultStream (ResultStream rs) p = ResultStream (rs =$= mapM p)
 
 instance (MonadIO m) => MonadIO (ResultStream m) where

@@ -1,10 +1,6 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 module ElasticSearch.Record where
 
-import QueryPlan
-
-import Data.Aeson (parseJSON, toJSON, Object, FromJSON, ToJSON, Value)
+import Data.Aeson (parseJSON, toJSON, FromJSON, ToJSON, Value)
 import Data.Map.Strict (Map, union, delete)
 import Data.Text (Text)
 import Control.Applicative ((<$>))

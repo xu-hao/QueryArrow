@@ -5,25 +5,20 @@ module ElasticSearch.ElasticSearchConnection where
 -- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
 
 import Prelude hiding (lookup)
-import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Map.Strict (Map, fromList, empty, foldrWithKey, insert, lookup)
-import Data.Text (unpack, pack, Text)
-import Data.Char (toLower)
+import Data.Text (unpack, Text)
 import Data.Convertible
 import Data.Scientific (toBoundedInteger)
 import Data.Aeson (Value (String, Number))
-import Control.Monad (zipWithM_)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Applicative ((<|>))
-import Data.Set (unions, singleton)
-import Algebra.Lattice
-import Algebra.SemiBoundedLattice
 
-import FO.Domain
 import FO.Data
 import DB.DB
+import DB.GenericDatabase
+import DB.NoConnection
 import DB.ResultStream
-import Config
+import Utils ()
 
 import ElasticSearch.Record
 import qualified ElasticSearch.Query as ESQ
@@ -31,13 +26,52 @@ import ElasticSearch.QueryResult
 import ElasticSearch.QueryResultHits
 import ElasticSearch.ESQL
 
-type ElasticSearchConnection = ESQ.ElasticSearchConnInfo
-data ElasticSearchStatement = ElasticSearchStatement ElasticSearchConnection ElasticSearchQuery
 type ElasticSearchDB = ESQ.ElasticSearchConnInfo
 
-instance GenericDatabase ElasticSearchDB where
-    type GenericDatabaseConnectionType ElasticSearchDB = ElasticSearchConnection
-    gdbOpen db = return db
+instance INoConnectionDatabase2 (GenericDatabase ESTrans ElasticSearchDB) where
+    type NoConnectionQueryType (GenericDatabase ESTrans ElasticSearchDB) = (ElasticSearchQuery, [Var])
+    type NoConnectionRowType (GenericDatabase ESTrans ElasticSearchDB) = MapResultRow
+    noConnectionDBStmtExec (GenericDatabase _ db _ _) (qu, vars) rs = do
+      row <- rs
+      execWithParams db qu (convert row)
+
+execWithParams :: ElasticSearchDB -> ElasticSearchQuery -> Map Var Expr -> DBResultStream MapResultRow
+execWithParams esci (ElasticSearchQuery type0 rec) args = do
+    hit <- esResultStream esci type0 rec args
+    return (convertHitToMapResultRow type0 rec hit)
+
+execWithParams esci (ElasticSearchInsert type0 rec) args =
+    let esquery =
+            ESRecord
+                (fromList (foldrWithKey (\key val list -> extractInsertItem key val args : list) [] rec)) in
+        resultStream2 (do
+            _ <- ESQ.postESRecord esci type0 esquery
+            return [mempty]
+            ) (return ())
+
+execWithParams esci (ElasticSearchDelete type0 rec) args = (do
+    hit <- esResultStream esci type0 rec args
+    _ <- liftIO $ ESQ.deleteById esci type0 (_id hit)
+    emptyResultStream) <|> return mempty
+
+execWithParams esci (ElasticSearchUpdateProperty type0 rec updaterec) args = (do
+    hit <- esResultStream esci type0 rec args
+    let rec = _source hit
+        id0 = _id hit
+        updatedrec = updateProps (recordToESRecord updaterec args) rec
+    _ <- liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
+    emptyResultStream
+    ) <|> return mempty
+
+execWithParams esci (ElasticSearchDeleteProperty type0 rec diff) args = (do
+    hit <- esResultStream esci type0 rec args
+    let rec = _source hit
+        id0 = _id hit
+        updatedrec = deleteProps diff rec
+    _ <- liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
+    emptyResultStream
+    ) <|> return mempty
+
 
 convertExprToString :: Expr -> String
 convertExprToString (IntExpr i) = show i
@@ -123,57 +157,5 @@ esResultStream esci type0 rec args = do
                         Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> return hits1
                 case rows of
                     [] -> emptyResultStream
-                    _ -> do
-                        listResultStream rows <|> getrs (off + lim) lim
+                    _ -> listResultStream rows <|> getrs (off + lim) lim
         getrs 0 page
-
-instance PreparedStatement ElasticSearchStatement where
-    execWithParams (ElasticSearchStatement esci qu@(ElasticSearchQuery type0 rec)) args = do
-        hit <- esResultStream esci type0 rec args
-        return (convertHitToMapResultRow type0 rec hit)
-
-    execWithParams (ElasticSearchStatement esci (ElasticSearchInsert type0 rec)) args =
-        let esquery =
-                ESRecord
-                    (fromList (foldrWithKey (\key val list -> extractInsertItem key val args : list) [] rec)) in
-            resultStream2 (do
-                _ <- ESQ.postESRecord esci type0 esquery
-                return [mempty]
-                ) (return ())
-
-    execWithParams (ElasticSearchStatement esci (ElasticSearchDelete type0 rec)) args = (do
-        hit <- esResultStream esci type0 rec args
-        liftIO $ ESQ.deleteById esci type0 (_id hit)
-        emptyResultStream) <|> return mempty
-
-    execWithParams (ElasticSearchStatement esci (ElasticSearchUpdateProperty type0 rec updaterec)) args = (do
-        hit <- esResultStream esci type0 rec args
-        let rec = _source hit
-            id0 = _id hit
-            updatedrec = updateProps (recordToESRecord updaterec args) rec
-        liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
-        emptyResultStream
-        ) <|> return mempty
-
-    execWithParams (ElasticSearchStatement esci (ElasticSearchDeleteProperty type0 rec diff)) args = (do
-        hit <- esResultStream esci type0 rec args
-        let rec = _source hit
-            id0 = _id hit
-            updatedrec = deleteProps diff rec
-        liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
-        emptyResultStream
-        ) <|> return mempty
-
-    closePreparedStatement _ = return ()
-
-instance DBConnection0 ElasticSearchConnection  where
-        dbClose _ = return ()
-        dbCommit _ = return True
-        dbPrepare _ = return True
-        dbRollback _ = return ()
-        dbBegin _ = return ()
-
-instance DBConnection ElasticSearchConnection  where
-        type QueryType ElasticSearchConnection = ElasticSearchQuery
-        type StatementType ElasticSearchConnection = PreparedDBStatement ElasticSearchStatement
-        prepareQuery conn _ query _ = return (PreparedDBStatement (ElasticSearchStatement conn query))

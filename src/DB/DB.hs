@@ -5,13 +5,13 @@ import DB.ResultStream
 import FO.Data
 
 import Prelude  hiding (lookup, null)
-import Data.Map.Strict (Map, empty, insert, lookup, intersectionWith, delete, singleton)
+import Data.Map.Strict (Map, empty, insert, lookup, singleton)
 import Control.Monad.Except
 import Data.Convertible.Base
 import Data.Maybe
 import Control.Monad.Trans.Resource
 import qualified Data.Text as T
-import Data.Set (Set, fromList, toAscList, null, isSubsetOf, member)
+import Data.Set (Set)
 
 -- result value
 data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show)

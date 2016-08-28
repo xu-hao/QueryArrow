@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
 
 module ElasticSearch.ElasticSearch where
 
@@ -29,8 +29,7 @@ import ElasticSearch.ICAT
 
 import Debug.Trace
 
-getDB :: ICATDBConnInfo -> IO [Database DBAdapterMonad MapResultRow]
+getDB :: ICATDBConnInfo -> IO [AbstractDatabase MapResultRow]
 getDB ps = do
-    let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_path ps !! 0))
-    let db = makeElasticSearchDBAdapter (db_name ps !! 0) conn
-    return [Database db]
+    let db = makeElasticSearchDBAdapter (db_namespace ps) conn
+    return [AbstractDatabase db]

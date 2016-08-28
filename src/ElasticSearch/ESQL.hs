@@ -1,31 +1,18 @@
-{-# LANGUAGE DeriveGeneric, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeFamilies #-}
 
 module ElasticSearch.ESQL where
 
 -- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
 
 import Prelude hiding (lookup)
-import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Map.Strict (lookup, fromList, Map)
-import Data.Text (unpack, pack, Text)
-import Data.Char (toLower)
-import Data.Convertible
-import Data.Scientific (toBoundedInteger)
-import Data.Aeson (Value (String, Number))
+import Data.Text (Text)
 import Data.Set (toAscList, unions, singleton)
 import Algebra.Lattice
 
-import FO.Domain
 import FO.Data
 import DB.GenericDatabase
 import DB.DB
-import DB.ResultStream
-import Config
-
-import ElasticSearch.Record
-import qualified ElasticSearch.Query as ESQ
-import ElasticSearch.QueryResult
-import ElasticSearch.QueryResultHits
 
 import Debug.Trace
 
@@ -101,21 +88,21 @@ translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPr
         propprops = propComponents pred0 props in
         (ElasticSearchDeleteProperty type0 (fromList (zip keyprops keyargs)) propprops, params)
 
-instance Translate ESTrans where
-    type TranslateQueryType ESTrans = (ElasticSearchQuery, [Var])
-    translateQueryWithParams trans vars (Query  (FAtomic (Atom pred1 args))) env =
+instance IGenericDatabase01 ESTrans where
+    type GDBQueryType ESTrans = (ElasticSearchQuery, [Var])
+    gTranslateQuery trans vars (Query  (FAtomic (Atom pred1 args))) env =
         translateQueryToElasticSearch trans (toAscList vars) pred1 args (toAscList env)
-    translateQueryWithParams trans vars (Query  (FInsert (Lit Pos (Atom pred1 args)))) env =
+    gTranslateQuery trans vars (Query  (FInsert (Lit Pos (Atom pred1 args)))) env =
         translateInsertToElasticSearch trans pred1 args (toAscList env)
-    translateQueryWithParams trans vars (Query  (FInsert (Lit Neg (Atom pred1 args)))) env =
+    gTranslateQuery trans vars (Query  (FInsert (Lit Neg (Atom pred1 args)))) env =
         translateDeleteToElasticSearch trans pred1 args (toAscList env)
-    translateQueryWithParams _ _ _ _ =
+    gTranslateQuery _ _ _ _ =
         error "unsupported"
 
-    translateable _ (FAtomic _) _ = True
-    translateable _ (FInsert _) _ = True
-    translateable _ _ _ = False
-    extractDomainSize _ _ (Atom _ args) =
+    gSupported _ (FAtomic _) _ = True
+    gSupported _ (FInsert _) _ = True
+    gSupported _ _ _ = False
+    gDeterminateVars _ _ (Atom _ args) =
         (unions (map (\arg -> case arg of
                 (VarExpr v) -> singleton v
                 _ -> bottom) args))

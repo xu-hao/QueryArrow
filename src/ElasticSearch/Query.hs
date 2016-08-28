@@ -7,11 +7,8 @@ module ElasticSearch.Query where
 import Network.HTTP.Conduit hiding (host, port)
 import Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Aeson
-import Control.Applicative
-import Control.Monad.Trans
 import GHC.Generics
 import ElasticSearch.Record
 import ElasticSearch.QueryResult
