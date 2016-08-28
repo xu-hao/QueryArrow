@@ -17,4 +17,4 @@ updateProps :: ESRecord -> ESRecord -> ESRecord
 updateProps (ESRecord diff) (ESRecord orig) = ESRecord (diff `union` orig)
 
 deleteProps :: [Text] -> ESRecord -> ESRecord
-deleteProps diff (ESRecord orig) = ESRecord (foldr (\prop map1 -> delete prop map1) orig diff)
+deleteProps diff (ESRecord orig) = ESRecord (foldr delete orig diff)
