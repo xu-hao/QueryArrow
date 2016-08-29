@@ -1,19 +1,19 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings #-}
 
 module Test where
-import FO hiding (validateInsert, validate)
-import qualified FO
+import Translation
 import QueryPlan
-import ResultStream
+import DB.DB
+import DB.ResultStream
 import FO.Data
 import Parser
 import SQL.SQL
-import ICAT
-import SQL.ICAT
+import qualified ICAT as ICAT
+import qualified SQL.ICAT as SQL.ICAT
 import Cypher.ICAT
 import Cypher.Cypher
 import qualified Cypher.Cypher as Cypher
-import DBQuery
+import DB.GenericDatabase
 import InMemory
 import Utils
 
@@ -115,18 +115,24 @@ runQuery dbs query2 =
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
             Right (qu2, _) -> unsafePerformIO (getAllResults2 dbs  qu2)
 -}
-parseStandardQuery ::  String -> Query
+
+standardPreds = unsafePerformIO (ICAT.loadPreds "gen/ICATGen")
+standardMappings = unsafePerformIO (SQL.ICAT.loadMappings "gen/SQL/ICATGen")
+
+sqlStandardTrans ns = SQL.ICAT.sqlStandardTrans ns standardPreds standardMappings (Just "nextid")
+
+standardPredMap = ICAT.standardPredMap standardPreds
+
+parseStandardQuery ::  String -> Formula
 parseStandardQuery query2 =
     case runParser progp (mempty, standardPredMap, mempty) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right (Left (qu2, _)) -> qu2
-            Right (Right Commit) -> error "query is commit"
-qParseStandardQuery ::  String -> String -> Query
+            Right (qu2, _) -> qu2
+qParseStandardQuery ::  String -> String -> Formula
 qParseStandardQuery ns query2 =
-    case runParser progp (mempty, qStandardPredsMap ns, mempty) "" query2 of
+    case runParser progp (mempty, ICAT.qStandardPredsMap ns standardPreds, mempty) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right (Left (qu2, _)) -> qu2
-            Right (Right Commit) -> error "query is commit"
+            Right (qu2, _) -> qu2
 {-
 parseStandardInsert :: String -> Query
 parseStandardInsert  = parseStandardQuery
@@ -205,8 +211,15 @@ test5 (LimitedMapDB db) = case db of
 testsFunc ::(Show a, Arbitrary a)=>(a-> Bool)->IO ()
 testsFunc = quickCheckWith stdArgs {maxSize = 5}
  -}
-translateQuery2 :: SQLTrans -> Set.Set Var -> Query -> SQLQuery
-translateQuery2 trans vars qu = fst (translateQueryWithParams trans vars qu Set.empty)
+translateQuery2 :: SQLTrans -> Set.Set Var -> Formula -> SQLQuery
+translateQuery2 trans vars qu = translateQuery1 trans vars qu Set.empty
+
+translateQuery1 :: SQLTrans -> Set.Set Var -> Formula -> Set.Set Var -> SQLQuery
+translateQuery1 trans vars qu env =
+  let (SQLTrans  builtin predtablemap _) = trans
+      env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
+      fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})))
+
 testTranslateSQLInsert :: String -> String -> String -> IO ()
 testTranslateSQLInsert ns qus sqls = do
   let qu = qParseStandardQuery "cat" qus
@@ -232,25 +245,25 @@ main = hspec $ do
             (v1, v2) <- return (runNew (evalStateT (do
                 v1 <- freshSQLVar "t"
                 v2 <- freshSQLVar "t"
-                return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty)))
+                return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty "nextid")))
             v1 `shouldBe` SQLVar "t"
             v2 `shouldBe` SQLVar "t0"
         it "test parse query 0" $ do
-            let (Query formula) = parseStandardQuery "DATA_NAME(x, y, z) return x y z"
+            let formula = parseStandardQuery "DATA_NAME(x, y, z) return x y z"
             formula `shouldBe`
               FSequencing
                 (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")]))
                 (FReturn [Var "x", Var "y", Var "z"])
 
         it "test parse query 1" $ do
-            let (Query formula) = parseStandardQuery "let a = count (DATA_NAME(x, y, z)) return a"
+            let formula = parseStandardQuery "let a = count (DATA_NAME(x, y, z)) return a"
             formula `shouldBe`
               FSequencing
                 (Aggregate (Summarize [(Var "a", Count)]) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
                 (FReturn [Var "a"])
 
         it "test parse query 1.1" $ do
-            let (Query formula) = parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
+            let formula = parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
             formula `shouldBe`
               FSequencing
                 (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))]) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
@@ -296,8 +309,8 @@ main = hspec $ do
             sql `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), []) -}
         it "test translate sql query with param" $ do
             let qu = qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
-            let sql = translateQueryWithParams (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y", Var "z"]) qu (Set.fromList [Var "w"])
-            (fst sql) `shouldBe` ([Var "x", Var "y", Var "z"], SQLQueryStmt (SQLQuery
+            let sql = translateQuery1 (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y", Var "z"]) qu (Set.fromList [Var "w"])
+            sql `shouldBe` ([Var "x", Var "y", Var "z"], SQLQueryStmt (SQLQuery
                     [
                         (Var "x", SQLColExpr (SQLVar "r_data_main", "data_id")),
                         (Var "y", SQLColExpr (SQLVar "r_data_main", "resc_name")),
@@ -306,13 +319,13 @@ main = hspec $ do
                     SQLTrueCond
                     []
                     top), [])
-            (snd sql) `shouldBe` []
+            (params sql) `shouldBe` []
         it "test translate sql query with param 2" $ do
             let qu = qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
-            let sql = translateQueryWithParams (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y"]) qu (Set.fromList [Var "z"])
-            ((\(x,_,_) -> x) (fst sql)) `shouldBe` [Var "x", Var "y"]
-            serialize ((\(_,x,_) -> x) (fst sql)) `shouldBe` "SELECT r_data_main.data_id AS x,r_data_main.resc_name AS y FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
-            (snd sql) `shouldBe` [Var "z"]
+            let sql = translateQuery1 (sqlStandardTrans "cat") (Set.fromList [Var "x", Var "y"]) qu (Set.fromList [Var "z"])
+            ((\(x,_,_) -> x) sql) `shouldBe` [Var "x", Var "y"]
+            serialize ((\(_,x,_) -> x) sql) `shouldBe` "SELECT r_data_main.data_id AS x,r_data_main.resc_name AS y FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
+            (params sql) `shouldBe` [Var "z"]
         it "test translate sql insert 0" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, y, \"foo\") insert cat.DATA_SIZE(x, y, 1000)" "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
         it "test translate sql insert 1" $ do
@@ -342,8 +355,8 @@ main = hspec $ do
         it "test translate sql insert 7.1" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\")" "UPDATE r_data_main SET data_name = NULL WHERE (resc_name = 'bar' AND data_name = 'foo1')"
         it "test translate sql insert 7.2" $ do
-            let qu@(Query form) = parseStandardQuery "insert ~DATA_NAME(x, \"bar\", \"foo1\") DATA_SIZE(x, \"bar\", 1000)"
-            let sql = translateable (sqlStandardTrans "") form Set.empty
+            let form = parseStandardQuery "insert ~DATA_NAME(x, \"bar\", \"foo1\") DATA_SIZE(x, \"bar\", 1000)"
+            let sql = supported (GenericDatabase (sqlStandardTrans "") () "cat" standardPreds) form Set.empty
             sql `shouldBe` False
             -- length sql `shouldBe` 2
             -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
