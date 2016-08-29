@@ -9,6 +9,7 @@ import DB.GenericDatabase
 import DB.NoConnection
 import ICAT
 import SQL.ICAT
+import SQL.SQL
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)
@@ -40,17 +41,17 @@ cypherBuiltIn ns =
                 return (cwhere (CypherCompCond "=~" ( (head args)) ( (args !! 1)) thesign)))
         ])
 
-cypherMapping :: String -> CypherPredTableMap
-cypherMapping ns = (sqlToCypher (fromList [
+cypherMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherPredTableMap
+cypherMapping ns preds mappings = (sqlToCypher (fromList [
     ("r_data_main", "DataObject"),
     ("r_coll_main", "Collection")
     ]) (fromList [
     ("data_id", "object_id"),
     ("coll_id", "object_id")
-    ]) (sqlMapping ns))
+    ]) (sqlMapping ns preds mappings))
 
-cypherTrans :: String -> CypherTrans
-cypherTrans ns = CypherTrans (cypherBuiltIn ns)  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] ((cypherMapping ns))
+cypherTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherTrans
+cypherTrans ns preds mappings = CypherTrans (cypherBuiltIn ns)  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] ((cypherMapping ns preds mappings))
 {- fromList [
         ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
         ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
@@ -73,5 +74,8 @@ cypherTrans ns = CypherTrans (cypherBuiltIn ns)  ["DATA_OBJ", "COLL_OBJ", "META_
         ] -}
 
 
-makeICATCypherDBAdapter :: String -> Neo4jDatabase -> NoConnectionDatabase (GenericDatabase CypherTrans Neo4jDatabase  )
-makeICATCypherDBAdapter ns conn = NoConnectionDatabase (GenericDatabase  (cypherTrans ns) conn ns (qStandardPreds ns ++ qStandardBuiltInPreds ns))
+makeICATCypherDBAdapter :: String -> [String] -> Neo4jDatabase -> IO (NoConnectionDatabase (GenericDatabase CypherTrans Neo4jDatabase  ))
+makeICATCypherDBAdapter ns [predsPath, mappingsPath] conn = do
+    preds <- loadPreds predsPath
+    mappings <- loadMappings mappingsPath
+    return (NoConnectionDatabase (GenericDatabase  (cypherTrans ns preds mappings) conn ns (qStandardPreds ns preds ++ qStandardBuiltInPreds ns)))

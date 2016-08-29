@@ -6,26 +6,32 @@ import DB.GenericDatabase
 import FO.Data
 import SQL.SQL
 import ICAT
-import SQL.ICATGen
 import Data.Namespace.Namespace
 
 import Data.Map.Strict (fromList)
 
 
-makeICATSQLDBAdapter :: String -> Maybe String -> a -> GenericDatabase  SQLTrans a
-makeICATSQLDBAdapter ns nextid conninfo = GenericDatabase (sqlStandardTrans ns nextid) conninfo ns (qStandardPreds ns ++ qStandardBuiltInPreds ns)
+makeICATSQLDBAdapter :: String -> [String] -> Maybe String -> a -> IO (GenericDatabase  SQLTrans a)
+makeICATSQLDBAdapter ns [predsPath, mappingsPath] nextid conninfo = do
+    preds <- loadPreds predsPath
+    mappings <- loadMappings mappingsPath
+    return (GenericDatabase (sqlStandardTrans ns preds mappings nextid) conninfo ns (qStandardPreds ns preds ++ qStandardBuiltInPreds ns))
 
+loadMappings :: FilePath -> IO [(String, (Table, [SQLQualifiedCol]))]
+loadMappings path = do
+    content <- readFile path
+    return (read content)
 
-sqlMapping :: String -> PredTableMap
-sqlMapping ns =
-    let sqlStandardPredsMap = qStandardPredsMap ns
+sqlMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> PredTableMap
+sqlMapping ns preds mappings =
+    let sqlStandardPredsMap = qStandardPredsMap ns preds
         lookupPred n = case lookupObject (QPredName ns [] n) sqlStandardPredsMap of
                 Nothing -> error ("sqlMapping: cannot find predicate " ++ n)
                 Just pred1 -> pred1 in
         fromList (map (\(n, m) -> (lookupPred n, m)) mappings)
 
-sqlStandardTrans :: String -> Maybe String -> SQLTrans
-sqlStandardTrans ns nextid =
+sqlStandardTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> Maybe String -> SQLTrans
+sqlStandardTrans ns preds mappings nextid =
     let sqlStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
         lookupPred n = case lookupObject (QPredName ns [] n) sqlStandardBuiltInPredsMap of
                 Nothing -> error ("sqlStandardTrans: cannot find predicate " ++ n)
@@ -54,4 +60,4 @@ sqlStandardTrans ns nextid =
                         Pos -> "~"
                         Neg -> "!~") (head args) (args !! 1)))))
             ]))
-            (sqlMapping ns) nextid)
+            (sqlMapping ns preds mappings) nextid)

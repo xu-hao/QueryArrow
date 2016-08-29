@@ -33,7 +33,7 @@ instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB))
 
 instance IDatabase (GenericDatabase  SQLTrans PostgreSQLDB) where
 
-getDB :: ICATDBConnInfo -> AbstractDatabase MapResultRow Formula
+getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
 getDB ps =
-    let db = makeICATSQLDBAdapter (db_namespace ps) (Just "nextid") (PostgreSQLDB ps) in
-        AbstractDatabase db
+    let db = makeICATSQLDBAdapter (db_namespace ps) (db_icat ps) (Just "nextid") (PostgreSQLDB ps) in
+        AbstractDatabase <$> db

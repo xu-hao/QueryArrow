@@ -13,8 +13,8 @@ import ElasticSearch.ICAT
 
 import Debug.Trace
 
-getDB :: ICATDBConnInfo -> AbstractDatabase MapResultRow Formula
-getDB ps =
+getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
+getDB ps = do
     let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_name ps))
-        db = makeElasticSearchDBAdapter (db_namespace ps) conn in
-        AbstractDatabase db
+    db <-  makeElasticSearchDBAdapter (db_namespace ps) (db_icat ps) conn in
+    return ()    AbstractDatabase db)

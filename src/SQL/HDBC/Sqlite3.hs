@@ -33,7 +33,7 @@ instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans SQLiteDB)) whe
 
 instance IDatabase (GenericDatabase  SQLTrans SQLiteDB)
 
-getDB :: ICATDBConnInfo -> AbstractDatabase MapResultRow Formula
+getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
 getDB ps =
-    let db = makeICATSQLDBAdapter (db_namespace ps) Nothing (SQLiteDB ps) in
-        AbstractDatabase db
+    let db = makeICATSQLDBAdapter (db_namespace ps) (db_icat ps) Nothing (SQLiteDB ps) in
+        AbstractDatabase <$> db

@@ -1,0 +1,15 @@
+{
+    "db_plugins" : [{
+        "db_info" : {
+           "db_port" : 5432,
+           "db_namespace" : "ICAT",
+           "db_name" : "ICAT",
+           "db_password" : "testpassword",
+           "db_host" : "192.168.1.2",
+           "db_username" : "irods",
+           "db_icat" : ["gen/ICATGen", "gen/SQL/ICATGen"],
+           "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+        }
+    }],
+    "rewriting_file_path" : "test/rewriting-dev.rules"
+}

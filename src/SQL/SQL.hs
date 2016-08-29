@@ -24,7 +24,7 @@ import Algebra.Lattice.Ordered
 
 type Col = String
 type TableName = String
-data Table = OneTable TableName SQLVar deriving (Eq, Ord, Show)
+data Table = OneTable TableName SQLVar deriving (Eq, Ord, Show, Read)
 
 type SQLTableList = [Table]
 
@@ -33,7 +33,7 @@ type SQLTableList = [Table]
 mergeTables :: SQLTableList -> SQLTableList -> SQLTableList
 mergeTables = union
 
-newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord, Show)
+newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord, Show, Read)
 
 type SQLQualifiedCol = (SQLVar, Col)
 

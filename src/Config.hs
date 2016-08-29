@@ -21,7 +21,8 @@ data ICATDBConnInfo = ICATDBConnInfo {
     db_name :: String,
     catalog_database_type :: String,
     db_port :: Int,
-    db_username :: String
+    db_username :: String,
+    db_icat :: [String]
 } deriving (Show, Generic)
 
 data TranslationInfo = TranslationInfo {

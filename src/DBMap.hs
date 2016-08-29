@@ -33,16 +33,17 @@ dbMap = fromList [
     ("SQL/HDBC/CockroachDB", CockroachDB.getDB),
     ("SQL/HDBC/Sqlite3", Sqlite3.getDB),
     ("Cypher/Neo4j", Neo4j.getDB),
-    ("InMemory/EqDB", \ps ->  AbstractDatabase (NoConnectionDatabase (InMemory.EqDB (db_name ps)))),
-    ("InMemory/RegexDB", \ps ->  AbstractDatabase (NoConnectionDatabase (InMemory.RegexDB (db_name ps)))),
-    ("InMemory/UtilsDB", \ps ->  AbstractDatabase (NoConnectionDatabase (InMemory.UtilsDB (db_name ps)))),
+    ("InMemory/EqDB", \ps ->  return (AbstractDatabase (NoConnectionDatabase (InMemory.EqDB (db_name ps))))),
+    ("InMemory/RegexDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.RegexDB (db_name ps))))),
+    ("InMemory/UtilsDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.UtilsDB (db_name ps))))),
     ("ElasticSearch/ElasticSearch", ElasticSearch.getDB)
     ];
 
 
 transDB :: String -> TranslationInfo -> IO (AbstractDatabase MapResultRow Formula)
-transDB name transinfo =
-    case getDBs dbMap (db_plugins transinfo) of
+transDB name transinfo = do
+    dbs <- getDBs dbMap (db_plugins transinfo)
+    case dbs of
         AbstractDBList dbs -> do
             let sumdb = SumDB "sum" dbs
             let predmap0 = constructDBPredMap sumdb

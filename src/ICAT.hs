@@ -1,11 +1,7 @@
-{-# LANGUAGE FlexibleContexts #-}
 module ICAT where
 
-import ICATGen
+import System.IO (FilePath, readFile)
 import FO.Data
-
-standardPreds :: [Pred]
-standardPreds = preds
 
 standardBuiltInPreds = [
         Pred (UQPredName "le") (PredType ObjectPred [Key "BigInt", Key "BigInt"]),
@@ -17,14 +13,19 @@ standardBuiltInPreds = [
 
 standardBuiltInPredsMap = constructPredMap standardBuiltInPreds
 
-standardPredMap = constructPredMap standardPreds
+standardPredMap standardPreds = constructPredMap standardPreds
 
-qStandardPreds :: String -> [Pred]
-qStandardPreds ns = map (setPredNamespace ns) standardPreds
+qStandardPreds :: String -> [Pred] -> [Pred]
+qStandardPreds ns standardPreds = map (setPredNamespace ns) standardPreds
 
 qStandardBuiltInPreds :: String -> [Pred]
 qStandardBuiltInPreds ns = map (setPredNamespace ns) standardBuiltInPreds
 
-qStandardPredsMap ns = constructPredMap (qStandardPreds ns)
+qStandardPredsMap ns standardPreds = constructPredMap (qStandardPreds ns standardPreds)
 
 qStandardBuiltInPredsMap ns = constructPredMap (qStandardBuiltInPreds ns)
+
+loadPreds :: FilePath -> IO [Pred]
+loadPreds path = do
+    content <- readFile path
+    return (read content)
