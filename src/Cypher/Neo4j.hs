@@ -10,5 +10,5 @@ import Cypher.ICAT
 getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
 getDB ps = do
     let conn = (db_host ps, db_port ps, db_username ps, db_password ps)
-    db <- makeICATCypherDBAdapter (db_name ps) (db_icat ps) conn in
+    db <- makeICATCypherDBAdapter (db_name ps) (db_icat ps) conn
     return (    AbstractDatabase db)
