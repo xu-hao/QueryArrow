@@ -15,6 +15,7 @@ class INoConnectionDatabase2 db where
 newtype NoConnectionDatabase db = NoConnectionDatabase db
 
 instance (IDatabase0 db) => (IDatabase0 (NoConnectionDatabase db)) where
+    type DBFormulaType (NoConnectionDatabase db) = DBFormulaType db
     getName (NoConnectionDatabase db) = getName db
     getPreds (NoConnectionDatabase db) = getPreds db
     determinateVars (NoConnectionDatabase db) = determinateVars db

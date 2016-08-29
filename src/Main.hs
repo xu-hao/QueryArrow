@@ -31,9 +31,13 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import FO
-import QueryPlan hiding (Null)
+import Translation
+import QueryPlan
 import DB.ResultStream
+import DB.DB hiding (Null)
+import Sum
+import DBMap
+import Translation
 import FO.Data
 import Parser
 import ICAT
@@ -110,11 +114,7 @@ runtcpmulti addr port ps = do
         (serverSettings port (fromString addr))
         (do
             liftIO $ infoM "QA" ("client connected")
-            tdb@(TransDB _ dbs   preds (qr, ir, dr) ) <- liftIO $ transDB "tdb" ps
-            liftIO $ mapM_ (debugM "QA" . show) qr
-            liftIO $ mapM_ (debugM "QA" . show) ir
-            liftIO $ mapM_ (debugM "QA" . show) dr
-            liftIO $ dbOpen tdb
+            tdb <- liftIO $ transDB "tdb" ps
             let worker = do
                     t0 <- liftIO $ getCurrentTime
                     req <- receiveRequest
@@ -157,53 +157,45 @@ runtcpmulti addr port ps = do
                             liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
                             worker
             worker
-            liftIO $ dbClose tdb
             liftIO $ infoM "QA" ("client connected")
             )
 
 
 run2 :: [String] -> String -> TranslationInfo -> IO ()
 run2 hdr query ps = do
-    tdb@(TransDB _ dbs preds (qr, ir, dr) ) <- transDB "tdb" ps
-    mapM_ print qr
-    mapM_ print ir
-    mapM_ print dr
-    dbOpen tdb
+    tdb <- transDB "tdb" ps
     (hdr, pp) <- run3 hdr query tdb "rods" "tempZone"
     putStr (pprint hdr pp)
-    dbClose tdb
 
 
-run3 :: [String] -> String -> TransDB DBAdapterMonad MapResultRow -> String -> String -> IO ([String], [Map String String])
-run3 hdr query tdb user zone = do
-    let predmap = constructDBPredMap (Database tdb)
+run3 :: [String] -> String -> AbstractDatabase MapResultRow Formula -> String -> String -> IO ([String], [Map String String])
+run3 hdr query (AbstractDatabase tdb) user zone = do
+    let predmap = constructDBPredMap tdb
     let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
 
 
-    r <- runResourceT $ evalStateT (dbCatch $ do
+    r <- runResourceT $ dbCatch $ do
                 case runParser progp (mempty, predmap, mempty) "" query of
                             Left err -> error (show err)
-                            Right (Left (qu@(Query form), _)) ->
+                            Right (qu, _) ->
                                 case runExcept (checkQuery qu) of
-                                    Right _ -> do
-                                        rows <- getAllResultsInStream ( doQuery tdb (Set.fromList (map Var hdr)) qu (keys params) (pure params))
-                                        return rows
+                                    Right _ -> getAllResultsInStream ( doQuery tdb (Set.fromList (map Var hdr)) qu (Set.fromList (keys params)) (pure params))
                                     Left e -> error e
-                            Right (Right Commit) -> do
-                                b <- dbPrepare tdb
-                                if b
-                                    then do
-                                        b <- dbCommit tdb
-                                        if b
-                                            then return [mempty]
-                                            else do
-                                                dbRollback tdb
-                                                liftIO $ errorM "QA" "prepare succeeded but cannot commit"
-                                                error "prepare succeeded but cannot commit"
-                                    else do
-                                        dbRollback tdb
-                                        liftIO $ errorM "QA" "prepare failed, cannot commit"
-                                        error "prepare failed, cannot commit") (DBAdapterState Nothing)
+                            -- Right (Right Commit) -> do
+                            --     b <- liftIO $ dbPrepare tdb
+                            --     if b
+                            --         then do
+                            --             b <- liftIO $ dbCommit tdb
+                            --             if b
+                            --                 then return [mempty]
+                            --                 else do
+                            --                     liftIO $ dbRollback tdb
+                            --                     liftIO $ errorM "QA" "prepare succeeded but cannot commit"
+                            --                     error "prepare succeeded but cannot commit"
+                            --         else do
+                            --             liftIO $ dbRollback tdb
+                            --             liftIO $ errorM "QA" "prepare failed, cannot commit"
+                            --             error "prepare failed, cannot commit")
     return (case r of
         Right rows ->  (hdr, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
         Left e ->  (["error"], [singleton "error" (show e)]))

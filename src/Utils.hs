@@ -14,6 +14,7 @@ import Data.List ((\\), intercalate, transpose)
 import Data.Convertible
 import Control.Monad.Catch
 
+
 import Data.Namespace.Path
 import Data.Namespace.Namespace
 
@@ -27,16 +28,16 @@ intResultStream i = return (insert (Var "i") (IntValue i) empty)
 -- map from predicate name to database names
 type PredDBMap = Map Pred [String]
 
-constructDBPredMap :: AbstractDatabase row -> PredMap
-constructDBPredMap (AbstractDatabase db) = foldr addPredToMap mempty preds where
+constructDBPredMap :: IDatabase db => db -> PredMap
+constructDBPredMap db = foldr addPredToMap mempty preds where
         addPredToMap thepred map1 =
             insertObject (predName thepred) thepred map1
         preds = getPreds db
 
 -- construct map from predicates to db names
-constructPredDBMap :: [AbstractDatabase row ] -> PredDBMap
+constructPredDBMap :: [AbstractDatabase row form] -> PredDBMap
 constructPredDBMap = foldr addPredFromDBToMap empty where
-        addPredFromDBToMap :: AbstractDatabase row -> PredDBMap -> PredDBMap
+        addPredFromDBToMap :: AbstractDatabase row form -> PredDBMap -> PredDBMap
         addPredFromDBToMap (AbstractDatabase db) predmap = foldr addPredToMap predmap preds where
             dbname = getName db
             addPredToMap thepred = alter alterValue  thepred

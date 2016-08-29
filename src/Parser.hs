@@ -6,11 +6,9 @@ import DB.DB
 import Rewriting
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, (!), member, insert, lookup, fromList, keys)
 import Text.ParserCombinators.Parsec hiding (State)
 import Data.Maybe
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
-import Data.List (union, (\\), intercalate)
 import qualified Text.Parsec.Token as T
 import qualified Data.Text as TE
 import Data.Namespace.Path
@@ -183,17 +181,13 @@ varp = Var <$> identifier
 varsp :: FOParser [Var]
 varsp = many1 varp
 
-progp :: FOParser (Either (Query, PredMap) Commit)
+progp :: FOParser (Formula, PredMap)
 progp = do
     whiteSpace
-    (do
-        q <- Query <$> formulap
-        eof
-        (_, predmap, _) <- getState
-        return (Left (q, predmap))) <|> (do
-        reserved "commit"
-        eof
-        return (Right Commit))
+    q <- formulap
+    eof
+    (_, predmap, _) <- getState
+    return (q, predmap)
 
 
 rulep :: FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])

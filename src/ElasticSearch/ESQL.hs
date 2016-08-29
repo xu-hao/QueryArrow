@@ -90,11 +90,12 @@ translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPr
 
 instance IGenericDatabase01 ESTrans where
     type GDBQueryType ESTrans = (ElasticSearchQuery, [Var])
-    gTranslateQuery trans vars (Query  (FAtomic (Atom pred1 args))) env =
+    type GDBFormulaType ESTrans = Formula
+    gTranslateQuery trans vars (FAtomic (Atom pred1 args)) env =
         translateQueryToElasticSearch trans (toAscList vars) pred1 args (toAscList env)
-    gTranslateQuery trans vars (Query  (FInsert (Lit Pos (Atom pred1 args)))) env =
+    gTranslateQuery trans vars (FInsert (Lit Pos (Atom pred1 args))) env =
         translateInsertToElasticSearch trans pred1 args (toAscList env)
-    gTranslateQuery trans vars (Query  (FInsert (Lit Neg (Atom pred1 args)))) env =
+    gTranslateQuery trans vars (FInsert (Lit Neg (Atom pred1 args))) env =
         translateDeleteToElasticSearch trans pred1 args (toAscList env)
     gTranslateQuery _ _ _ _ =
         error "unsupported"

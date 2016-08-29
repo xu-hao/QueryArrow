@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances #-}
 module SQL.HDBC.Sqlite3 where
 
+import FO.Data
 import DB.GenericDatabase
 import DB.DB
 import Config
@@ -32,7 +33,7 @@ instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans SQLiteDB)) whe
 
 instance IDatabase (GenericDatabase  SQLTrans SQLiteDB)
 
-getDB :: ICATDBConnInfo -> IO [AbstractDatabase MapResultRow]
-getDB ps = do
-    let db = makeICATSQLDBAdapter (db_namespace ps) Nothing (SQLiteDB ps)
-    return [AbstractDatabase db]
+getDB :: ICATDBConnInfo -> AbstractDatabase MapResultRow Formula
+getDB ps =
+    let db = makeICATSQLDBAdapter (db_namespace ps) Nothing (SQLiteDB ps) in
+        AbstractDatabase db

@@ -349,8 +349,8 @@ instance Params SQLQuery where
 instance Serialize SQLQuery where
     serialize (_, stmt, _) = show stmt
 
-translateQueryToSQL :: [Var] -> Query -> TransMonad SQLQuery
-translateQueryToSQL vars qu@(Query formula) = do
+translateQueryToSQL :: [Var] -> Formula -> TransMonad SQLQuery
+translateQueryToSQL vars formula = do
     ts <- get
     let nextid1 = nextid ts
     case formula of
@@ -366,7 +366,7 @@ translateQueryToSQL vars qu@(Query formula) = do
                     let map2 = fromList sels <> repmap ts
                     let extractCol var = case lookup var map2 of
                                             Just col -> col
-                                            _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show qu ++ " to SQL, available " ++ show (repmap ts))
+                                            _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show formula ++ " to SQL, available " ++ show (repmap ts))
                     let cols = map extractCol vars
                         sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit)
                     return (vars, sql, (params sql))
@@ -860,6 +860,7 @@ summarizeF trans form = pureOrExecF trans form
 
 instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], String, [Var])
+    type GDBFormulaType SQLTrans = Formula
     gTranslateQuery trans ret query env =
         let (SQLTrans  builtin predtablemap _) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env

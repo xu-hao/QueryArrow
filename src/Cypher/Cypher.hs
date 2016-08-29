@@ -503,8 +503,8 @@ extractPropertyVarInNodePattern env n@(NodePattern v l p) (CypherVarExprMap vmap
                         ) (CypherTrueCond, [], vmap) p in
                 (cond', NodePattern v l props', CypherVarExprMap vmap')
 
-translateQueryToCypher :: [Var] -> Query -> [Var] -> TransMonad CypherQuery
-translateQueryToCypher vars (Query  conj) env = do
+translateQueryToCypher :: [Var] -> Formula -> [Var] -> TransMonad CypherQuery
+translateQueryToCypher vars conj env = do
     lift $ registerVars env
     cypher <- translateFormulaToCypher vars conj env
     return (CypherQuery vars cypher env)
@@ -692,6 +692,7 @@ translateableCypher trans (Aggregate _ _)  = lift $ Nothing
 
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
+    type GDBFormulaType CypherTrans = Formula
     gDeterminateVars trans varDomainSize (Atom name args) =
         (if isBuiltIn
             then bottom

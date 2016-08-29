@@ -26,6 +26,10 @@ data HVariant' f (l :: [*]) where
     HLeft' :: f e -> HVariant' f (e ': l)
     HRight' :: HVariant' f l -> HVariant' f (e ': l)
 
+toIntegerV :: HVariant l -> Int
+toIntegerV (HLeft  e) = 0
+toIntegerV (HRight l) = toIntegerV l + 1
+
 toHVariant :: HVariant' f l -> HVariant (HMap f l)
 toHVariant (HLeft'  e) = HLeft e
 toHVariant (HRight' l) = HRight (toHVariant l)
@@ -132,6 +136,16 @@ hMapACUL_ g l = case l of
             HNil -> pure mempty
             HCons e l' -> (<>) <$> g e <*> hMapACUL_ @c g l'
 
+hMapACUL' :: forall (c :: * -> Constraint)  (f :: * -> *) (b :: *)  (m :: * -> *) (l :: [*]) . (HMapConstraint c (HMap f l), Applicative m) => (forall a . c (f a) => f a -> m b) -> HList' f l -> m [b]
+hMapACUL' g l = case l of
+            HNil' -> pure []
+            HCons' e l' -> (:) <$> (g e) <*> (hMapACUL' @c @f @b g l')
+
+hMapACUL'_ :: forall (c :: * -> Constraint) (f :: * -> *) (m :: * -> *) (l :: [*]) . (HMapConstraint c (HMap f l), Applicative m) => (forall a . c (f a) => f a -> m ()) -> HList' f l -> m ()
+hMapACUL'_ g l = case l of
+            HNil' -> pure mempty
+            HCons' e l' -> (<>) <$> g e <*> hMapACUL'_ @c @f g l'
+
 hMapCUVV :: forall (c :: * -> Constraint) (f :: * -> *)  (l :: [*]) . (HMapConstraint c l) => (forall a . c a => a -> f a) -> HVariant l -> HVariant' f l
 hMapCUVV g l = case l of
             HLeft e -> HLeft' (g e)
@@ -144,12 +158,31 @@ hFindCULV g l = case l of
                 then Just (HLeft e)
                 else HRight <$> (hFindCULV @c g l')
 
-hApplyCUL :: forall (c :: * -> Constraint) (l :: [*]) (b :: *) . (HMapConstraint c l) => (forall a . c a => a -> b) -> Int -> HList l -> Maybe b
+hFindULV :: forall (l :: [*]) . (forall a . a -> Bool) -> HList l -> Maybe (HVariant l)
+hFindULV g l = case l of
+            HNil -> Nothing
+            HCons e l' -> if (g e)
+                then Just (HLeft e)
+                else HRight <$> (hFindULV g l')
+
+hApplyCUL :: forall (c :: * -> Constraint) (b :: *)  (l :: [*]). (HMapConstraint c l) => (forall a . c a => a -> b) -> Int -> HList l -> Maybe b
 hApplyCUL g a l = case l of
             HNil -> Nothing
             HCons e l' -> if a == 0
                 then Just (g e)
-                else hApplyCUL @c g a l'
+                else hApplyCUL @c @b g a l'
+
+hApplyCUV :: forall (c :: * -> Constraint) (b :: *)  (l :: [*]). (HMapConstraint c l) => (forall a . c a => a -> b) -> HVariant l -> b
+hApplyCUV g l = case l of
+            HLeft e -> g e
+            HRight l' -> hApplyCUV @c @b g l'
+
+hApplyUL :: forall (b :: *) (l :: [*]) . (forall a . a -> b) -> Int -> HList l -> Maybe b
+hApplyUL g a l = case l of
+            HNil -> Nothing
+            HCons e l' -> if a == 0
+                then Just (g e)
+                else hApplyUL g a l'
 
 hApplyCULV :: forall (c :: * -> Constraint) (f :: * -> *) (l :: [*]) . (HMapConstraint c l) => (forall a . c a => a -> f a) -> Int -> HList l -> Maybe (HVariant' f l)
 hApplyCULV g a l = case l of

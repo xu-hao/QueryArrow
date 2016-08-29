@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings, TypeFamilies #-}
 module SQL.HDBC.PostgreSQL where
 
+import FO.Data
 import DB.DB
 import SQL.HDBC
 import DB.GenericDatabase
@@ -32,7 +33,7 @@ instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB))
 
 instance IDatabase (GenericDatabase  SQLTrans PostgreSQLDB) where
 
-getDB :: ICATDBConnInfo -> [AbstractDatabase MapResultRow]
+getDB :: ICATDBConnInfo -> AbstractDatabase MapResultRow Formula
 getDB ps =
     let db = makeICATSQLDBAdapter (db_namespace ps) (Just "nextid") (PostgreSQLDB ps) in
-        [AbstractDatabase db]
+        AbstractDatabase db

@@ -59,15 +59,11 @@ instance SubstituteResultValue Lit where
 
 
 -- query
-newtype Query = Query Formula
 
 data Commit = Commit
 
-checkQuery :: Query -> Except String ()
-checkQuery (Query form) = checkFormula form
-
-instance Show Query where
-    show (Query  disjs) = show disjs
+checkQuery :: Formula -> Except String ()
+checkQuery form = checkFormula form
 
 {-
     class A a b | a -> b
@@ -101,9 +97,9 @@ class (IDBConnection0 conn, IDBStatement (StatementType conn)) => IDBConnection 
     type StatementType conn
     prepareQuery :: conn -> QueryType conn -> IO (StatementType conn)
 
-data AbstractDBConnection row = forall conn. (IDBConnection conn, row ~ RowType (StatementType conn)) => AbstractDBConnection { unAbstractDBConnection :: conn }
+data AbstractDBConnection = forall conn. (IDBConnection conn) => AbstractDBConnection { unAbstractDBConnection :: conn }
 
-instance IDBConnection0 (AbstractDBConnection row) where
+instance IDBConnection0 AbstractDBConnection where
     dbClose (AbstractDBConnection conn) = dbClose conn
     dbBegin (AbstractDBConnection conn) = dbBegin conn
     dbPrepare (AbstractDBConnection conn) = dbPrepare conn
@@ -112,15 +108,16 @@ instance IDBConnection0 (AbstractDBConnection row) where
 
 -- database
 class IDatabase0 db where
+    type DBFormulaType db
     getName :: db -> String
     getPreds :: db -> [Pred]
     -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
     determinateVars :: db -> Set Var -> Atom -> Set Var
-    supported :: db -> Formula -> Set Var -> Bool
+    supported :: db -> DBFormulaType db -> Set Var -> Bool
 
-class IDatabase1 db where
+class IDatabase0 db => IDatabase1 db where
     type DBQueryType db
-    translateQuery :: db -> Set Var -> Query -> Set Var -> DBQueryType db
+    translateQuery :: db -> Set Var -> DBFormulaType db -> Set Var -> DBQueryType db
 
 class (IDBConnection (ConnectionType db)) => IDatabase2 db where
     data ConnectionType db
@@ -129,15 +126,16 @@ class (IDBConnection (ConnectionType db)) => IDatabase2 db where
 class (IDatabase0 db, IDatabase1 db, IDatabase2 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db where
 
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data AbstractDatabase row = forall db. (IDatabase db, row ~ RowType (StatementType (ConnectionType db))) => AbstractDatabase { unAbstractDatabase :: db }
+data AbstractDatabase row form = forall db. (IDatabase db, row ~ RowType (StatementType (ConnectionType db)), form ~ DBFormulaType db) => AbstractDatabase { unAbstractDatabase :: db }
 
-instance IDatabase0 (AbstractDatabase row) where
+instance IDatabase0 (AbstractDatabase row form) where
+    type DBFormulaType (AbstractDatabase row form) = form
     getName (AbstractDatabase db) = getName db
     getPreds (AbstractDatabase db) = getPreds db
     determinateVars (AbstractDatabase db) = determinateVars db
     supported (AbstractDatabase db) = supported db
 
-doQuery :: (IDatabase db) => db -> Set Var -> Query -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+doQuery :: (IDatabase db) => db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQuery db vars2 qu vars rs =
         bracketPStream (dbOpen db) dbClose (\conn -> do
             stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
