@@ -1,4 +1,4 @@
-{-# LANGUAGE MonadComprehensions, ForeignFunctionInterface ,OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 --import QueryArrowList
@@ -31,43 +31,21 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import Translation
-import QueryPlan
 import DB.ResultStream
 import DB.DB hiding (Null)
-import Sum
 import DBMap
-import Translation
-import FO.Data
 import Parser
-import ICAT
 -- import Plugins
--- import SQL.HDBC.PostgreSQL
--- import Cypher.Neo4j
 import FO.Data
 import Config
 import Utils
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (empty, lookup, fromList, singleton, keys, toList, Map, delete, insert, member)
+import Data.Map.Strict (fromList, singleton, keys, toList, Map)
 import Text.Parsec (runParser)
-import Control.Monad
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.State.Strict
 import Control.Monad.Trans.Resource
-import Control.Monad.Trans.Class (lift)
 import System.Environment
-import Data.Tree
-import Data.List (intercalate, transpose)
-import Control.Applicative ((<$>))
-import qualified Control.Applicative as Appl
-import qualified Data.ByteString.Char8 as CS
-import qualified Data.ByteString.Lazy as B
-import System.IO
-import System.Environment
-import Data.Maybe
-import Control.Concurrent
-import Control.Concurrent.Async hiding (async)
 import Data.Time
 import Control.Exception
 import Control.Monad.Except
@@ -78,26 +56,21 @@ import qualified Data.Text as T
 import System.Log.Logger
 import Logging
 -- import Data.Serialize
-import Data.Namespace.Path
-import Data.Namespace.Namespace
 import qualified Data.Set as Set
 import Data.Conduit.Network
 import Network.JsonRpc
-import Control.Monad.Trans.Reader
 import Data.String
-import Control.Monad.Logger
-import System.Log.FastLogger
-import Control.Monad.Logger.HSLogger
+import Control.Monad.Logger.HSLogger ()
 
 main::IO()
 main = do
     setup
     args2 <- getArgs
     if null args2
-        then do
-            print "no arguments"
+        then
+            putStrLn "no arguments"
         else do
-            ps <- getConfig (args2 !! 0)
+            ps <- getConfig (head args2)
             if (args2 !! 1) == "tcp"
                 then
                     runtcpmulti (args2 !! 2) (read (args2 !! 3)) ps
@@ -174,8 +147,7 @@ run3 hdr query (AbstractDatabase tdb) user zone = do
     let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
 
 
-    r <- runResourceT $ dbCatch $ do
-                case runParser progp (mempty, predmap, mempty) "" query of
+    r <- runResourceT $ dbCatch $ case runParser progp (mempty, predmap, mempty) "" query of
                             Left err -> error (show err)
                             Right (qu, _) ->
                                 case runExcept (checkQuery qu) of
