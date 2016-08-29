@@ -62,7 +62,7 @@ instance SubstituteResultValue Lit where
 
 -- query
 
-data Commit = Commit
+data Command = Begin | Prepare | Commit | Rollback | Execute Formula
 
 checkQuery :: Formula -> Except String ()
 checkQuery form = checkFormula form
@@ -146,6 +146,14 @@ doQuery db vars2 qu vars rs =
                 liftIO $ if b then noticeM "QA" "doQuery: commit succeeded" else errorM "QA" "doQuery: commit failed"
                 emptyResultStream
             )
+
+doQueryWithConn :: (IDatabase db) => db -> ConnectionType db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+doQueryWithConn db conn vars2 qu vars rs = do
+            stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
+            dbStmtExec stmt rs <|> do
+                b <- liftIO $ dbCommit conn
+                liftIO $ if b then noticeM "QA" "doQuery: commit succeeded" else errorM "QA" "doQuery: commit failed"
+                emptyResultStream
 
 newtype QueryTypeIso conn = QueryTypeIso (QueryType conn)
 newtype DBQueryTypeIso db = DBQueryTypeIso (DBQueryType db)

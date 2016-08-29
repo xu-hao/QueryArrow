@@ -181,13 +181,14 @@ varp = Var <$> identifier
 varsp :: FOParser [Var]
 varsp = many1 varp
 
-progp :: FOParser (Formula, PredMap)
+progp :: FOParser ([Command], PredMap)
 progp = do
-    whiteSpace
-    q <- formulap
+    commands <- many (do
+      whiteSpace
+      (reserved "begin" *> return Begin) <|> (reserved "prepare" *> return Prepare) <|> (reserved "commit" *> return Commit) <|> (reserved "rollback" *> return Rollback) <|> (Execute <$> formulap))
     eof
     (_, predmap, _) <- getState
-    return (q, predmap)
+    return (commands, predmap)
 
 
 rulep :: FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])

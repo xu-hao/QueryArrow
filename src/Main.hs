@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TypeFamilies #-}
 module Main where
 
 --import QueryArrowList
@@ -87,7 +87,7 @@ runtcpmulti addr port ps = do
         (serverSettings port (fromString addr))
         (do
             liftIO $ infoM "QA" ("client connected")
-            tdb <- liftIO $ transDB "tdb" ps
+            (AbstractDatabase tdb) <- liftIO $ transDB "tdb" ps
             let worker = do
                     t0 <- liftIO $ getCurrentTime
                     req <- receiveRequest
@@ -111,7 +111,8 @@ runtcpmulti addr port ps = do
                                         zone = qszone qs
                                         qu = qsquery qs
                                         hdr = qsheaders qs
-                                    ret <- liftIO $ try (liftIO $ run3 hdr qu tdb user zone)
+                                    conn <- liftIO $ dbOpen tdb
+                                    ret <- liftIO $ try (liftIO $ run3 hdr qu tdb conn user zone)
                                     case ret of
                                         Left e ->
                                             sendResponse (ResponseError
@@ -126,6 +127,7 @@ runtcpmulti addr port ps = do
                                                               V2
                                                               (toJSON (resultSet hdr rep))
                                                               (getReqId req))
+                                    liftIO $ dbClose conn
                             t1 <- liftIO $ getCurrentTime
                             liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
                             worker
@@ -136,23 +138,47 @@ runtcpmulti addr port ps = do
 
 run2 :: [String] -> String -> TranslationInfo -> IO ()
 run2 hdr query ps = do
-    tdb <- transDB "tdb" ps
-    (hdr, pp) <- run3 hdr query tdb "rods" "tempZone"
+    AbstractDatabase tdb <- transDB "tdb" ps
+    conn <- dbOpen tdb
+    (hdr, pp) <- run3 hdr query tdb conn "rods" "tempZone"
     putStr (pprint hdr pp)
+    dbClose conn
 
 
-run3 :: [String] -> String -> AbstractDatabase MapResultRow Formula -> String -> String -> IO ([String], [Map String String])
-run3 hdr query (AbstractDatabase tdb) user zone = do
+run3 :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => [String] -> String -> db -> ConnectionType db -> String -> String -> IO ([String], [Map String String])
+run3 hdr query tdb conn user zone = do
     let predmap = constructDBPredMap tdb
     let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
 
 
     r <- runResourceT $ dbCatch $ case runParser progp (mempty, predmap, mempty) "" query of
                             Left err -> error (show err)
-                            Right (qu, _) ->
-                                case runExcept (checkQuery qu) of
-                                    Right _ -> getAllResultsInStream ( doQuery tdb (Set.fromList (map Var hdr)) qu (Set.fromList (keys params)) (pure params))
-                                    Left e -> error e
+                            Right (commands, _) ->
+                                concat <$> mapM (\command -> case command of
+                                    Begin -> do
+                                        liftIO $ dbBegin conn
+                                        return []
+                                    Prepare -> do
+                                        b <- liftIO $ dbPrepare conn
+                                        if b
+                                            then return []
+                                            else do
+                                                liftIO $ errorM "QA" "prepare failed, cannot commit"
+                                                error "prepare failed, cannot commit"
+                                    Commit -> do
+                                        b <- liftIO $ dbCommit conn
+                                        if b
+                                            then return []
+                                            else do
+                                                liftIO $ errorM "QA" "commit failed"
+                                                error "commit failed"
+                                    Rollback -> do
+                                        liftIO $ dbRollback conn
+                                        return []
+                                    Execute qu ->
+                                        case runExcept (checkQuery qu) of
+                                              Right _ -> getAllResultsInStream ( doQueryWithConn tdb conn (Set.fromList (map Var hdr)) qu (Set.fromList (keys params)) (pure params))
+                                              Left e -> error e) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb
                             --     if b
@@ -163,11 +189,9 @@ run3 hdr query (AbstractDatabase tdb) user zone = do
                             --                 else do
                             --                     liftIO $ dbRollback tdb
                             --                     liftIO $ errorM "QA" "prepare succeeded but cannot commit"
-                            --                     error "prepare succeeded but cannot commit"
                             --         else do
                             --             liftIO $ dbRollback tdb
-                            --             liftIO $ errorM "QA" "prepare failed, cannot commit"
-                            --             error "prepare failed, cannot commit")
+                            --             )
     return (case r of
         Right rows ->  (hdr, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
         Left e ->  (["error"], [singleton "error" (show e)]))
