@@ -12,6 +12,8 @@ import Data.Maybe
 import Control.Monad.Trans.Resource
 import qualified Data.Text as T
 import Data.Set (Set)
+import System.Log.Logger (errorM, noticeM)
+import Control.Applicative ((<|>))
 
 -- result value
 data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show)
@@ -139,8 +141,11 @@ doQuery :: (IDatabase db) => db -> Set Var -> DBFormulaType db -> Set Var -> DBR
 doQuery db vars2 qu vars rs =
         bracketPStream (dbOpen db) dbClose (\conn -> do
             stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
-            dbStmtExec stmt rs)
+            dbStmtExec stmt rs <|> do
+                b <- liftIO $ dbCommit conn
+                liftIO $ if b then noticeM "QA" "doQuery: commit succeeded" else errorM "QA" "doQuery: commit failed"
+                emptyResultStream
+            )
 
-newtype ConnectionTypeIso db = ConnectionTypeIso (ConnectionType db)
 newtype QueryTypeIso conn = QueryTypeIso (QueryType conn)
 newtype DBQueryTypeIso db = DBQueryTypeIso (DBQueryType db)
