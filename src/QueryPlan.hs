@@ -292,7 +292,7 @@ checkQueryPlan :: (HMapConstraint IDatabase l ) => HList l -> QueryPlan2 -> Exce
 checkQueryPlan dbs (qpd, Exec2 form x) = do
     let par0 = paramvs qpd
         det0 = determinevs qpd
-        map2 = fromJust (hApplyCUL @IDatabase (domainSizeFormula par0  form) x dbs)
+        map2 = fromMaybe (error "index out of range") (hApplyCUL @IDatabase (domainSizeFormula par0  form) x dbs)
     if det0 `isSubsetOf` map2
         then return ()
         else throwError ("checkQueryPlan: unbounded vars: " ++ show (det0 \\\ map2) ++ ", the formula is " ++ show form)
