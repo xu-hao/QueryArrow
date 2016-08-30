@@ -41,7 +41,7 @@ executable QueryArrow
                    regex-tdfa,
                    monad-control,
                    lifted-async,
-                   namespace >= 0.1.1.0,
+                   namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
                    network,
@@ -91,7 +91,7 @@ executable QueryArrowWeb
                    regex-tdfa,
                    monad-control,
                    lifted-async,
-                   namespace >= 0.1.1.0,
+                   namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
                    network,
@@ -104,83 +104,23 @@ executable QueryArrowWeb
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
-library
-  hs-source-dirs:  src
-  exposed-modules: SQL.HDBC.PostgreSQL
-  build-depends:
-                   base >= 4,
-                   containers,
-                   mtl,
-                   transformers,
-                   semigroups,
-                   semigroupoids,
-                   HDBC-postgresql,
-                   HDBC,
-                   conduit-combinators,
-                   conduit,
-                   utf8-string,
-                   resourcet
-  ghc-options:     -Wall -fPIC -shared -dynamic
-executable ZmqSend
-  hs-source-dirs:  src test
-  main-is:         ZmqSend.hs
-  build-depends:
-                   base >= 4,
-                   containers,
-                   mtl,
-                   transformers,
-                   bytestring,
-                   unordered-containers,
-                   convertible,
-                   text >= 1.2.1.1,
-                   scientific,
-                   array,
-                   temporary,
-                   process,
-                   async,
-                   time,
-                   cereal,
-                   exceptions,
-                   utf8-string
-  ghc-options:
-  other-modules:
-executable PostgreSQLTest
-  hs-source-dirs:  src test
-  main-is: PostgreSQLTest.hs
-  build-depends:
-                   base >= 4,
-                   containers,
-                   mtl,
-                   transformers,
-                   HDBC-postgresql,
-                   HDBC,
-                   utf8-string
-  ghc-options:
-  other-modules:
-executable ElasticSearchSend
-    hs-source-dirs:  src test
-    main-is:         ElasticSearchSend.hs
-    build-depends:
-                     base >= 4,
-                     containers,
-                     mtl,
-                     transformers,
-                     bytestring,
-                     unordered-containers,
-                     convertible,
-                     text >= 1.2.1.1,
-                     scientific,
-                     array,
-                     temporary,
-                     process,
-                     http-conduit,
-                     async,
-                     time,
-                     cereal,
-                     exceptions,
-                     utf8-string
-    ghc-options:
-    other-modules:
+-- library
+--   hs-source-dirs:  src
+--   exposed-modules: SQL.HDBC.PostgreSQL
+--   build-depends:
+--                    base >= 4,
+--                    containers,
+--                    mtl,
+--                    transformers,
+--                    semigroups,
+--                    semigroupoids,
+--                    HDBC-postgresql,
+--                    HDBC,
+--                    conduit-combinators,
+--                    conduit,
+--                    utf8-string,
+--                    resourcet
+--   ghc-options:     -Wall -fPIC -shared -dynamic
 Test-Suite Test
     type:       exitcode-stdio-1.0
     hs-source-dirs:  src test
