@@ -706,7 +706,7 @@ instance IGenericDatabase01 CypherTrans where
 
     gTranslateQuery trans vars query env =
         let (CypherTrans builtin _ predtablemap) = trans in
-            runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap))
+            return (runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap)))
     gSupported trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
 
 instance New CypherVar CypherExpr where

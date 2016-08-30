@@ -191,6 +191,13 @@ hApplyCULV g a l = case l of
                 then Just (HLeft' (g e))
                 else HRight' <$> hApplyCULV @c @f g a l'
 
+hApplyACULV :: forall (c :: * -> Constraint) (f :: * -> *) (m :: * -> *) (l :: [*]) . (HMapConstraint c l, Applicative m) => (forall a . c a => a -> m (f a)) -> Int -> HList l -> m (Maybe (HVariant' f l))
+hApplyACULV g a l = case l of
+            HNil -> pure Nothing
+            HCons e l' -> if a == 0
+                then Just <$> (HLeft' <$> (g e))
+                else getCompose (HRight' <$> Compose (hApplyACULV @c @f g a l'))
+
 hApplyCULV' :: forall (c :: * -> Constraint) (f :: * -> *) (g :: * -> *) (l :: [*]) . (HMapConstraint c l) => (forall a . c a => f a -> g a) -> Int -> HList' f l -> Maybe (HVariant' g l)
 hApplyCULV' h a l = case l of
             HNil' -> Nothing

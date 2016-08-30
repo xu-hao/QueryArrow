@@ -46,7 +46,7 @@ queryPlan dbs formula =
 --     liftIO $ infoM "QA" ("rewritten query: " ++ show qu)
 --     return qu
 --
-translate' :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> Formula -> Set Var -> QueryPlanT l
+translate' :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> Formula -> Set Var -> IO (QueryPlanT l)
 translate' dbs rvars qu0 vars =
     let insp = queryPlan dbs qu0
         qp2 = calculateVars vars rvars insp

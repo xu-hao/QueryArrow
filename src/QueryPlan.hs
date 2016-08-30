@@ -22,6 +22,7 @@ import System.Log.Logger
 import Algebra.Lattice
 import Data.Set (Set, fromList, null, isSubsetOf, member)
 import Data.Ord (comparing, Down(..))
+import Data.Functor.Compose (Compose(..))
 
 type MSet a = Complemented (Set a)
 
@@ -514,34 +515,34 @@ prepareTransaction rdbxs qp@(qpd, QPTransaction2 _) =
     (rdbxs, (qpd, QPTransaction2 rdbxs))
 prepareTransaction rdbxs qp@(_, QPReturn2 _) =  (rdbxs, qp)
 
-translateQueryPlan :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l) => HList l -> QueryPlan2 -> QueryPlanT l
+translateQueryPlan :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l) => HList l -> QueryPlan2 -> IO (QueryPlanT l)
 
-translateQueryPlan dbs (qpd, e@(Exec2  form x)) =
+translateQueryPlan dbs (qpd, (Exec2  form x)) = do
         let vars = paramvs qpd
             vars2 = returnvs qpd
-            trans :: (IDatabaseUniformDBFormula Formula db) => db -> DBQueryTypeIso db
-            trans db = DBQueryTypeIso (translateQuery db vars2 form vars)
-            qu = fromMaybe (error "index out of range") (hApplyCULV @(IDatabaseUniformDBFormula Formula) @DBQueryTypeIso trans x dbs) in
-            ExecT (combinedvs qpd) qu (show form)
-translateQueryPlan dbs  (qpd, QPChoice2 qp1 qp2) =
-    let qp1' = translateQueryPlan dbs  qp1
-        qp2' = translateQueryPlan dbs  qp2 in
-        QPChoiceT qp1' qp2'
-translateQueryPlan dbs  (qpd, QPPar2 qp1 qp2) =
-    let qp1' = translateQueryPlan dbs  qp1
-        qp2' = translateQueryPlan dbs  qp2 in
-        QPParT qp1' qp2'
-translateQueryPlan dbs  (qpd, QPSequencing2 qp1 qp2) =
-    let qp1' = translateQueryPlan dbs  qp1
-        qp2' = translateQueryPlan dbs  qp2 in
-        QPSequencingT qp1' qp2'
-translateQueryPlan _ qp@(_, QPOne2) = QPOneT
-translateQueryPlan _ qp@(_, QPZero2) = QPZeroT
-translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) =
-    let qp1' = translateQueryPlan dbs  qp1 in
-        QPAggregateT (combinedvs qpd) agg qp1'
-translateQueryPlan _ qp@(_, QPReturn2 vars) = QPReturnT vars
-translateQueryPlan dbs qp@(_, QPTransaction2 dbxs) = QPTransactionT dbxs
+            trans :: (IDatabaseUniformDBFormula Formula db) => db ->  IO (DBQueryTypeIso db)
+            trans db =  DBQueryTypeIso <$> (translateQuery db vars2 form vars)
+        qu <-  fromMaybe (error "index out of range") <$> (hApplyACULV @(IDatabaseUniformDBFormula Formula) @(DBQueryTypeIso) trans x dbs)
+        return (ExecT (combinedvs qpd) qu (show form))
+translateQueryPlan dbs  (_, QPChoice2 qp1 qp2) = do
+        qp1' <- translateQueryPlan dbs  qp1
+        qp2' <- translateQueryPlan dbs  qp2
+        return (QPChoiceT qp1' qp2')
+translateQueryPlan dbs  (_, QPPar2 qp1 qp2) = do
+        qp1' <- translateQueryPlan dbs  qp1
+        qp2' <- translateQueryPlan dbs  qp2
+        return (QPParT qp1' qp2')
+translateQueryPlan dbs  (_, QPSequencing2 qp1 qp2) = do
+        qp1' <- translateQueryPlan dbs  qp1
+        qp2' <- translateQueryPlan dbs  qp2
+        return (QPSequencingT qp1' qp2')
+translateQueryPlan _ (_, QPOne2) = return QPOneT
+translateQueryPlan _ (_, QPZero2) = return QPZeroT
+translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) = do
+        qp1' <- translateQueryPlan dbs  qp1
+        return (QPAggregateT (combinedvs qpd) agg qp1')
+translateQueryPlan _ (_, QPReturn2 vars) = return (QPReturnT vars)
+translateQueryPlan _ (_, QPTransaction2 dbxs) = return (QPTransactionT dbxs)
 
 hDbOpen :: (HMapConstraint IDatabase l) => HList l -> IO (HList' ConnectionType l)
 hDbOpen dbs =

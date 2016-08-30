@@ -71,7 +71,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db _ (qr, ir, dr) ) vars2 qu vars =
         let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
-            translateQuery db vars2 qu vars
+            translateQuery db vars2 qu' vars
 
 instance (IDatabase db) => IDatabase2 (TransDB db) where
     newtype ConnectionType (TransDB db) = TransDBConnection (ConnectionType db)

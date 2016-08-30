@@ -865,7 +865,7 @@ instance IGenericDatabase01 SQLTrans where
         let (SQLTrans  builtin predtablemap _) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
-            (case sqlquery of
+            return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, serialize sqlquery, params sql)
 

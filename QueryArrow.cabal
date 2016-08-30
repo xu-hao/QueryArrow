@@ -50,6 +50,7 @@ executable QueryArrow
                    monad-logger,
                    fast-logger,
                    constraints,
+                   lrucache,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

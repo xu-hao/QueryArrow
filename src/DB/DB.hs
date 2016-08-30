@@ -119,7 +119,7 @@ class IDatabase0 db where
 
 class IDatabase0 db => IDatabase1 db where
     type DBQueryType db
-    translateQuery :: db -> Set Var -> DBFormulaType db -> Set Var -> DBQueryType db
+    translateQuery :: db -> Set Var -> DBFormulaType db -> Set Var -> IO (DBQueryType db)
 
 class (IDBConnection (ConnectionType db)) => IDatabase2 db where
     data ConnectionType db
@@ -140,7 +140,8 @@ instance IDatabase0 (AbstractDatabase row form) where
 doQuery :: (IDatabase db) => db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQuery db vars2 qu vars rs =
         bracketPStream (dbOpen db) dbClose (\conn -> do
-            stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
+            qu' <- liftIO $ translateQuery db vars2 qu vars
+            stmt <- liftIO $ prepareQuery conn qu'
             dbStmtExec stmt rs <|> do
                 b <- liftIO $ dbCommit conn
                 liftIO $ if b then noticeM "QA" "doQuery: commit succeeded" else errorM "QA" "doQuery: commit failed"
@@ -149,7 +150,8 @@ doQuery db vars2 qu vars rs =
 
 doQueryWithConn :: (IDatabase db) => db -> ConnectionType db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQueryWithConn db conn vars2 qu vars rs = do
-            stmt <- liftIO $ prepareQuery conn (translateQuery db vars2 qu vars)
+            qu' <- liftIO $ translateQuery db vars2 qu vars
+            stmt <- liftIO $ prepareQuery conn qu'
             dbStmtExec stmt rs <|> do
                 b <- liftIO $ dbCommit conn
                 liftIO $ if b then noticeM "QA" "doQuery: commit succeeded" else errorM "QA" "doQuery: commit failed"

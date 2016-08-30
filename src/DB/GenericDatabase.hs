@@ -14,7 +14,7 @@ class IGenericDatabase01 db where
   type GDBFormulaType db
   gDeterminateVars :: db -> Set Var -> Atom -> Set Var
   gSupported :: db -> GDBFormulaType db -> Set Var -> Bool
-  gTranslateQuery :: db -> Set Var -> GDBFormulaType db -> Set Var -> GDBQueryType db
+  gTranslateQuery :: db -> Set Var -> GDBFormulaType db -> Set Var -> IO (GDBQueryType db)
 
 instance (IGenericDatabase01 db) => IDatabase0 (GenericDatabase db a) where
   type DBFormulaType (GenericDatabase db a) = GDBFormulaType db

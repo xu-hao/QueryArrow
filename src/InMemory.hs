@@ -44,7 +44,7 @@ instance IDatabase0 MapDB where
 
 instance IDatabase1 MapDB where
     type DBQueryType MapDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = (vars, qu, vars2)
+    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 
 instance INoConnectionDatabase2 MapDB where
@@ -78,7 +78,7 @@ instance IDatabase0 StateMapDB where
 
 instance IDatabase1 StateMapDB where
     type DBQueryType StateMapDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = (vars, qu, vars2)
+    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 instance INoConnectionDatabase2 StateMapDB where
     type NoConnectionQueryType StateMapDB = (Set Var, Formula, Set Var)
@@ -155,7 +155,7 @@ instance IDatabase0 RegexDB where
     supported _ _ _ = False
 instance IDatabase1 RegexDB where
     type DBQueryType RegexDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = (vars, qu, vars2)
+    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 extractStringFromExpr :: ResultValue -> String
 extractStringFromExpr (StringValue s) = unpack s
@@ -188,7 +188,7 @@ instance IDatabase0 EqDB where
 
 instance IDatabase1 EqDB where
     type DBQueryType EqDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = (vars, qu, vars2)
+    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 evalExpr :: MapResultRow -> Expr -> ResultValue
 evalExpr row (StringExpr s) = StringValue s
@@ -224,7 +224,7 @@ instance IDatabase0 UtilsDB where
     supported _ _ _ = False
 instance IDatabase1 UtilsDB where
     type DBQueryType UtilsDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = (vars, qu, vars2)
+    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 instance INoConnectionDatabase2 UtilsDB where
     type NoConnectionQueryType UtilsDB = (Set Var, Formula, Set Var)

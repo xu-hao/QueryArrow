@@ -10,6 +10,7 @@ import Utils
 import Sum
 import Translation
 import ListUtils
+import Cache
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (foldrWithKey, fromList)
@@ -74,4 +75,4 @@ transDB name transinfo = do
             mapM_ (debugM "QA" . show) qr
             mapM_ (debugM "QA" . show) ir
             mapM_ (debugM "QA" . show) dr
-            return (AbstractDatabase (TransDB name sumdb exportedpreds rules1))
+            AbstractDatabase <$> cacheDB name (TransDB name sumdb exportedpreds rules1) (Just (max_cc transinfo))

@@ -5,14 +5,15 @@
            "db_namespace" : "ICAT",
            "db_name" : "ICAT",
            "db_password" : "testpassword",
-           "db_host" : "192.168.1.2",
+           "db_host" : "localhost",
            "db_username" : "irods",
            "db_icat" : ["gen/ICATGen", "gen/SQL/ICATGen"],
-           "catalog_database_type" : "SQL/HDBC/DummyDB"
+           "catalog_database_type" : "SQL/HDBC/PostgreSQL"
         }
     }],
     "server_addr" : "*",
     "server_port" : 12345,
     "server_protocols" : ["tcp"],
+    "max_cc" : 1024,
     "rewriting_file_path" : "test/rewriting-dev.rules"
 }
