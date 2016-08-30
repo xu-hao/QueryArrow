@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings #-}
 
-module Test where
+module Main where
 import Translation
 import QueryPlan
 import DB.DB
@@ -127,12 +127,12 @@ parseStandardQuery ::  String -> Formula
 parseStandardQuery query2 =
     case runParser progp (mempty, standardPredMap, mempty) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right (qu2, _) -> qu2
+            Right ([Execute qu2], _) -> qu2
 qParseStandardQuery ::  String -> String -> Formula
 qParseStandardQuery ns query2 =
     case runParser progp (mempty, ICAT.qStandardPredsMap ns standardPreds, mempty) "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right (qu2, _) -> qu2
+            Right ([Execute qu2], _) -> qu2
 {-
 parseStandardInsert :: String -> Query
 parseStandardInsert  = parseStandardQuery
@@ -218,7 +218,7 @@ translateQuery1 :: SQLTrans -> Set.Set Var -> Formula -> Set.Set Var -> SQLQuery
 translateQuery1 trans vars qu env =
   let (SQLTrans  builtin predtablemap _) = trans
       env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
-      fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})))
+      fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid="nextid"})))
 
 testTranslateSQLInsert :: String -> String -> String -> IO ()
 testTranslateSQLInsert ns qus sqls = do

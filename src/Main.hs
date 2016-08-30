@@ -64,76 +64,90 @@ import Control.Monad.Logger.HSLogger ()
 
 main::IO()
 main = do
-    setup
     args2 <- getArgs
+    mainArgs args2
+
+mainArgs :: [String] -> IO ()
+mainArgs args2 = do
+    setup
     if null args2
         then
-            putStrLn "no arguments"
+            putStrLn "usage: \n server mode <command> <config file>\n cli mode <command> <config file> <query> <headers>"
+
         else do
             ps <- getConfig (head args2)
-            if (args2 !! 1) == "tcp"
+            if length args2 == 1
                 then
-                    runtcpmulti (args2 !! 2) (read (args2 !! 3)) ps
+                    runtcpmulti ps
                 else
                     run2 (words (args2 !! 2)) (args2 !! 1) ps
 
 
-runtcpmulti :: String -> Int -> TranslationInfo -> IO ()
-runtcpmulti addr port ps = do
-    infoM "QA" ("listening at " ++ addr)
-    jsonRpcTcpServer
-        V2
-        True
-        (serverSettings port (fromString addr))
-        (do
-            liftIO $ infoM "QA" ("client connected")
-            (AbstractDatabase tdb) <- liftIO $ transDB "tdb" ps
-            let worker = do
-                    t0 <- liftIO $ getCurrentTime
-                    req <- receiveRequest
-                    case req of
-                        Nothing -> return ()
-                        Just req -> do
-                            liftIO $ infoM "QA" ("received message " ++ show req)
-                            let qus = getReqParams req
-                            let qs = parse parseJSON qus
-                            case qs of
-                                Error errmsg ->
-                                    sendResponse (ResponseError
-                                                      V2
-                                                      (ErrorObj
-                                                          errmsg
-                                                          (-1)
-                                                          Null)
-                                                      (getReqId req))
-                                Success qs -> do
-                                    let user = qsuser qs
-                                        zone = qszone qs
-                                        qu = qsquery qs
-                                        hdr = qsheaders qs
-                                    conn <- liftIO $ dbOpen tdb
-                                    ret <- liftIO $ try (liftIO $ run3 hdr qu tdb conn user zone)
-                                    case ret of
-                                        Left e ->
-                                            sendResponse (ResponseError
-                                                              V2
-                                                              (ErrorObj
-                                                                  (show (e :: SomeException))
-                                                                  (-1)
-                                                                  Null)
-                                                              (getReqId req))
-                                        Right (hdr, rep) ->
-                                            sendResponse (Response
-                                                              V2
-                                                              (toJSON (resultSet hdr rep))
-                                                              (getReqId req))
-                                    liftIO $ dbClose conn
-                            t1 <- liftIO $ getCurrentTime
-                            liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
-                            worker
-            worker
-            liftIO $ infoM "QA" ("client connected")
-            )
+runtcpmulti :: TranslationInfo -> IO ()
+runtcpmulti ps = do
+    let addr = server_addr ps
+        port = server_port ps
+        protocols = server_protocols ps
+    mapM_ (\protocol ->
+        case protocol of
+            "tcp" -> do
+                infoM "QA" ("listening at " ++ addr ++ ":" ++ show port)
+                jsonRpcTcpServer
+                    V2
+                    True
+                    (serverSettings port (fromString addr))
+                    (do
+                        liftIO $ infoM "QA" ("client connected")
+                        (AbstractDatabase tdb) <- liftIO $ transDB "tdb" ps
+                        let worker conn = do
+                                t0 <- liftIO $ getCurrentTime
+                                req <- receiveRequest
+                                case req of
+                                    Nothing -> return ()
+                                    Just req -> do
+                                        liftIO $ infoM "QA" ("received message " ++ show req)
+                                        let qus = getReqParams req
+                                        let qs = parse parseJSON qus
+                                        case qs of
+                                            Error errmsg ->
+                                                sendResponse (ResponseError
+                                                                  V2
+                                                                  (ErrorObj
+                                                                      errmsg
+                                                                      (-1)
+                                                                      Null)
+                                                                  (getReqId req))
+                                            Success qs -> do
+                                                let user = qsuser qs
+                                                    zone = qszone qs
+                                                    qu = qsquery qs
+                                                    hdr = qsheaders qs
+                                                ret <- liftIO $ try (liftIO $ run3 hdr qu tdb conn user zone)
+                                                case ret of
+                                                    Left e ->
+                                                        sendResponse (ResponseError
+                                                                          V2
+                                                                          (ErrorObj
+                                                                              (show (e :: SomeException))
+                                                                              (-1)
+                                                                              Null)
+                                                                          (getReqId req))
+                                                    Right (hdr, rep) ->
+                                                        sendResponse (Response
+                                                                          V2
+                                                                          (toJSON (resultSet hdr rep))
+                                                                          (getReqId req))
+                                        t1 <- liftIO $ getCurrentTime
+                                        liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
+                                        worker conn
+                        runResourceT $ do
+                            (_, conn) <- allocate (dbOpen tdb) dbClose
+                            lift $ worker conn
+                        liftIO $ infoM "QA" ("client disconnected")
+                        )
+            _ ->
+                errorM "QA" ("unsupported protocol " ++ protocol)) protocols
+
 
 
 run2 :: [String] -> String -> TranslationInfo -> IO ()

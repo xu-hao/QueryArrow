@@ -27,6 +27,9 @@ data ICATDBConnInfo = ICATDBConnInfo {
 
 data TranslationInfo = TranslationInfo {
     db_plugins :: [DBTrans],
+    server_addr :: String,
+    server_port :: Int,
+    server_protocols :: [String],
     rewriting_file_path :: String
 } deriving (Show, Generic)
 

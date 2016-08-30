@@ -8,8 +8,11 @@
            "db_host" : "192.168.1.2",
            "db_username" : "irods",
            "db_icat" : ["gen/ICATGen", "gen/SQL/ICATGen"],
-           "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+           "catalog_database_type" : "SQL/HDBC/DummyDB"
         }
     }],
+    "server_addr" : "*",
+    "server_port" : 12345,
+    "server_protocols" : ["tcp"],
     "rewriting_file_path" : "test/rewriting-dev.rules"
 }

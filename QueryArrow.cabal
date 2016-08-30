@@ -5,7 +5,7 @@ build-type:     Simple
 author:         Hao Xu
 
 executable QueryArrow
-  hs-source-dirs:  src gen
+  hs-source-dirs:  src
   main-is:         Main.hs
   build-depends:
                    base >= 4,
@@ -53,8 +53,58 @@ executable QueryArrow
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
+executable QueryArrowWeb
+  hs-source-dirs:  src
+  main-is:         App.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   HDBC-sqlite3,
+                   HDBC-postgresql,
+                   HDBC,
+                   aeson,
+                   bytestring,
+                   haskell-neo4j-client,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   array,
+                   temporary,
+                   process,
+                   distributive,
+                   pretty-tree,
+                   conduit-combinators,
+                   conduit,
+                   resourcet,
+                   async,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   regex-tdfa,
+                   monad-control,
+                   lifted-async,
+                   namespace >= 0.1.1.0,
+                   lattices,
+                   semibounded-lattices,
+                   network,
+                   json-rpc,
+                   conduit-extra,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   yesod,
+                   template-haskell
+  ghc-options:     -Wall -fPIC -threaded
+  other-modules:
 library
-  hs-source-dirs:  src gen
+  hs-source-dirs:  src
   exposed-modules: SQL.HDBC.PostgreSQL
   build-depends:
                    base >= 4,
@@ -71,7 +121,7 @@ library
                    resourcet
   ghc-options:     -Wall -fPIC -shared -dynamic
 executable ZmqSend
-  hs-source-dirs:  src gen test
+  hs-source-dirs:  src test
   main-is:         ZmqSend.hs
   build-depends:
                    base >= 4,
@@ -94,7 +144,7 @@ executable ZmqSend
   ghc-options:
   other-modules:
 executable PostgreSQLTest
-  hs-source-dirs:  src gen test
+  hs-source-dirs:  src test
   main-is: PostgreSQLTest.hs
   build-depends:
                    base >= 4,
@@ -107,7 +157,7 @@ executable PostgreSQLTest
   ghc-options:
   other-modules:
 executable ElasticSearchSend
-    hs-source-dirs:  src gen test
+    hs-source-dirs:  src test
     main-is:         ElasticSearchSend.hs
     build-depends:
                      base >= 4,
@@ -130,9 +180,10 @@ executable ElasticSearchSend
                      utf8-string
     ghc-options:
     other-modules:
-executable Test
-    hs-source-dirs:  src gen test
-    main-is:         Test.hs
+Test-Suite Test
+    type:       exitcode-stdio-1.0
+    hs-source-dirs:  src test
+    main-is:    Test.hs
     build-depends:
                      base >= 4,
                      containers,
