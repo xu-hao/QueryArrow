@@ -104,23 +104,23 @@ executable QueryArrowWeb
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
--- library
---   hs-source-dirs:  src
---   exposed-modules: SQL.HDBC.PostgreSQL
---   build-depends:
---                    base >= 4,
---                    containers,
---                    mtl,
---                    transformers,
---                    semigroups,
---                    semigroupoids,
---                    HDBC-postgresql,
---                    HDBC,
---                    conduit-combinators,
---                    conduit,
---                    utf8-string,
---                    resourcet
---   ghc-options:     -Wall -fPIC -shared -dynamic
+library
+  hs-source-dirs:  src
+  exposed-modules: SQL.HDBC.PostgreSQL
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   semigroupoids,
+                   HDBC-postgresql,
+                   HDBC,
+                   conduit-combinators,
+                   conduit,
+                   utf8-string,
+                   resourcet
+  ghc-options:     -Wall -fPIC -shared -dynamic
 Test-Suite Test
     type:       exitcode-stdio-1.0
     hs-source-dirs:  src test
