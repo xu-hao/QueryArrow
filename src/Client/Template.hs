@@ -439,7 +439,7 @@ functions :: String -> DecsQ
 functions path = do
     (qr, ir, dr) <- runIO (getRewritingRules path)
     let qr1 = concatMap (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) (PredType _ ts) ) _) _) ->
-                        let n = map toLower n0
+                        let n = map toLower (drop 2 n0)
                             getInputOutputTypes [] = ([], [])
                             getInputOutputTypes (Key "Int" : t) = ((IntType :) *** id) (getInputOutputTypes t)
                             getInputOutputTypes (Key "Text" : t) = ((StringType :) *** id) (getInputOutputTypes t)
@@ -455,13 +455,13 @@ functions path = do
                               queryAllFunction n inputtypes outputtypes, hsQueryAllFunction n inputtypes outputtypes, hsQueryAllForeign n inputtypes outputtypes]
                     ) qr
     let ir1 = concatMap (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) args) _) ->
-                        let n = map toLower n0 in
+                        let n = map toLower (drop 2 n0) in
                             [createFunction n (length args), hsCreateFunction n (length args), hsCreateForeign n (length args),
                               createFunctionArray n (length args), hsCreateFunctionArray n, hsCreateForeignArray n]
                     ) ir
     let dr1 = concatMap (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) args) _) ->
-                        let n = map toLower n0 in
+                        let n = map toLower (drop 2 n0) in
                             [deleteFunction n (length args), hsDeleteFunction n (length args), hsDeleteForeign n (length args)]
                     ) dr
-    let st = struct (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower n0) (qr ++ ir ++ dr)))
+    let st = struct (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)))
     sequence (st : qr1 ++ ir1 ++ dr1)
