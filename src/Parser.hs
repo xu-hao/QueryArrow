@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "count", "limit", "order", "by", "asc", "desc", "let"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "count", "limit", "order", "by", "asc", "desc", "let", "distinct"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -117,7 +117,7 @@ letp = do
     reservedOp "="
     s <- (reserved "max" >> Max <$> varp)
       <|> (reserved "min" >> Min <$> varp)
-      <|> (reserved "count" >> return Count)
+      <|> (reserved "count" >> (try (reserved "distinct" >> CountDistinct <$> varp) <|> return Count))
     return (v,s)
 
 formula1p :: FOParser Formula
@@ -127,7 +127,8 @@ formula1p = try (parens formulap)
        <|> transactionp *> pure FTransaction
        <|> (Aggregate Not <$> (negp >> formula1p))
        <|> (Aggregate Exists <$> (existsp >> formula1p))
-       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> sepBy letp comma)) <*> formula1p)
+       <|> (Aggregate <$> (reserved "distinct" >> return Distinct) <*> formula1p)
+       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> sepBy1 letp comma)) <*> formula1p)
        <|> (Aggregate <$> (reserved "limit" >> Limit . fromIntegral <$> integer) <*> formula1p)
        <|> (Aggregate <$> (reserved "order" >> reserved "by" >> (try (OrderByAsc <$> varp <* reserved "asc") <|> (OrderByDesc <$> varp <* reserved "desc"))) <*> formula1p)
        <|> onep *> pure FOne
@@ -137,18 +138,18 @@ formula1p = try (parens formulap)
 
 formulap :: FOParser Formula
 formulap = do
-  formula1s <- sepBy formulaChoicep parp
+  formula1s <- sepBy1 formulaChoicep parp
   return (fpar formula1s)
 
 formulaChoicep :: FOParser Formula
 formulaChoicep = do
-    formulaConjs <- sepBy formulaSequencingp plusp
+    formulaConjs <- sepBy1 formulaSequencingp plusp
     return (fchoice formulaConjs)
 
 
 formulaSequencingp :: FOParser Formula
 formulaSequencingp = do
-  formulaConjs <- sepBy formula1p timesp
+  formulaConjs <- sepBy1 formula1p timesp
   return (fsequencing formulaConjs)
 
 paramtypep :: FOParser ParamType
@@ -162,7 +163,7 @@ prednamep :: FOParser PredName
 prednamep = do
     name <- identifier
     (do
-        dot
+        _ <- dot
         name2 <- identifier
         return (QPredName name [] name2))
         <|> return (UQPredName name)
@@ -185,7 +186,11 @@ progp :: FOParser ([Command], PredMap)
 progp = do
     commands <- many (do
       whiteSpace
-      (reserved "begin" *> return Begin) <|> (reserved "prepare" *> return Prepare) <|> (reserved "commit" *> return Commit) <|> (reserved "rollback" *> return Rollback) <|> (Execute <$> formulap))
+      (reserved "begin" *> return Begin)
+          <|> (reserved "prepare" *> return Prepare)
+          <|> (reserved "commit" *> return Commit)
+          <|> (reserved "rollback" *> return Rollback)
+          <|> (Execute <$> formulap))
     eof
     (_, predmap, _) <- getState
     return (commands, predmap)

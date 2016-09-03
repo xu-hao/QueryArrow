@@ -1,0 +1,406 @@
+import qualified all from ICAT
+import all from ICAT
+export qualified all from ICAT
+export all from ICAT
+export NUM_DATA_OBJ_COLL
+
+predicate LOCAL_ZONE property (property Text)
+rewrite LOCAL_ZONE(zn)
+    ZONE_NAME(zid, zn) ZONE_TYPE_NAME(zid, "local")
+
+predicate ZONE_ID property (property Text, property Text)
+rewrite ZONE_ID(zn, zid)
+    ZONE_NAME(zid, zn)
+
+predicate NUM_DATA_BY_RESC property (key Text, property Int)
+rewrite NUM_DATA_BY_RESC(rid, c)
+    let c = count distinct id (DATA_OBJ(id, rid))
+
+predicate NUM_DATA_BY_NAME property (key Text, property Int)
+rewrite NUM_DATA_BY_NAME(cn, n, c)
+    let c = count distinct id (COLL_NAME(cid, cn) DATA_NAME(id, rid, n) DATA_COLL_ID(id, rid, cid))
+
+predicate TOKEN_ID property(key Text, key Text, property Text)
+rewrite TOKEN_ID (ns, n, id)
+    TOKEN_NAME(id, n) TOKEN_NAMESPACE(id, ns)
+
+predicate TOKEN_NAME_BY_NAME_SPACE_AND_NAME property(key Text, key Text)
+rewrite TOKEN_NAME_BY_NAME_SPACE_AND_NAME (ns, n)
+    TOKEN_NAME(id, n) TOKEN_NAMESPACE(id, ns)
+
+predicate USER object(key Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert USER(uid, un, type, zn, cts, mts)
+    insert USER_OBJ(uid) USER_NAME(uid, un) USER_TYPE(uid, type) USER_ZONE_NAME(uid, zn) USER_CREATE_TS(uid, cts) USER_MODIFY_TS(uid, mts)
+
+predicate METAMAP_BY_OBJ_ID object (key Text)
+rewrite delete METAMAP_BY_OBJ_ID(id)
+    OBJT_METAMAP_OBJ(id, mid) delete OBJT_METAMAP_OBJ(id, mid)
+
+predicate ACCESS_BY_OBJ_ID_AND_USER object (key Text, key Text)
+rewrite delete ACCESS_BY_OBJ_ID_AND_USER(id, uid)
+    OBJT_ACCESS_OBJ(id, uid, acc) delete OBJT_METAMAP_OBJ(id, uid, acc)
+
+predicate ACCESS_BY_ACCESS_TYPE_TOKEN object (key Text, key Text, key Text, property Text, property Text)
+rewrite insert ACCESS_BY_ACCESS_TYPE_TOKEN(id, uid, acctoken, cts, mts)
+    TOKEN_ID("access_type", acctoken, acc) insert OBJT_ACCESS_OBJ(id, uid, acc) OBJT_ACCESS_CRAETE_TS(id, uid, acc, cts) OBJT_ACCESS_MODIFY_TS(id, uid, acc, mts)
+
+predicate METAMAP_BY_NAME object (key Text, key Text, key Text, property Text, property Text)
+rewrite insert METAMAP_BY_NAME(cn, n, mid, cts, mts)
+    DATA_NAME(id, n2) like(n2, n) DATA_COLL_ID(id, cid) COLL_NAME(cid, cn2) like(cn2, cn) insert OBJT_METAMAP_OBJ(id, mid) OBJT_METAMAP_CREATE_TS(id,mid, cts) OBJT_METAMAP_MODIFY_TS(id,mid,mts)
+
+predicate METAMAP object (key Text, key Text, property Text, property Text)
+rewrite insert METAMAP(id, mid, cts, mts)
+    insert OBJT_METAMAP_OBJ(id, mid) OBJT_METAMAP_CREATE_TS(id,mid, cts) OBJT_METAMAP_MODIFY_TS(id,mid,mts)
+
+predicate META_MAP_BY_OBJ_ID object (key Text, key Text, property Text, property Text)
+rewrite insert META_MAP_BY_OBJ_ID(id, id2, cts, mts)
+    OBJT_METAMAP_OBJ(id2, mid) insert OBJT_METAMAP_OBJ(id, mid) OBJT_METAMAP_CREATE_TS(id, mid, cts) OBJT_METAMAP_MODIFY_TS(id, mid, mts)
+
+predicate RESC_GROUP_ID property (key Text, property Text)
+rewrite RESC_GROUP_ID(rgn, rgid)
+    RESC_GROUP_NAME(rgn, rgid)
+
+predicate META_VALUE_AND_UNITS object (key Text, property Text, property Text)
+rewrite insert META_VALUE_AND_UNITS(mid, v, u)
+    insert META_VALUE(mid, v) META_UNITS(mid, v)
+
+predicate AVUS object ()
+rewrite delete AVUS()
+    META_OBJ(mid) ~ OBJT_METAMAP_OBJ(id, mid) delete META_OBJ(mid)
+
+predicate RESC_PARENT_BY_ZONE_AND_NAME property (key Text, key Text, property Text)
+rewrite RESC_PARENT_BY_ZONE_AND_NAME(zn, rn, p)
+    RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_PARENT(rid, p)
+
+predicate RESC_PARENT_TS property (key Text, property Text, property Text, property Text)
+rewrite insert RESC_PARENT_TS(rid, p, pc, ts)
+    insert RESC_PARENT(rid, p) RESC_PARENT_CONTEXT(rid, pc) RESC_MODIFY_TS(rid, ts)
+
+predicate COLL_CHILD_BY_NAME property (key Text, property Text)
+rewrite COLL_CHILD_BY_NAME(cn, id)
+    distinct (COLL_PARENT_COLL_NAME(id, cn) | COLL_NAME(cid, cn) DATA_COLL_ID(id, rid, cid))
+
+predicate COLL_BY_NAME object (key Text, key Text)
+rewrite delete COLL_BY_NAME(cn, cid)
+    COLL_NAME(cid, cn) delete COLL_OBJ(cid)
+
+predicate ACCESS_BY_OBJ_ID object (property Text)
+rewrite delete ACCESS_BY_OBJ_ID(id)
+    OBJT_ACCESS_OBJ(id, uid, acc) delete OBJT_ACCESS_OBJ(id, uid, acc)
+
+predicate ACCESS_BY_COLL_NAME object (property Text)
+rewrite delete ACCESS_BY_COLL_NAME(cn)
+    COLL_NAME(cid, cn) OBJT_ACCESS_OBJ(cid, uid, acc) delete OBJT_ACCESS_OBJ(id, uid, acc)
+
+predicate PASSWORD_BY_USER_ZONE_AND_NAME property (key Text, key Text, property Text)
+rewrite PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw)
+    USER_ID(zn, un, uid) USER_PASSWORD_OBJ(uid, pw)
+
+predicate USER_PASSWORD_BY_USER_ZONE_AND_NAME property (key Text, key Text, property Text, property Text, property Text, property Text)
+rewrite USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, mts)
+    USER_ID(zn, un, uid) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
+
+predicate USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS object (key Text, key Text, key Text, key Text)
+rewrite delete USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS(zn, un, pw, cts)
+        USER_ID(zn, un, uid) USER_PASSWORD_CREATE_TS(uid, pw, cts) delete USER_PASSWORD_OBJ(uid, pw)
+
+predicate USER_PASSWORD_BY_USER object (key Text)
+rewrite delete USER_PASSWORD_BY_USER(uid)
+    USER_PASSWORD_OBJ(uid, pw) delete USER_PASSWORD_OBJ(uid, pw)
+
+predicate USER_PASSWORD_BY_PASSWORD object (key Text)
+rewrite delete USER_PASSWORD_BY_PASSWORD(pw)
+    USER_PASSWORD_OBJ(uid, pw) delete USER_PASSWORD_OBJ(uid, pw)
+
+predicate USER_PASSWORD_BY_EXPIRY_TS_AND_CREATE_TS object (key Text, key Text)
+rewrite delete USER_PASSWORD_BY_EXPIRY_TS_AND_CREATE_TS(expiryts, cts)
+    USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts2) lt(cts2, cts) delete USER_PASSWORD_OBJ(uid, pw)
+
+predicate USER_GROUP object (key Text, key Text)
+rewrite delete USER_GROUP(gid, uid)
+    delete USER_GROUP_OBJ(gid, uid)
+
+predicate USER_GROUP object (key Text, key Text, property Text, property Text)
+rewrite insert USER_GROUP(gid, uid, cts, mts)
+    insert USER_GROUP_OBJ(gid, uid) USER_GROUP_CREATE_TS(gid, uid, cts) USER_GROUP_MODIFY_TS(gid,uid, mts)
+
+predicate USER_AUTH object (key Text)
+rewrite delete USER_AUTH(uid)
+    delete USER_AUTH_OBJ(uid)
+
+predicate RESC_ID property (key Text, key Text, property Text)
+rewrite RESC_ID (zn, rn, rid)
+    RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn)
+
+predicate RESC_ID_BY_NAME property (key Text, property Text)
+rewrite RESC_ID_BY_NAME (rn, rid)
+    RESC_NAME(rid, rn)
+
+predicate RESC_BY_NAME property (key Text)
+rewrite delete RESC_BY_NAME (rn)
+    RESC_NAME(rid, rn) delete RESC_OBJ(rid)
+
+predicate USER_ID property (key Text, key Text, property Text)
+rewrite USER_ID(zn, un, uid)
+    USER_NAME(uid, un) USER_ZONE_NAME(uid, zn)
+
+predicate USER_ID_WITH_PASSWORD property (key Text, key Text, key Text, property Text)
+rewrite USER_ID_WITH_PASSWORD(zn, un, uid)
+    USER_NAME(uid, un) USER_ZONE_NAME(uid, zn) USER_PASSWORD_OBJ(uid, pw)
+
+predicate META_ID property (key Text, key Text, key Text, property Text)
+rewrite META_ID(a, v, u, mid)
+    META_ATTRIBUTE(mid, a) META_VALUE(mid, v) META_UNITS(mid, u)
+
+predicate META_ID_BY_ATTRIBUTE_AND_VALUE property (key Text, key Text, property Text)
+rewrite META_ID_BY_ATTRIBUTE_AND_VALUE(a, v, mid)
+    META_ATTRIBUTE(mid, a) META_VALUE(mid, v) (META_UNITS(mid, u) | META_UNITS(mid, ""))
+
+predicate META_ID_BY_ATTRIBUTE_AND_OBJ_ID property (key Text, key Text, property Text)
+rewrite META_ID_BY_ATTRIBUTE_AND_OBJ_ID(a, id, mid)
+    META_ATTRIBUTE(mid, a) OBJT_METAMAP_OBJ(id, mid)
+
+predicate METAMAP_BY_ATTRIBUTE_AND_OBJ_ID property (key Text, key Text)
+rewrite delete METAMAP_BY_ATTRIBUTE_AND_OBJ_ID(a, id)
+    META_ATTRIBUTE(mid, a) OBJT_METAMAP_OBJ(id, mid) delete OBJT_METAMAP_OBJ(id, mid)
+
+predicate METAMAP_ALLOW_NULL_UNITS_USE_WILDCARDS property (key Text, key Text, key Text, key Text)
+rewrite delete METAMAP_ALLOW_NULL_UNITS_USE_WILDCARDS(a, v, u, id)
+    META_ID(a2, v2, u2, mid) like(a2, a) like(v2, v) (like(u2, u)|eq(u2,"")) OBJT_METAMAP_OBJ(id, mid) delete OBJT_METAMAP_OBJ(id, mid)
+
+predicate METAMAP_ALLOW_NULL_UNITS property (key Text, key Text, key Text, key Text)
+rewrite delete METAMAP_ALLOW_NULL_UNITS(a, v, u, id)
+    META_ID(a2, v2, u2, mid) eq(a2, a) eq(v2, v) (eq(u2, u)|eq(u2,"")) OBJT_METAMAP_OBJ(id, mid) delete OBJT_METAMAP_OBJ(id, mid)
+
+predicate METAMAP_USE_WILDCARDS property (key Text, key Text, key Text, key Text)
+rewrite delete METAMAP_USE_WILDCARDS(a, v, u, id)
+    META_ID(a2, v2, u2, mid) like(a2, a) like(v2, v) like(u2, u) OBJT_METAMAP_OBJ(id, mid) delete OBJT_METAMAP_OBJ(id, mid)
+
+predicate METAMAP_BY_AVU_AND_OBJ_ID property (key Text, key Text, key Text, key Text)
+rewrite delete METAMAP_BY_AVU_AND_OBJ_ID(a, v, u, id)
+    META_ID(a2, v2, u2, mid) eq(a2, a) eq(v2, v) eq(u2, u) OBJT_METAMAP_OBJ(id, mid) delete OBJT_METAMAP_OBJ(id, mid)
+
+predicate META object (key Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert META(mid, a, v, u, cts, mts)
+    insert META_OBJ(mid) META_ATTRIBUTE(mid, a) META_VALUE(mid, v) META_UNITS(mid, u) META_CREATE_TS(mid, cts) META_MODIFY_TS(mid, mts)
+
+predicate COLL_INHERITANCE_TS property (key Text, property Text, property Text)
+rewrite insert COLL_INHERITANCE_TS(cid, ci, ts)
+    insert COLL_INHERITANCE(cid, ci) COLL_MODIFY_TS(cid, ts)
+
+predicate COLL_INHERITANCE_BY_NAME property (property Text, property Text, property Text, property Text)
+rewrite insert COLL_INHERITANCE_BY_NAME(cn, cs, ci, ts)
+    (COLL_NAME(cid, cn) | COLL_NAME(cid, cn2) like(cn2, cs)) insert COLL_INHERITANCE_TS(cid, ci, ts)
+
+predicate NON_GROUP_USER_ID property (key Text, key Text, property Text)
+rewrite NON_GROUP_USER_ID(zn, un, uid)
+    USER_ID(zn, un, uid) USER_TYPE(uid, ut) ~eq(ut, "rodsgroup")
+
+predicate USER_BY_ZONE_AND_NAME property (key Text, key Text)
+rewrite delete USER_BY_ZONE_AND_NAME(zn, un)
+    USER_ID(zn, un, uid) delete USER_OBJ(uid)
+
+predicate GROUP_ID property (key Text, key Text, property Text)
+rewrite GROUP_ID(zn, un, uid)
+    USER_ID(zn, un, uid) USER_TYPE(uid, "rodsgroup")
+
+predicate USER_TYPE_BY_ZONE_AND_NAME property (key Text, key Text, property Text)
+rewrite USER_TYPE_BY_ZONE_AND_NAME(zn, un, type)
+    USER_ID(zn, un, uid) USER_TYPE(uid, type)
+
+predicate PASSWORD_BY_USER_ZONE_AND_NAME_AND_DIFF_EXPIRY_TS property (key Text, key Text, key Text, property Text)
+rewrite PASSWORD_BY_USER_ZONE_AND_NAME_AND_DIFF_EXPIRY_TS(zn, un, expiryts, pw)
+    USER_ID(zn, un, uid) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts2) ~eq(expiryts2, expiryts)
+
+predicate USER_PASSWORD_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, property Text, property Text, property Text)
+rewrite insert USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, mts)
+    USER_ID(zn, un, uid) insert USER_PASSWORD_OBJ(uid, pw) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
+
+predicate USER_PASSWORD object (key Text, key Text, property Text, property Text, property Text)
+rewrite insert USER_PASSWORD(uid, pw, expiryts, cts, mts)
+    insert USER_PASSWORD_OBJ(uid, pw) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
+
+predicate PASSWORD_EXPIRY_TS property (key Text, key Text, property Text, property Text)
+rewrite PASSWORD_EXPIRY_TS(uid, pw, expiryts, mts)
+    insert USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
+
+predicate DATA_ID property (key Text, key Text, property Text)
+rewrite DATA_ID(cid, n, id)
+    DATA_COLL_ID(id, rid, cid) DATA_NAME(id, rid, n)
+
+predicate REPL_RESC_ID property (key Text, key Text, property Text)
+rewrite REPL_RESC_ID (id, rnum, rid)
+    DATA_REPL_NUM(id, rid, rnum)
+
+predicate REPL2 property (key Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text)
+rewrite REPL2(id, cid, n, rnum, version, dtype, dsize, rgn, rn, rh, rid, filepath, un, zn, dirty, status, chksum, dmode, cts, mts, expts, rn)
+    DATA_COLL_ID(id, rid, cid) DATA_NAME(id, rid, n) DATA_REPL_NUM(id, rid, rnum) DATA_VERSION(id, rid, version) DATA_TYPE(id, rid, dtype)
+    DATA_SIZE(id, rid, dsize) DATA_RESC_GROUP_NAME(id, rid, rgn) DATA_RESC_NAME(id, rid, rn) DATA_RESC_HIER(id, rid, rh) DATA_FILE_PATH(id, rid, filepath) DATA_OWNER_NAME(id, rid, un) DATA_OWNER_ZONE(id, rid, zn)
+    DATA_IS_DIRTY(id, rid, dirty) DATA_STATUS(id, rid, status) DATA_CHECKSUM(id, rid, chksum) DATA_MODE(id, rid, dmode) DATA_CREATE_TS(id, rid, cts) DATA_MODIFY_TS(id, rid, mts)
+    DATA_EXPIRY_TS(id, rid, expts) DATA_RESC_NAME(id, rid, rn)
+
+rewrite insert REPL2(id, cid, n, rnum, version, dtype, dsize, rgn, rn, rh, rid, filepath, un, zn, dirty, status, chksum, dmode, cts, mts, expts, rn)
+    insert DATA_COLL_ID(id, rid, cid) DATA_NAME(id, rid, n) DATA_REPL_NUM(id, rid, rnum) DATA_VERSION(id, rid, version) DATA_TYPE(id, rid, dtype)
+            DATA_SIZE(id, rid, dsize) DATA_RESC_GROUP_NAME(id, rid, rgn) DATA_RESC_NAME(id, rid, rn) DATA_RESC_HIER(id, rid, rh) DATA_FILE_PATH(id, rid, filepath) DATA_OWNER_NAME(id, rid, un) DATA_OWNER_ZONE(id, rid, zn)
+            DATA_IS_DIRTY(id, rid, dirty) DATA_STATUS(id, rid, status) DATA_CHECKSUM(id, rid, chksum) DATA_MODE(id, rid, dmode) DATA_CREATE_TS(id, rid, cts) DATA_MODIFY_TS(id, rid, mts)
+            DATA_EXPIRY_TS(id, rid, expts) DATA_RESC_NAME(id, rid, rn)
+
+predicate REPL object (key Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert REPL(id, cid, n, rnum, version, dtype, dsize, rgn, rn, rh, rid, filepath, un, zn, dirty, status, chksum, dmode, cts, mts, expts, rn)
+    insert DATA_OBJ(id, rid) DATA_COLL_ID(id, rid, cid) DATA_NAME(id, rid, n) DATA_REPL_NUM(id, rid, rnum) DATA_VERSION(id, rid, version) DATA_TYPE(id, rid, dtype)
+            DATA_SIZE(id, rid, dsize) DATA_RESC_GROUP_NAME(id, rid, rgn) DATA_RESC_NAME(id, rid, rn) DATA_RESC_HIER(id, rid, rh) DATA_FILE_PATH(id, rid, filepath) DATA_OWNER_NAME(id, rid, un) DATA_OWNER_ZONE(id, rid, zn)
+            DATA_IS_DIRTY(id, rid, dirty) DATA_STATUS(id, rid, status) DATA_CHECKSUM(id, rid, chksum) DATA_MODE(id, rid, dmode) DATA_CREATE_TS(id, rid, cts) DATA_MODIFY_TS(id, rid, mts)
+            DATA_EXPIRY_TS(id, rid, expts) DATA_RESC_NAME(id, rid, rn)
+
+predicate ACCESS_INHERIT_COLL object (property Text, property Text, property Text, property Text)
+rewrite insert ACCESS_INHERIT_COLL(id, cid, cts, mts)
+    OBJT_ACCESS_OBJ(cid, uid, acc) insert OBJT_ACCESS_OBJ(id, uid, acc) OBJT_ACCESS_CRAETE_TS(id, uid, acc, cts) OBJT_ACCESS_MODIFY_TS(id, uid, acc, mts)
+
+predicate ACCESS_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, key Text, property Text, property Text)
+rewrite insert ACCESS_BY_USER_ZONE_AND_NAME(id, zn, un, acctoken, cts, mts)
+    USER_ID(zn, un, uid) TOKEN_ID("access_type", acctoken, acc) insert OBJT_ACCESS_OBJ(id, uid, acc) OBJT_ACCESS_CRAETE_TS(id, uid, acc, cts) OBJT_ACCESS_MODIFY_TS(id, uid, acc, mts)
+
+predicate ACCESS_RECURSIVE object (key Text, key Text, key Text, key Text, property Text, property Text)
+rewrite insert ACCESS_RECURSIVE(id, uid, acctoken, cts, mts, cn, cnpat)
+    TOKEN_ID("access_type", acctoken, acc) distinct ((COLL_NAME(id, cn) | COLL_NAME(id, cn2) like(cn2, cnpat)) return id) insert OBJT_ACCESS_OBJ(id, uid, acc) OBJT_ACCESS_CRAETE_TS(id, uid, acc, cts) OBJT_ACCESS_MODIFY_TS(id, uid, acc, mts)
+
+predicate MAX_REPL_NUM property (key Text, property Text)
+rewrite MAX_REPL_NUM(id, c)
+    let c = max rnum (DATA_REPL_NUM(id, rid, rnum))
+
+predicate DIFF_REPL_NUM property (key Text, key Text, property Text)
+rewrite DIFF_REPL_NUM(id, rnum, rnum2)
+    DATA_REPL_NUM(id, rid, rnum2) ~eq(rnum2, rnum)
+
+predicate REPL_BY_NAME object (key Text, key Text, key Text)
+rewrite delete REPL_BY_NAME(cn, n, rnum)
+    COLL_NAME(cid, cn) DATA_NAME(id, rid, n) DATA_COLL_ID(id, rid, cid) DATA_REPL_NUM(id, rid, rnum) delete DATA_OBJ(id, rid)
+
+predicate DATA_BY_NAME object (key Text, key Text)
+rewrite delete DATA_BY_NAME(cn, n)
+    COLL_NAME(cid, cn) DATA_NAME(id, rid, n) DATA_COLL_ID(id, rid, cid) delete DATA_OBJ(id, rid)
+
+predicate RESC_PARENT2 property (key Text, property Text)
+rewrite RESC_PARENT2(rid, p)
+    RESC_PARENT(rid, p)
+
+predicate RESC_CHILD property (key Text, property Text)
+rewrite RESC_CHILD(rid, ch)
+    RESC_PARENT(ch, rid)
+
+predicate RULE_EXEC property (key Text)
+rewrite delete RULE_EXEC(ruleid)
+    delete RULE_EXEC_OBJ(ruleid)
+
+predicate RESC object (key Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert RESC(rid, rn, zn, type, class, net, defpath, cts, mts, children, context, parent)
+    insert RESC_OBJ(rid) RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_TYPE_NAME(rid, type) RESC_CLASS_NAME(rid, class) RESC_NET(rid, net) RESC_DEF_PATH(rid, defpath) RESC_CREATE_TS(rid, cts) RESC_MODIFY_TS(rid, mts) RESC_CHILDREN(rid, children) RESC_CONTEXT(rid, context) RESC_PARENT(rid, parent)
+
+predicate COLL object (key Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert COLL(cid, pn, cn, owner, zn, type, info1, info2, cts, mts)
+    insert COLL_OBJ(cid) COLL_NAME(cid, cn) COLL_OWNER_ZONE(cid, zn) COLL_TYPE(cid, type) COLL_OWNER_NAME(cid, owner) COLL_INFO1(cid, info1) COLL_INFO2(cid, info2) COLL_CREATE_TS(cid, cts) COLL_MODIFY_TS(cid, mts) COLL_PARENT_COLL_NAME(cid, pn)
+
+predicate ZONE object (key Text, property Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert ZONE(zid, zn, type, conn, comm, cts, mts)
+    insert ZONE_OBJ(zid) ZONE_NAME(zid, zn) ZONE_TYPE_NAME(zid, type) ZONE_CONN_STRING(zid, conn) ZONE_R_COMMENT(zid, comm) COLL_CREATE_TS(zid, cts) ZONE_MODIFY_TS(zid, mts)
+
+predicate ZONE_R_COMMENT_TS object (key Text, property Text, property Text)
+rewrite insert ZONE_R_COMMENT_TS(zid, comm, mts)
+    insert ZONE_R_COMMENT(zid, comm) ZONE_MODIFY_TS(zid, mts)
+
+predicate RESC_R_COMMENT_TS object (key Text, property Text, property Text)
+rewrite insert RESC_R_COMMENT_TS(zid, comm, mts)
+    insert RESC_R_COMMENT(zid, comm) RESC_MODIFY_TS(zid, mts)
+
+predicate RESC_INFO_TS object (key Text, property Text, property Text)
+rewrite insert RESC_INFO_TS(zid, comm, mts)
+    insert RESC_INFO(zid, comm) RESC_MODIFY_TS(zid, mts)
+
+predicate ZONE_CONN_STRING_TS object (key Text, property Text, property Text)
+rewrite insert ZONE_CONN_STRING_TS(zid, conn, mts)
+    insert ZONE_CONN_STRING(zid, conn) ZONE_MODIFY_TS(zid, mts)
+
+predicate ZONE_NAME_TS object (key Text, property Text, property Text)
+rewrite insert ZONE_NAME_TS(zid, zn, mts)
+    insert ZONE_NAME(zid, zn) ZONE_MODIFY_TS(zid, mts)
+
+predicate COLL_OWNER_ZONE_BY_ZONE_NAME object (key Text, property Text, property Text)
+rewrite insert COLL_OWNER_ZONE_BY_ZONE_NAME(zn, zn2, mts)
+    COLL_OWNER_ZONE(cid, zn) insert COLL_OWNER_ZONE(cid, zn2) COLL_MODIFY_TS(cid, mts)
+
+predicate DATA_OWNER_ZONE_BY_ZONE_NAME object (key Text, property Text, property Text)
+rewrite insert DATA_OWNER_ZONE_BY_ZONE_NAME(zn, zn2, mts)
+    DATA_OWNER_ZONE(id, zn) insert DATA_OWNER_ZONE(id, zn2) DATA_MODIFY_TS(id, mts)
+
+predicate RESC_ZONE_BY_ZONE_NAME object (key Text, property Text, property Text)
+rewrite insert RESC_ZONE_BY_ZONE_NAME(zn, zn2, mts)
+    RESC_ZONE(rid, zn) insert RESC_ZONE(rid, zn2) RESC_MODIFY_TS(rid, mts)
+
+predicate RESC_FREE_SPACE_BY_NAME property (key Text, property Text, property Text)
+rewrite insert RESC_FREE_SPACE_BY_NAME(rn, fs, mts)
+    RESC_NAME(rid, rn) insert RESC_FREE_SPACE(rid, fs) RESC_MODIFY_TS(rid, mts)
+
+
+predicate RESC_FREE_SPACE_TS2 property (key Text, property Text, property Text, property Text)
+rewrite insert RESC_FREE_SPACE_TS2(rid, fs, fsts, mts)
+    insert RESC_FREE_SPACE(rid, fs) RESC_FREE_SPACE_TS(rid, fsts) RESC_MODIFY_TS(rid, mts)
+
+predicate RESC_NET_TS property (key Text, property Text, property Text)
+rewrite insert RESC_NET_TS(rid, fs, mts)
+    insert RESC_NET(rid, fs) RESC_MODIFY_TS(rid, mts)
+
+predicate RESC_TYPE_NAME_TS property (key Text, property Text, property Text)
+rewrite insert RESC_TYPE_NAME_TS(rid, fs, mts)
+    insert RESC_TYPE_NAME(rid, fs) RESC_MODIFY_TS(rid, mts)
+
+predicate RESC_DEF_PATH2 property (key Text, property Text)
+rewrite insert RESC_DEF_PATH2(rid, fs)
+    RESC_DEF_PATH(rid, fs)
+
+predicate RESC_DEF_PATH_TS property (key Text, property Text, property Text)
+rewrite insert RESC_DEF_PATH_TS(rid, fs, mts)
+    insert RESC_DEF_PATH(rid, fs) RESC_MODIFY_TS(rid, mts)
+
+predicate RESC_STATUS_TS property (key Text, property Text, property Text)
+rewrite insert RESC_STATUS_TS(rid, fs, mts)
+    insert RESC_STATUS(rid, fs) RESC_MODIFY_TS(rid, mts)
+
+predicate RESC_NAME_TS property (key Text, property Text, property Text)
+rewrite insert RESC_NAME_TS(rid, fs, mts)
+    insert RESC_NAME(rid, fs) RESC_MODIFY_TS(rid, mts)
+
+predicate SERVER_LOAD_RESC_NAME_BY_RESC_NAME property (key Text, property Text)
+rewrite insert SERVER_LOAD_RESC_NAME_BY_RESC_NAME(rn, rn2)
+    SERVER_LOAD_RESC_NAME(slid, rn) insert SERVER_LOAD_RESC_NAME(slid, rn2)
+
+predicate SERVER_LOAD_DIGEST_RESC_NAME_BY_RESC_NAME property (key Text, property Text)
+rewrite insert SERVER_LOAD_DIGEST_RESC_NAME_BY_RESC_NAME(rn, rn2)
+    SERVER_LOAD_DIGES_RESC_NAME(slid, rn) insert SERVER_LOAD_RESC_NAME(slid, rn2)
+
+predicate RESC_CONTEXT_TS property (key Text, property Text, property Text)
+rewrite insert RESC_CONTEXT_TS(rid, rcontext, mts)
+    insert RESC_CONTEXT(rid, rcontext) RESC_MODIFY_TS(rid, mts)
+
+predicate RULE_OWNER_ZONE_BY_ZONE_NAME object (key Text, property Text, property Text)
+rewrite insert RULE_OWNER_ZONE_BY_ZONE_NAME(zn, zn2, mts)
+    RULE_OWNER_ZONE(id, zn) insert RULE_OWNER_ZONE(id, zn2) RULE_MODIFY_TS(id, mts)
+
+predicate USER_ZONE_BY_ZONE_NAME object (key Text, property Text, property Text)
+rewrite insert USER_ZONE_BY_ZONE_NAME(zn, zn2, mts)
+    USER_ZONE(uid, zn) insert USER_ZONE(uid, zn2) USER_MODIFY_TS(uid, mts)
+
+predicate ZONE_NAME_BY_ZONE_NAME object (key Text, property Text, property Text)
+rewrite insert ZONE_NAME_BY_ZONE_NAME(zn, zn2, mts)
+    ZONE_NAME(zid, zn) insert ZONE_NAME(zid, zn2) ZONE_MODIFY_TS(zid, mts)
+
+predicate ZONE_TYPE_BY_NAME object (key Text, property Text)
+rewrite ZONE_TYPE_BY_NAME(zn, type)
+    ZONE_NAME(zid, zn) ZONE_TYPE(zid, type)
+
+predicate ZONE_BY_NAME object (key Text)
+rewrite delete ZONE_BY_NAME(zn)
+    ZONE_NAME(zid, zn) delete ZONE_OBJ(zid)
+
+predicate NUM_PASSWORD_BY_USER_NAME property (key Text, property Int)
+rewrite NUM_PASSWORD_BY_USER_NAME(un, c)
+    let c = count (USER_NAME(uid, un) USER_PASSWORD_OBJ(uid, pw))

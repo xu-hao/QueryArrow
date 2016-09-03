@@ -132,8 +132,9 @@ stringQ = return . LitE . StringL
 findAllKeys :: String -> [ColDef] -> ([ColDef], [ColDef])
 findAllKeys prefix coldefs =
     let par@(key, _) = partition (\(ColDef key0 _ _) -> map toUpper key0 == prefix ++ "_ID")  coldefs in
-        if null key
-            then partition (\(ColDef key0 _ _) -> endswith "_ID" (map toUpper key0)) coldefs
+        if null key || prefix == "DATA" -- specical case for data
+            then partition (\(ColDef key0 _ _) -> let key1 = (map toUpper key0) in
+                                                                      (endswith "_ID" key1 && "DATA_MAP_ID" /= key1) || "RCAT_PASSWORD" == key1) coldefs -- special case for user password
             else par
 
 findAllNotNulls :: [ColDef] -> [ColDef]

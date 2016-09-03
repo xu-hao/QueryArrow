@@ -262,6 +262,13 @@ main = hspec $ do
                 (Aggregate (Summarize [(Var "a", Count)]) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
                 (FReturn [Var "a"])
 
+        it "test parse query 1.2" $ do
+            let formula = parseStandardQuery "let a = count distinct b (DATA_NAME(x, y, z)) return a"
+            formula `shouldBe`
+              FSequencing
+                (Aggregate (Summarize [(Var "a", CountDistinct (Var "b"))]) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (FReturn [Var "a"])
+
         it "test parse query 1.1" $ do
             let formula = parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
             formula `shouldBe`
@@ -280,7 +287,8 @@ main = hspec $ do
                     [OneTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
-                    top), [])
+                    top
+                    False), [])
         it "test translate sql query 0.2" $ do
             let qu = qParseStandardQuery "cat" "let a = count (cat.DATA_NAME(x, y, z))"
             let sql = translateQuery2 (sqlStandardTrans "cat") (Set.fromList [Var "a"]) qu
@@ -290,7 +298,8 @@ main = hspec $ do
                     [OneTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
-                    top), [])
+                    top
+                    False), [])
         it "test translate sql query 0.2" $ do
             let qu = qParseStandardQuery "cat" "let a = count, b = max x, c = min x (cat.DATA_NAME(x, y, z))"
             let sql = translateQuery2 (sqlStandardTrans "cat") (Set.fromList [Var "a", Var "b", Var "c"]) qu
@@ -302,7 +311,8 @@ main = hspec $ do
                     [OneTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
-                    top), [])
+                    top
+                    False), [])
         {- it "test translate sql query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y, z) return x y"
             let sql = translateQuery2 (sqlStandardTrans "") qu
@@ -318,7 +328,8 @@ main = hspec $ do
                     [OneTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
-                    top), [])
+                    top
+                    False), [])
             (params sql) `shouldBe` []
         it "test translate sql query with param 2" $ do
             let qu = qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
