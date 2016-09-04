@@ -136,7 +136,7 @@ getSomeResultValues (Session db conn predicates) n vars form params = do
               Just r -> return r
               Nothing -> throwError (-1, "error 1")
 
-getIntResult :: (Liftable a b) => Session b ->[ Var ]-> a -> MapResultRow -> EitherT Error IO Int
+getIntResult :: (Liftable a b) => Session b ->[ Var ]-> a -> MapResultRow -> EitherT Error IO Int64
 getIntResult session vars form params = do
     r:_ <- getResultValues session vars form params
     return (resultValueToInt r)
@@ -161,8 +161,8 @@ getAllStringArrayResult session vars form params = do
     r <- getAllResultValues session vars form params
     return (map (map resultValueToString) r)
 
-resultValueToInt :: ResultValue -> Int
-resultValueToInt (IntValue i) = i
+resultValueToInt :: ResultValue -> Int64
+resultValueToInt (IntValue i) = fromIntegral i
 resultValueToInt (StringValue i) = read (Text.unpack i)
 
 resultValueToString :: ResultValue -> Text
