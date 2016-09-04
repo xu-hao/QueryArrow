@@ -125,6 +125,16 @@ getAllResultValues (Session db conn predicates) vars form params = do
               Just r -> return r
               Nothing -> throwError (-1, "error 1")
 
+getSomeResultValues :: (Liftable a b) => Session b -> Int -> [Var] -> a -> MapResultRow -> EitherT Error IO [[ResultValue]]
+getSomeResultValues (Session db conn predicates) n vars form params = do
+  count <- liftIO $ runResourceT (resultStreamTake n (doQueryWithConn db conn (fromList vars) (Aggregate (Limit n) (formula predicates form)) (fromList (Map.keys params)) (listResultStream [params])))
+  case count of
+      [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
+      rows ->
+          case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
+              Just r -> return r
+              Nothing -> throwError (-1, "error 1")
+
 getIntResult :: (Liftable a b) => Session b ->[ Var ]-> a -> MapResultRow -> EitherT Error IO Int
 getIntResult session vars form params = do
     r:_ <- getResultValues session vars form params
@@ -139,6 +149,11 @@ getStringArrayResult :: (Liftable a b) => Session b -> [Var] -> a -> MapResultRo
 getStringArrayResult session vars form params = do
     r <- getResultValues session vars form params
     return (map resultValueToString r)
+
+getSomeStringArrayResult :: (Liftable a b) => Session b -> Int -> [Var] -> a -> MapResultRow -> EitherT Error IO [[Text]]
+getSomeStringArrayResult session n vars form params = do
+    r <- getSomeResultValues session n vars form params
+    return (map (map resultValueToString) r)
 
 getAllStringArrayResult :: (Liftable a b) => Session b -> [Var] -> a -> MapResultRow -> EitherT Error IO [[Text]]
 getAllStringArrayResult session vars form params = do
@@ -263,19 +278,21 @@ querySomeFunction :: String -> [Type2] -> [Type2] -> DecsQ
 querySomeFunction name inputtypes outputtypes = do
     let fn = mkName ("get_some_" ++ name)
     p <- [p|session|]
+    let n = mkName ("a")
+    np <- [p|a|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
-    let ps = p : map VarP argnames
+    let ps = p : np : map VarP argnames
     -- this is the input map
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
-    let func = [|getAllStringArrayResult|]
+    let func = [|getSomeStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) session $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session $(varE n) $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
@@ -394,7 +411,7 @@ hsQuerySomeFunction n inputtypes outputtypes = do
     let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
     let retp = [|arrayToAllocatedBuffer $(varE retn) $(varE retlen) $(varE retlen2)|]
     runIO $ putStrLn ("generating function " ++ show fn2)
-    let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) session|] argnames
+    let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) session $(varE retlen2)|] argnames
     let b0 = foldl (\expr (arg, name) -> [|do
                                         $(varP name) <- $(arg)
                                         $(expr)|]) [|do
