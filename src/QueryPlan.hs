@@ -335,8 +335,21 @@ checkQueryPlan dbs   (_, QPAggregate2 (Summarize funcs) qp@(qpd, _)) = do
                 if var2 `member` det
                     then return ()
                     else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
+            Sum var2 ->
+                if var2 `member` det
+                    then return ()
+                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
+            Average var2 ->
+                if var2 `member` det
+                    then return ()
+                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
             Count ->
-                return ()) funcs
+                return ()
+            CountDistinct var2 ->
+                if var2 `member` det
+                    then return ()
+                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)) funcs
+
 
 checkQueryPlan dbs   (_, QPAggregate2 (Limit _) qp) = do
     checkQueryPlan dbs qp
@@ -673,9 +686,19 @@ execQueryPlan rs (QPAggregate3 combinedvs (Summarize funcs) qp) = -- assume no u
                                     if List.null rows
                                         then error "min of empty list"
                                         else minimum (map (ext v2) rows)
+                                Sum v2 ->
+                                    sum (map (ext v2) rows)
+                                Average v2 ->
+                                    if List.null rows
+                                        then error "min of empty list"
+                                        else average (map (ext v2) rows)
                                 Count ->
-                                    fromInteger (toInteger (length rows)) in
-                          ret v1 m) funcs
+                                    fromIntegral (length rows)
+                                CountDistinct v2 ->
+                                    fromIntegral (length (List.nub (map (ext v2) rows))) in
+                          ret v1 m) funcs where
+                              average :: Fractional a => [a] -> a
+                              average n = sum n / fromIntegral (length n)
 
         return (mconcat (reverse rows2) <> row)))
 execQueryPlan rs (QPAggregate3 combinedvs (Limit n) qp) =

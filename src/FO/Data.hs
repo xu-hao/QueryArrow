@@ -54,7 +54,7 @@ data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
 -- literals
 data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord, Show, Read)
 
-data Summary = Max Var | Min Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
+data Summary = Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
 data Aggregator = Summarize [(Var, Summary)] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists deriving (Eq, Ord, Show, Read)
 
 data Formula = FTransaction

@@ -8,6 +8,7 @@ import SQL.SQL
 import ICAT
 import Data.Namespace.Namespace
 
+import Data.Text (unpack)
 import Data.Map.Strict (fromList)
 
 
@@ -58,6 +59,13 @@ sqlStandardTrans ns preds mappings nextid =
                 (lookupPred "like_regex", simpleBuildIn "like_regex" (\thesign args ->
                     return (swhere (SQLCompCond (case thesign of
                         Pos -> "~"
-                        Neg -> "!~") (head args) (args !! 1)))))
+                        Neg -> "!~") (head args) (args !! 1))))),
+                (lookupPred "in", simpleBuildIn "in" (\thesign args ->
+                    let sql = swhere (SQLCompCond "in" (head args) (SQLExprText ("(" ++ (case args !! 1 of
+                                                                                              SQLStringConstExpr str -> unpack str
+                                                                                              _ -> error "the second argument of in is not a string") ++ ")"))) in
+                        case thesign of
+                            Pos -> return sql
+                            Neg -> return (snot sql)))
             ]))
             (sqlMapping ns preds mappings) nextid)

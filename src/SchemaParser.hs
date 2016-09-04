@@ -131,11 +131,24 @@ stringQ = return . LitE . StringL
 
 findAllKeys :: String -> [ColDef] -> ([ColDef], [ColDef])
 findAllKeys prefix coldefs =
-    let par@(key, _) = partition (\(ColDef key0 _ _) -> map toUpper key0 == prefix ++ "_ID")  coldefs in
-        if null key || prefix == "DATA" -- specical case for data
-            then partition (\(ColDef key0 _ _) -> let key1 = (map toUpper key0) in
-                                                                      (endswith "_ID" key1 && "DATA_MAP_ID" /= key1) || "RCAT_PASSWORD" == key1) coldefs -- special case for user password
-            else par
+    case prefix of
+        "SERVER_LOAD" -> (coldefs, []) -- special case for server load
+        "SERVER_LOAD_DIGEST" -> (coldefs, []) -- special case for server load digest
+        "SERVER_LOAD_DIGEST" -> partition (\(ColDef key0 _ _) ->
+                                    let key1 = map toUpper key0 in
+                                          "RESC_ID" == key1 || "USER_ID" == key1 || "MODIFY_TS" == key1)  coldefs  -- specical case for quota usage
+        "DATA" -> partition (\(ColDef key0 _ _) ->
+                                    let key1 = map toUpper key0 in
+                                          "DATA_ID" == key1 || "RESC_NAME" == key1)  coldefs  -- specical case for data
+        "USER_PASSWORD" -> partition (\(ColDef key0 _ _) ->
+                                    let key1 = map toUpper key0 in
+                                          "USER_ID" == key1 || "RCAT_PASSWORD" == key1)  coldefs  -- special case for user password
+        _ ->
+            let par@(key, _) = partition (\(ColDef key0 _ _) -> map toUpper key0 == prefix ++ "_ID")  coldefs in
+                if null key
+                    then partition (\(ColDef key0 _ _) -> let key1 = (map toUpper key0) in
+                                                                              (endswith "_ID" key1)) coldefs
+                    else par
 
 findAllNotNulls :: [ColDef] -> [ColDef]
 findAllNotNulls = filter (\(ColDef _ _ cs) -> any (\c -> case c of NotNull -> True ; _ -> False) cs)

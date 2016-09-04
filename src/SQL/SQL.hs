@@ -12,7 +12,7 @@ import Data.List (intercalate, (\\),union, nub)
 import Control.Monad.Trans.State.Strict (StateT, get, put, evalStateT, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, alter, toList, elems, size, delete)
-import Data.Monoid
+import Data.Monoid ((<>))
 import Data.Maybe
 import Debug.Trace
 import qualified Data.Text as T
@@ -484,6 +484,12 @@ translateFormulaToSQL (Aggregate (Summarize funcs) conj) = do
             Min v2 -> do
                 rep <- findRep v2
                 return (v, SQLFuncExpr "min" [rep])
+            Sum v2 -> do
+                rep <- findRep v2
+                return (v, SQLFuncExpr "sum" [rep])
+            Average v2 -> do
+                rep <- findRep v2
+                return (v, SQLFuncExpr "average" [rep])
             Count -> return (v, SQLFuncExpr "count" [SQLExprText "*"])
             CountDistinct v2 -> do
                 rep <- findRep v2

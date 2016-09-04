@@ -2,7 +2,6 @@ import qualified all from ICAT
 import all from ICAT
 export qualified all from ICAT
 export all from ICAT
-export NUM_DATA_OBJ_COLL
 
 predicate D_LOCAL_ZONE property (property Text)
 rewrite D_LOCAL_ZONE(zn)
@@ -24,8 +23,8 @@ predicate D_TOKEN_ID property(key Text, key Text, property Text)
 rewrite D_TOKEN_ID (ns, n, id)
     TOKEN_NAME(id, n) TOKEN_NAMESPACE(id, ns)
 
-predicate D_TOKEN_NAME_BY_NAME_SPACE_AND_NAME property(key Text, key Text)
-rewrite D_TOKEN_NAME_BY_NAME_SPACE_AND_NAME (ns, n)
+predicate D_TOKEN_NAME_BY_NAMESPACE_AND_NAME property(key Text, key Text)
+rewrite D_TOKEN_NAME_BY_NAMESPACE_AND_NAME (ns, n)
     TOKEN_NAME(id, n) TOKEN_NAMESPACE(id, ns)
 
 predicate D_USER object(key Text, property Text, property Text, property Text, property Text, property Text)
@@ -71,6 +70,10 @@ rewrite delete D_AVUS()
 predicate D_RESC_PARENT_BY_ZONE_AND_NAME property (key Text, key Text, property Text)
 rewrite D_RESC_PARENT_BY_ZONE_AND_NAME(zn, rn, p)
     RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_PARENT(rid, p)
+
+    predicate D_RESC_TYPE_NAME_BY_ZONE_AND_NAME property (key Text, key Text, property Text)
+    rewrite D_RESC_TYPE_NAME_BY_ZONE_AND_NAME(zn, rn, p)
+        RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_TYPE_NAME(rid, p)
 
 predicate D_RESC_PARENT_TS property (key Text, property Text, property Text, property Text)
 rewrite insert D_RESC_PARENT_TS(rid, p, pc, ts)
@@ -387,11 +390,11 @@ rewrite insert D_RESC_NAME_TS(rid, fs, mts)
 
 predicate D_SERVER_LOAD_RESC_NAME_BY_RESC_NAME property (key Text, property Text)
 rewrite insert D_SERVER_LOAD_RESC_NAME_BY_RESC_NAME(rn, rn2)
-    SERVER_LOAD_RESC_NAME(slid, rn) insert SERVER_LOAD_RESC_NAME(slid, rn2)
+    SERVER_LOAD_OBJ(a, rn, b, c, e, d, f, g, h, i) delete SERVER_LOAD_OBJ(a, rn, b, c, e, d, f, g, h, i) insert SERVER_LOAD_OBJ(a, rn2, b, c, e, d, f, g, h, i)
 
 predicate D_SERVER_LOAD_DIGEST_RESC_NAME_BY_RESC_NAME property (key Text, property Text)
 rewrite insert D_SERVER_LOAD_DIGEST_RESC_NAME_BY_RESC_NAME(rn, rn2)
-    SERVER_LOAD_DIGES_RESC_NAME(slid, rn) insert SERVER_LOAD_RESC_NAME(slid, rn2)
+    SERVER_LOAD_DIGEST_OBJ(rn, lf, ts) delete SERVER_LOAD_DIGEST_OBJ(rn, lf, ts) insert SERVER_LOAD_DIGEST_OBJ(rn2, lf, ts)
 
 predicate D_RESC_CONTEXT_TS property (key Text, property Text, property Text)
 rewrite insert D_RESC_CONTEXT_TS(rid, rcontext, mts)
@@ -424,3 +427,73 @@ rewrite D_NUM_PASSWORD_BY_USER_NAME(un, c)
 predicate D_DATA_NAME property (key Text, property Text)
 rewrite insert D_DATA_NAME(id, n)
     insert DATA_NAME(id, n)
+
+predicate D_COLL_NAME property (key Text, property Text, property Text, property Text)
+rewrite insert D_COLL_NAME(cid, cn, pn, mts)
+    insert COLL_NAME(cid, cn) COLL_PARENT_COLL_NAME(cid, pn) COLL_MODIFY_TS(cid, mts)
+
+predicate D_DATA_COLL_ID_TS property (key Text, property Text, property Text)
+rewrite insert D_DATA_COLL_ID_TS(id, cid, mts)
+    insert DATA_COLL_ID(id, cid) DATA_MODIFY_TS(id, mts)
+
+predicate D_TOKEN object (key Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text)
+rewrite insert D_TOKEN( tid, tns, tn, value1, value2, value3, tcomment, cts, mts)
+    insert TOKEN_OBJ(tid) TOKEN_NAMESPACE(tid, tns) TOKEN_NAME(tid, tn) TOKEN_VALUE(tid, value) TOKEN_VALUE1(tid, value2) TOKEN_VALUE1(tid, value3) TOKEN_R_COMMENT(tid, tcomment) TOKEN_CREATE_TS(tid, cts) TOKEN_MODIFY_TS(tid, mts)
+
+predicate D_TOKEN_BY_NAMESPACE_AND_NAME object (key Text, key Text)
+rewrite delete D_TOKEN_BY_NAMESPACE_AND_NAME( tns, tn)
+    TOKEN_NAMESPACE(tid, tns) TOKEN_NAME(tid, tn) delete TOKEN_OBJ(tid)
+
+predicate D_SERVER_LOAD object (key Text, key Text, key Text, key Text, key Text, key Text, key Text, key Text, key Text, key Text)
+rewrite insert D_SERVER_LOAD( hostname, rescname, cpuused, memused, swapused, runqload, diskspace, netinput, netoutput, createts)
+    insert SERVER_LOAD( hostname, rescname, cpuused, memused, swapused, runqload, diskspace, netinput, netoutput, createts)
+
+predicate D_SERVER_LOAD_BY_CREATE_TS object (key Text)
+rewrite delete D_SERVER_LOAD_BY_CREATE_TS( createts)
+    SERVER_LOAD( hostname, rescname, cpuused, memused, swapused, runqload, diskspace, netinput, netoutput, createts2) lt(createts2, createts) delete SERVER_LOAD( hostname, rescname, cpuused, memused, swapused, runqload, diskspace, netinput, netoutput, createts)
+
+predicate D_SERVER_LOAD_DIGEST object (key Text, key Text, key Text)
+rewrite insert D_SERVER_LOAD_DIGEST(rescname, loadfactor, createts)
+    insert SERVER_LOAD_OBJ( rescname, loadfactor, createts)
+
+predicate D_SERVER_LOAD_DIGEST_BY_CREATE_TS object (key Text)
+rewrite delete D_SERVER_LOAD_DIGEST_BY_CREATE_TS( createts)
+    SERVER_LOAD_DIGEST_OBJ( rescname, loadfactor, createts2) lt(createts2, createts) delete SERVER_LOAD_DIGEST_OBJ(rescname, loadfactor, createts)
+
+predicate D_QUOTA_USAGE_BY_MODIFY_TS object (key Text)
+rewrite delete D_QUOTA_USAGE_BY_MODIFY_TS( createts)
+    QUOTA_USAGE_OBJ( uid, rid, createts2) lt(createts2, createts) delete QUOTA_USAGE_OBJ(uid, rid, createts)
+
+predicate D_QUOTA_USAGE object (key Text)
+rewrite insert D_QUOTA_USAGE(mts)
+    DATA_RESC_NAME(rid, rn)
+    D_USER_ID(zn, un, uid)
+    let usage = sum dsize ( DATA_OWNER_NAME(id, un) DATA_OWNER_ZONE(id, zn) DATA_RESC_NAME(id, rn) DATA_SIZE(id, dsize) )
+    insert QUOTA_USAGE_OBJ(uid, rid, mts) QUOTA_USAGE(uid, rid, mts, usage)
+
+predicate D_QUOTA_BY_USER_ID_AND_RESC_ID object (key Text, key Text)
+rewrite delete D_QUOTA_BY_USER_ID_AND_RESC_ID( uid, rid)
+    delete QUOTA_OBJ( uid, rid)
+
+predicate D_QUOTA object (key Text, key Text, property Text, property Text)
+rewrite insert D_QUOTA(uid, rid, a, mts)
+    insert QUOTA_OBJ(uid, rid) QUOTA_LIMIT(uid, rid, a) QUOTA_MODIFY_TS(uid, rid, mts)
+
+predicate D_QUOTA_BY_USER_NAME_AND_RESC_NAME property (key Text, key Text, property Text, property Text, property Text, property Text)
+rewrite D_QUOTA_BY_USER_NAME_AND_RESC_NAME(un, rn, uid, rid, a, o)
+    order by o desc (distinct ( (D_USER_ID(un, zn, uid) | D_GROUP_ID(un, zn, gid) USER_GROUP_OBJ(gid, uid) | eq(rid, "0")) RESC_NAME(rid, rn) QUOTA_LIMIT(uid, rid, a) QUOTA_OVER(uid, rid, o) return uid rid a o))
+
+predicate D_NUM_DATA_BY_RESC_RECURSIVE property (key Text, property Text)
+rewrite D_NUM_DATA_BY_RESC_RECURSIVE(rn, c)
+    concat(root, rn, ";%") concat(mid1, "%;", rn) concat(mid, mid1, ";%") concat(leaf, "%;", rn)
+    let c = count distinct id (DATA_RESC_HIER(id, h) (like (h, root) | like (h, mid) | like (h, leaf)))
+
+predicate D_DATA_BY_RESC_NOT_IN_CHILD property (key Text, key Text, property Text)
+rewrite D_DATA_BY_RESC_NOT_IN_CHILD(rn, crn, c)
+    concat(root, rn, ";%") concat(mid1, "%;", rn) concat(mid, mid1, ";%") concat(leaf, "%;", rn)
+    concat(croot, crn, ";%") concat(cmid1, "%;", crn) concat(cmid, cmid1, ";%") concat(cleaf, "%;", crn)
+    distinct (DATA_RESC_HIER(id, h) (like (h, root) | like (h, mid) | like (h, leaf)) ~(like (h, croot) | like (h, cmid) | like (h, cleaf)) return id)
+
+predicate D_DATA_BY_RESC_LIST property (key Text, key Text, property Text)
+rewrite D_DATA_BY_RESC_LIST(rids, rids2, id)
+    distinct (DATA_RESC_ID(id, rid) in(rid, rids) ~ in(rid, rids2) return id)

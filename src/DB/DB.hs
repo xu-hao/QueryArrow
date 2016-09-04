@@ -22,6 +22,9 @@ instance Num ResultValue where
     IntValue a + IntValue b = IntValue (a + b)
     fromInteger i = IntValue (fromInteger i)
 
+instance Fractional ResultValue where
+    IntValue a / IntValue b = IntValue (a `quot` b)
+
 instance Convertible ResultValue Expr where
     safeConvert (StringValue s) = Right (StringExpr s)
     safeConvert (IntValue i) = Right (IntExpr i)

@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "count", "limit", "order", "by", "asc", "desc", "let", "distinct"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "order", "by", "asc", "desc", "let", "distinct"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -117,6 +117,8 @@ letp = do
     reservedOp "="
     s <- (reserved "max" >> Max <$> varp)
       <|> (reserved "min" >> Min <$> varp)
+      <|> (reserved "sum" >> Max <$> varp)
+      <|> (reserved "average" >> Min <$> varp)
       <|> (reserved "count" >> (try (reserved "distinct" >> CountDistinct <$> varp) <|> return Count))
     return (v,s)
 
@@ -168,13 +170,14 @@ prednamep = do
         return (QPredName name [] name2))
         <|> return (UQPredName name)
 
-predp :: FOParser ()
+predp :: FOParser [Action]
 predp = do
     reserved "predicate"
     name <- prednamep
     t <- predtypep
     let thepred = Pred name t
     updateState (\(predmap, predmap2, exports) -> (predmap, insertObject name thepred predmap2, exports))
+    return []
 
 varp :: FOParser Var
 varp = Var <$> identifier
@@ -196,30 +199,29 @@ progp = do
     return (commands, predmap)
 
 
-rulep :: FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+rulep :: FOParser [Action]
 rulep = (do
     whiteSpace
-    _ <- many predp
     reserved "rewrite"
     reserved "insert" *> irulep
       <|> reserved "delete" *> drulep
       <|> qrule2p) where
           qrule2p = do
               r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
-              return ([r], [], [])
+              return [(Rule ([r], [], []))]
           irulep = do
               r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
-              return ([], [r], [])
+              return [(Rule ([], [r], []))]
           drulep = do
               r <- InsertRewritingRule <$> atomp <* rarrowp  <*> formulap
-              return ([], [], [r])
+              return [(Rule ([], [], [r]))]
 
 namespacepathp :: FOParser (NamespacePath String)
 namespacepathp = do
   ids <- many identifier
   return (foldl extendNamespacePath mempty ids)
 
-importp :: FOParser ()
+importp :: FOParser [Action]
 importp = do
     (predmap, workspace, predmap2) <- getState
     reserved "import"
@@ -260,18 +262,62 @@ importp = do
             return (importFromNamespace ns prednames predmap predmap2)
             )
     setState (predmap, workspace, fromMaybe (error "import") predmap2')
+    return []
 
 
-importsp :: FOParser ()
-importsp = do
-    many importp
-    return ()
+data Action =
+  ExportQualifiedExceptFrom (NamespacePath String) [String] |
+  ExportQualifiedAllFrom (NamespacePath String) |
+  ExportQualifiedFrom (NamespacePath String) [String] |
+  ExportExceptFrom (NamespacePath String) [String] |
+  ExportAllFrom (NamespacePath String) |
+  ExportFrom (NamespacePath String) [String] |
+  Export [String] |
+  Rule ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
 
-exportp :: FOParser ()
+execAction :: Action -> FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+execAction (ExportQualifiedExceptFrom ns prednames) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importQualifiedExceptFromNamespace ns prednames workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (ExportQualifiedAllFrom ns) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importQualifiedAllFromNamespace ns workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (ExportQualifiedFrom ns prednames) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importQualifiedFromNamespace ns prednames workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (ExportExceptFrom ns prednames) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importExceptFromNamespace ns prednames workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (ExportAllFrom ns) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importAllFromNamespace ns workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (ExportFrom ns prednames) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importFromNamespace ns prednames workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (Export prednames) = do
+    (predmap, workspace, exports) <- getState
+    let exports' = importFromNamespace mempty prednames workspace exports
+    setState (predmap, workspace, fromMaybe (error "export") exports')
+    return mempty
+execAction (Rule r) = return r
+
+
+exportp :: FOParser [Action]
 exportp = do
-    (predmap, predmap2, workspace) <- getState
     reserved "export"
-    exports' <- (do
+    (do
         reserved "qualified"
         (do
             reserved "all"
@@ -280,15 +326,15 @@ exportp = do
             (do
                 reserved "except"
                 preds <- many1 identifier
-                return (importQualifiedExceptFromNamespace ns preds predmap workspace)
+                return [(ExportQualifiedExceptFrom ns preds)]
                 ) <|> (
-                return (importQualifiedAllFromNamespace ns predmap workspace)
+                return [(ExportQualifiedAllFrom ns)]
                 )
             ) <|> (do
             prednames <- many1 identifier
             reserved "from"
             ns <- namespacepathp
-            return (importQualifiedFromNamespace ns prednames predmap workspace)
+            return [(ExportQualifiedFrom ns prednames)]
             )
         ) <|> (do
         reserved "all"
@@ -297,35 +343,28 @@ exportp = do
         (do
             reserved "except"
             preds <- many1 identifier
-            return (importExceptFromNamespace ns preds predmap workspace)
+            return [(ExportExceptFrom ns preds)]
             ) <|> (
-            return (importAllFromNamespace ns predmap workspace)
+            return [(ExportAllFrom ns)]
             )
         ) <|> (do
             prednames <- many1 identifier
             (do
                 reserved "from"
                 ns <- namespacepathp
-                return (importFromNamespace ns prednames predmap workspace)
+                return [(ExportFrom ns prednames)]
                 ) <|> (
-                return (importFromNamespace mempty prednames predmap2 workspace)
+                return [(Export prednames)]
                 )
             )
-    setState (predmap, predmap2, fromMaybe (error "export") exports')
 
-
-exportsp :: FOParser ()
-exportsp = do
-   many exportp
-   return ()
 
 rulesp :: FOParser (([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), PredMap, PredMap)
 rulesp = do
-    importsp
-    exportsp
-    rules <- many rulep
+    actions <- many (importp <|> exportp <|> predp <|> rulep)
     eof
     (_, st, exports) <- getState
+    rules <- mapM execAction (concat actions)
     return (mconcat rules, st, exports)
 
 samePredAndKey :: Atom -> Atom -> Bool
