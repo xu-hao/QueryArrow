@@ -37,6 +37,7 @@ import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign.StablePtr
 import Control.Arrow ((+++), (***))
+import Data.Int
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -1
@@ -191,7 +192,7 @@ textToBuffer str n text = do
     let n2= (min (n - 1) (length str2))
     pokeArray0 (castCharToCChar '\0') str (map castCharToCChar (take n2 str2))
 
-intToBuffer :: Ptr CInt -> Int -> IO ()
+intToBuffer :: Ptr CLong -> Int64 -> IO ()
 intToBuffer buf i =
     poke buf (fromIntegral i)
 
@@ -321,7 +322,7 @@ hsQueryForeign name inputtypes outputtypes = do
   let b = conT (mkName "Predicates")
   sequence [ForeignD <$> (ExportF CCall ("hs_get_" ++ name) (mkName ("hs_get_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) (case outputtypes of
     [StringType] -> [t|CString -> Int -> IO Int|]
-    [IntType] -> [t|Ptr CInt -> IO Int|]
+    [IntType] -> [t|Ptr CLong -> IO Int|]
     _ -> [t|Ptr CString -> Int -> IO Int|]))|])]
 
 hsQueryLongForeign :: String -> [Type2] -> [Type2] -> DecsQ
@@ -330,7 +331,7 @@ hsQueryLongForeign name inputtypes outputtypes = do
     let b = conT (mkName "Predicates")
     case outputtypes of
         [StringType] ->
-            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName ("hs_get_int_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) [t|Ptr CInt -> IO Int|])|])]
+            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName ("hs_get_int_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
         _ -> return []
 
 hsQuerySomeForeign :: String -> [Type2] -> [Type2] -> DecsQ
