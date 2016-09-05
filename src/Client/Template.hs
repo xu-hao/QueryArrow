@@ -561,6 +561,14 @@ getRewritingRules path = do
           (rewriting, _, _) <- getRewriting predmap0 transinfo
           return rewriting
 
+getPredicates :: String -> IO ([Pred])
+getPredicates path = do
+  transinfo <- getConfig path
+  db <- PostgreSQL.getDB (db_info (head (db_plugins transinfo)))
+  case db of
+      AbstractDatabase db2 -> do
+          return (getPreds db2)
+
 functions :: String -> DecsQ
 functions path = do
     (qr, ir, dr) <- runIO (getRewritingRules path)
@@ -592,5 +600,6 @@ functions path = do
                         let n = map toLower (drop 2 n0) in
                             sequence [deleteFunction n (length args), hsDeleteFunction n (length args), hsDeleteForeign n (length args)]
                     ) dr
-    st <- struct (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)))
+    preds <- runIO (getPredicates path)
+    st <- struct (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
     return  (st : qr1 ++ ir1 ++ dr1)

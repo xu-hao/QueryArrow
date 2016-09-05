@@ -10,8 +10,9 @@ import Client.Template
 
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList, empty)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import qualified Data.Text as Text
+import Data.Monoid ((<>))
 import Control.Monad.Reader
 import Control.Applicative (liftA2, pure)
 import Control.Monad.Trans.Resource (runResourceT)
@@ -21,6 +22,11 @@ import Control.Monad.Trans.Either (EitherT)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.IO.Class (liftIO)
 import Foreign.StablePtr
+import Foreign.Ptr
+import Foreign.C.Types
+import Foreign.C.String
+import Foreign.Storable
+import Foreign.Marshal.Array
 
 $(functions "test/tdb-plugin.json")
 
@@ -37,3 +43,63 @@ hs_rollback sessionptr = do
     (Session _ conn _) <- deRefStablePtr sessionptr
     dbRollback conn
     return 0
+
+foreign export ccall hs_modify_data :: StablePtr (Session Predicates) -> Ptr CString -> Ptr CString -> Ptr CString -> Ptr CString -> Int -> Int -> IO Int
+hs_modify_data :: StablePtr (Session Predicates) -> Ptr CString -> Ptr CString -> Ptr CString -> Ptr CString -> Int -> Int -> IO Int
+hs_modify_data sessionptr cupdatecols cupdatevals cwherecolsandops cwherevals cupcols cnumwheres = do
+    session@(Session _ _ predicates) <- deRefStablePtr sessionptr
+    let upcols = fromIntegral cupcols
+    let numwheres = fromIntegral cnumwheres
+    cupdatecols2 <- peekArray upcols cupdatecols
+    updatecols <- mapM peekCString cupdatecols2
+    cupdatevals2 <- peekArray upcols cupdatevals
+    updatevals <- mapM peekCString cupdatevals2
+    cwherecolsandops2 <- peekArray numwheres cwherecolsandops
+    wherecolsandops <- mapM peekCString cwherecolsandops2
+    cwherevals2 <- peekArray numwheres cwherevals
+    wherevals <- mapM peekCString cwherevals2
+    let parse wherecolandcond =
+            if drop (length wherecolandcond - 2) wherecolandcond == "!="
+                then (drop (length wherecolandcond - 2) wherecolandcond, "!=")
+                else (drop (length wherecolandcond - 1) wherecolandcond, "=")
+    let (wherecols, whereops) = unzip (map parse wherecolsandops)
+    let whereatom pre wherecol0 =
+          let wherecol = var (pre ++ wherecol0) in
+                  case wherecol0 of
+                      "data_id" -> Atom (_eq predicates) [var "id", wherecol]
+                      "data_resc_id" -> Atom (_data_obj predicates) [var "id", wherecol]
+                      _ ->
+                          let p = case wherecol0 of
+                                      "data_repl_num" -> _data_repl_num
+                                      "data_type_name" -> _data_type_name
+                                      "data_size" -> _data_size
+                                      "resc_name" -> _data_resc_name
+                                      "data_path" -> _data_path
+                                      "data_owner_name" -> _data_owner_name
+                                      "data_owner_zone" -> _data_owner_zone
+                                      "data_is_dirty" -> _data_is_dirty
+                                      "data_checksum" -> _data_checksum
+                                      "data_expiry_ts" -> _data_expiry_ts
+                                      "data_r_comment" -> _data_comment
+                                      "data_create_ts" -> _data_create_ts
+                                      "data_modify_ts" -> _data_modify_ts
+                                      "data_mode" -> _data_mode
+                                      "data_resc_hier" -> _data_resc_hier  in
+                              Atom (p predicates) [var "id", var "rid", wherecol]
+    let whereform wherecol =
+            FAtomic (whereatom "w_" wherecol)
+    let wherelit :: String -> String -> Formula
+        wherelit wherecol "!=" =
+            Aggregate Not (whereform wherecol)
+        wherelit wherecol "=" =
+            whereform wherecol
+    let cond = foldl FSequencing FOne (zipWith wherelit wherecols whereops )
+    let updateatom wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = whereatom "u_" wherecol
+                            | otherwise = error ("cannot update " ++ wherecol)
+    let updateform updatecol =
+            FInsert (Lit Pos (updateatom updatecol))
+    let update = foldl FSequencing cond (map updateform updatecols)
+    let whereparam col val = (Var ("w_" ++ col), StringValue (pack val))
+    let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
+    let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
+    processRes (execQuery session update params) (const (return ()))

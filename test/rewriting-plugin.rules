@@ -321,15 +321,15 @@ rewrite insert D_COLL(cid, pn, cn, owner, zn, type, info1, info2, cts, mts)
 
 predicate D_ZONE object (key Text, property Text, property Text, property Text, property Text, property Text, property Text)
 rewrite insert D_ZONE(zid, zn, type, conn, comm, cts, mts)
-    insert ZONE_OBJ(zid) ZONE_NAME(zid, zn) ZONE_TYPE_NAME(zid, type) ZONE_CONN_STRING(zid, conn) ZONE_R_COMMENT(zid, comm) COLL_CREATE_TS(zid, cts) ZONE_MODIFY_TS(zid, mts)
+    insert ZONE_OBJ(zid) ZONE_NAME(zid, zn) ZONE_TYPE_NAME(zid, type) ZONE_CONN_STRING(zid, conn) ZONE_COMMENT(zid, comm) COLL_CREATE_TS(zid, cts) ZONE_MODIFY_TS(zid, mts)
 
-predicate D_ZONE_R_COMMENT_TS object (key Text, property Text, property Text)
-rewrite insert D_ZONE_R_COMMENT_TS(zid, comm, mts)
-    insert ZONE_R_COMMENT(zid, comm) ZONE_MODIFY_TS(zid, mts)
+predicate D_ZONE_COMMENT_TS object (key Text, property Text, property Text)
+rewrite insert D_ZONE_COMMENT_TS(zid, comm, mts)
+    insert ZONE_COMMENT(zid, comm) ZONE_MODIFY_TS(zid, mts)
 
-predicate D_RESC_R_COMMENT_TS object (key Text, property Text, property Text)
-rewrite insert D_RESC_R_COMMENT_TS(zid, comm, mts)
-    insert RESC_R_COMMENT(zid, comm) RESC_MODIFY_TS(zid, mts)
+predicate D_RESC_COMMENT_TS object (key Text, property Text, property Text)
+rewrite insert D_RESC_COMMENT_TS(zid, comm, mts)
+    insert RESC_COMMENT(zid, comm) RESC_MODIFY_TS(zid, mts)
 
 predicate D_RESC_INFO_TS object (key Text, property Text, property Text)
 rewrite insert D_RESC_INFO_TS(zid, comm, mts)
@@ -438,7 +438,7 @@ rewrite insert D_DATA_COLL_ID_TS(id, cid, mts)
 
 predicate D_TOKEN object (key Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text, property Text)
 rewrite insert D_TOKEN( tid, tns, tn, value1, value2, value3, tcomment, cts, mts)
-    insert TOKEN_OBJ(tid) TOKEN_NAMESPACE(tid, tns) TOKEN_NAME(tid, tn) TOKEN_VALUE(tid, value) TOKEN_VALUE1(tid, value2) TOKEN_VALUE1(tid, value3) TOKEN_R_COMMENT(tid, tcomment) TOKEN_CREATE_TS(tid, cts) TOKEN_MODIFY_TS(tid, mts)
+    insert TOKEN_OBJ(tid) TOKEN_NAMESPACE(tid, tns) TOKEN_NAME(tid, tn) TOKEN_VALUE(tid, value) TOKEN_VALUE1(tid, value2) TOKEN_VALUE1(tid, value3) TOKEN_COMMENT(tid, tcomment) TOKEN_CREATE_TS(tid, cts) TOKEN_MODIFY_TS(tid, mts)
 
 predicate D_TOKEN_BY_NAMESPACE_AND_NAME object (key Text, key Text)
 rewrite delete D_TOKEN_BY_NAMESPACE_AND_NAME( tns, tn)
