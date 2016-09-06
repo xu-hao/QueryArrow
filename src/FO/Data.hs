@@ -55,7 +55,7 @@ data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
 data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord, Show, Read)
 
 data Summary = Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
-data Aggregator = Summarize [(Var, Summary)] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists deriving (Eq, Ord, Show, Read)
+data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists deriving (Eq, Ord, Show, Read)
 
 data Formula = FTransaction
              | FReturn [Var]
@@ -113,7 +113,7 @@ instance FreeVars Formula where
         freeVars formula1
     freeVars (Aggregate Exists formula1) =
         freeVars formula1
-    freeVars (Aggregate (Summarize _) form) =
+    freeVars (Aggregate (Summarize _ _) form) =
         freeVars form
     freeVars (Aggregate (Limit _) form) =
         freeVars form
@@ -325,7 +325,7 @@ instance Serialize Formula where
     serialize (FZero) = "𝟎"
     serialize (Aggregate Exists form) = "∃" ++ serialize form
     serialize (Aggregate Not form) = "¬" ++ serialize form
-    serialize (Aggregate (Summarize funcs) form) = "(let " ++ unwords (map (\(var1, func1) -> serialize var1 ++ " = " ++ serialize func1) funcs) ++ " " ++ serialize form ++ ")"
+    serialize (Aggregate (Summarize funcs groupby) form) = "(let " ++ unwords (map (\(var1, func1) -> serialize var1 ++ " = " ++ serialize func1) funcs) ++ " " ++ (if null groupby then "" else "group by " ++ unwords (map serialize groupby) ++ " ") ++ serialize form ++ ")"
     serialize (Aggregate (Limit n) form) = "(limit " ++ show n ++ " " ++ serialize form ++ ")"
     serialize (Aggregate (OrderByAsc var1) form) = "(order by " ++ serialize var1 ++ " asc " ++ serialize form ++ ")"
     serialize (Aggregate (OrderByDesc var1) form) = "(order by " ++ serialize var1 ++ " desc " ++ serialize form ++ ")"
@@ -441,7 +441,7 @@ instance Subst Formula where
     subst s (FPar form1 form2) = FPar (subst s form1) (subst s form2)
     subst s (Aggregate Not a) = Aggregate Not (subst s a)
     subst s (Aggregate Exists a) = Aggregate Exists (subst s a)
-    subst s (Aggregate (Summarize funcs) a) = Aggregate (Summarize (subst s funcs)) (subst s a)
+    subst s (Aggregate (Summarize funcs groupby) a) = Aggregate (Summarize (subst s funcs) (map (\var1 -> extractVar (subst s (VarExpr var1))) groupby)) (subst s a)
     subst s (Aggregate (Limit n) a) = Aggregate (Limit n) (subst s a)
     subst s (Aggregate (OrderByAsc var1) a) = Aggregate (OrderByAsc (extractVar (subst s (VarExpr var1)))) (subst s a)
     subst s (Aggregate (OrderByDesc var1) a) = Aggregate (OrderByAsc (extractVar (subst s (VarExpr var1)))) (subst s a)

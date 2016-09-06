@@ -90,7 +90,7 @@ data SQLOrder = ASC | DESC deriving (Eq, Ord, Show)
 type IntLattice = Dropped (Ordered Int)
 pattern IntLattice a = Drop (Ordered a)
 
-data SQL = SQLQuery {sqlSelect :: [ (Var, SQLExpr) ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond, sqlOrderBy :: [(SQLExpr, SQLOrder)], sqlLimit :: IntLattice, sqlDistinct :: Bool } deriving (Eq, Ord, Show)
+data SQL = SQLQuery {sqlSelect :: [ (Var, SQLExpr) ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond, sqlOrderBy :: [(SQLExpr, SQLOrder)], sqlLimit :: IntLattice, sqlDistinct :: Bool, sqlGroupBy :: [SQLExpr]} deriving (Eq, Ord, Show)
 
 data SQLStmt = SQLQueryStmt SQL
     | SQLInsertStmt TableName [(Col,SQLExpr)] [Table] SQLCond
@@ -138,11 +138,14 @@ showWhereCond2 cond sqlvar = case cond of
     _ -> " WHERE " ++ show2 cond sqlvar
 
 instance Show2 SQL where
-    show2 (SQLQuery cols tables conds orderby limit distinct) sqlvar = "SELECT " ++ (if distinct then "DISTINCT " else "") ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ show var) cols)) ++
+    show2 (SQLQuery cols tables conds orderby limit distinct groupby) sqlvar = "SELECT " ++ (if distinct then "DISTINCT " else "") ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ show var) cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map serialize tables)) ++
             (showWhereCond2 conds sqlvar) ++
+            (if null groupby
+                then ""
+                else " GROUP BY " ++ intercalate "," (map serialize groupby)) ++
             (if null orderby
                 then ""
                 else " ORDER BY " ++ intercalate "," (map (\(expr, ord) -> serialize expr ++ " " ++ case ord of
@@ -221,22 +224,23 @@ instance Subst a => Subst [a] where
 type SQLQuery = ([Var], SQLStmt, [Var]) -- return vars, sql, param vars
 
 instance Monoid SQL where
-    (SQLQuery sselect1 sfrom1 swhere1 orderby1 limit1 distinct1) `mappend` (SQLQuery sselect2 sfrom2 swhere2 orderby2 limit2 distinct2)
-        | not distinct1 && not distinct2 =
-            SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2) (orderby1 <> orderby2) (limit1 /\ limit2) False
-        | otherwise =
-            error "incompatible distinct"
-    mempty = SQLQuery [] [] SQLTrueCond [] top False
+    (SQLQuery sselect1 sfrom1 swhere1 [] Top False []) `mappend` (SQLQuery sselect2 sfrom2 swhere2 [] Top False []) =
+            SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2) [] Top False []
+    _ `mappend` _ =
+            error "sand: incompatible order by, limit, distinct, or group by"
+    mempty = SQLQuery [] [] SQLTrueCond [] top False []
 
 sor :: SQL -> SQL -> SQL
-sor (SQLQuery sselect1 sfrom1 swhere1 [] Top False) (SQLQuery sselect2 sfrom2 swhere2 [] Top False) = SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2) [] top False
-sor _ _ = error "sor: incompatible order by, limit, or distinct"
+sor (SQLQuery sselect1 sfrom1 swhere1 [] Top False []) (SQLQuery sselect2 sfrom2 swhere2 [] Top False []) = SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .||. swhere2) [] top False []
+sor _ _ = error "sor: incompatible order by, limit, distinct, or group by"
 
 snot :: SQL -> SQL
-snot (SQLQuery sselect sfrom swhere orderby limit _) = SQLQuery sselect sfrom (SQLNotCond swhere) [] top False
+snot (SQLQuery sselect sfrom swhere _ (Drop (Ordered 0)) _ _) = mempty
+snot (SQLQuery sselect sfrom swhere _ _ _ _) = SQLQuery sselect sfrom (SQLNotCond swhere) [] top False []
 
 swhere :: SQLCond -> SQL
-swhere swhere1 = SQLQuery [] [] swhere1 [] top False
+swhere swhere1 = SQLQuery [] [] swhere1 [] top False []
+
 -- translate relational calculus to sql
 -- If P maps to table T col_1 ... col_n
 -- {xs : P(e_1,e_2,...,e_n)}
@@ -338,13 +342,13 @@ instance Params SQLCond where
     params (SQLExistsCond sql) = params sql
 
 instance Params SQLStmt where
-    params (SQLQueryStmt (SQLQuery sel _ cond _ _ _)) = params sel ++ params cond
+    params (SQLQueryStmt (SQLQuery sel _ cond _ _ _ _)) = params sel ++ params cond
     params (SQLInsertStmt _ vs _ cond) = params (map snd vs) ++ params cond
     params (SQLUpdateStmt _ vs cond) = params (map snd vs) ++ params cond
     params (SQLDeleteStmt _ cond) = params cond
 
 instance Params SQL where
-    params (SQLQuery sel _ cond _ _ _) = params sel ++ params cond
+    params (SQLQuery sel _ cond _ _ _ _) = params sel ++ params cond
 
 instance Params (Var, SQLExpr) where
     params (_, expr) = params expr
@@ -367,26 +371,26 @@ translateQueryToSQL vars formula = do
         _ -> do
             (vars, sql, vars2) <- if pureF formula
                 then do
-                    (SQLQuery sels tablelist cond1 orderby limit distinct) <-  translateFormulaToSQL formula
+                    (SQLQuery sels tablelist cond1 orderby limit distinct groupby) <-  translateFormulaToSQL formula
                     ts <- get
                     let map2 = fromList sels <> repmap ts
                     let extractCol var = case lookup var map2 of
                                             Just col -> col
                                             _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show formula ++ " to SQL, available " ++ show (repmap ts))
                     let cols = map extractCol vars
-                        sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit distinct)
+                        sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit distinct groupby)
                     return (vars, sql, (params sql))
                 else translateInsertToSQL formula
             return (vars, simplifySQLCond sql, vars2)
 
 simplifySQLCond :: SQLStmt -> SQLStmt
-simplifySQLCond (SQLQueryStmt (SQLQuery s f cond orderby limit distinct)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond) orderby limit distinct)
+simplifySQLCond (SQLQueryStmt (SQLQuery s f cond orderby limit distinct groupby)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond) orderby limit distinct groupby)
 simplifySQLCond (SQLInsertStmt t s f cond) = SQLInsertStmt t s f (simplifySQLCond' cond)
 simplifySQLCond (SQLUpdateStmt t cs cond) = SQLUpdateStmt t cs (simplifySQLCond' cond)
 simplifySQLCond (SQLDeleteStmt t cond) = SQLDeleteStmt t (simplifySQLCond' cond)
 
 simplifySQLCond2 :: SQL -> SQL
-simplifySQLCond2 (SQLQuery s f cond orderby limit distinct) = SQLQuery s f (simplifySQLCond' cond) orderby limit distinct
+simplifySQLCond2 (SQLQuery s f cond orderby limit distinct groupby) = SQLQuery s f (simplifySQLCond' cond) orderby limit distinct groupby
 
 simplifySQLCond' :: SQLCond -> SQLCond
 simplifySQLCond' c@(SQLCompCond "=" a b) | a == b = SQLTrueCond
@@ -423,25 +427,31 @@ simplifySQLCond' (SQLExistsCond sql) = SQLExistsCond (simplifySQLCond2 sql)
 
 
 sqlexists :: SQL -> SQL
-sqlexists sql@(SQLQuery [] tablelist (SQLExistsCond _) _ _ _) = sql
-sqlexists (SQLQuery cols tablelist cond orderby limit _) = SQLQuery [] [] (SQLExistsCond (SQLQuery cols tablelist cond orderby limit False)) [] top False
+sqlexists (SQLQuery _ _ _ _ (Drop (Ordered 0)) _ _) = sqlfalse
+sqlexists (SQLQuery cols tablelist cond _ _ _ _) = SQLQuery [] [] (SQLExistsCond (SQLQuery cols tablelist cond [] Top False [])) [] top False []
 
 sqlfalse :: SQL
-sqlfalse = SQLQuery [] [] (SQLFalseCond) [] top False
+sqlfalse = SQLQuery [] [] (SQLFalseCond) [] top False []
 
-sqlsummarize :: [(Var, SQLExpr)] -> SQL -> SQL
-sqlsummarize funcs (SQLQuery _ from whe orderby limit False) =
-    SQLQuery funcs from whe orderby limit False
-sqlsummarize funcs (SQLQuery _ from whe orderby limit True) =
+sqlsummarize :: [(Var, SQLExpr)] -> [SQLExpr] -> SQL -> SQL
+sqlsummarize funcs groupby (SQLQuery _ from whe [] Top False []) =
+    SQLQuery funcs from whe [] top False groupby
+sqlsummarize funcs groupby (SQLQuery _ from whe (_ : _) _ _ _) =
+    error "cannot summarize orderby selection"
+sqlsummarize funcs groupby (SQLQuery _ from whe _ (Drop _) _ _) =
+    error "cannot summarize limit selection"
+sqlsummarize funcs groupby (SQLQuery _ from whe _ _ True _) =
     error "cannot summarize distinct selection"
+sqlsummarize funcs groupby (SQLQuery _ from whe _ _ _ (_ : _)) =
+    error "cannot summarize groupby selection"
 
 sqlorderby :: SQLOrder -> SQLExpr -> SQL -> SQL
-sqlorderby ord expr (SQLQuery sel from whe orderby limit distinct) =
-    SQLQuery sel from whe ((expr, ord) : orderby) limit distinct
+sqlorderby ord expr (SQLQuery sel from whe orderby limit distinct groupby) =
+    SQLQuery sel from whe ((expr, ord) : orderby) limit distinct groupby
 
 sqllimit :: IntLattice -> SQL -> SQL
-sqllimit n (SQLQuery sel from whe orderby limit distinct) =
-    SQLQuery sel from whe orderby (n /\ limit) distinct
+sqllimit n (SQLQuery sel from whe orderby limit distinct groupby) =
+    SQLQuery sel from whe orderby (n /\ limit) distinct groupby
 
 findRep :: Var -> TransMonad SQLExpr
 findRep v =  do
@@ -474,7 +484,7 @@ translateFormulaToSQL (Aggregate Not (FAtomic a)) =
 translateFormulaToSQL (Aggregate Not form) =
     snot <$> translateFormulaToSQL form
 
-translateFormulaToSQL (Aggregate (Summarize funcs) conj) = do
+translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
     sql <- translateFormulaToSQL conj
     funcs' <- mapM (\(v, s) ->
         case s of
@@ -494,7 +504,8 @@ translateFormulaToSQL (Aggregate (Summarize funcs) conj) = do
             CountDistinct v2 -> do
                 rep <- findRep v2
                 return (v, SQLFuncExpr "count" [SQLFuncExpr2 "distinct" rep])) funcs
-    return (sqlsummarize funcs' sql)
+    groupbyreps <- mapM findRep groupby
+    return (sqlsummarize funcs' groupbyreps sql)
 
 translateFormulaToSQL (Aggregate (Limit n) form) =
     sqllimit (IntLattice n) <$> translateFormulaToSQL form
@@ -558,8 +569,8 @@ translateAtomToSQL thesign (Atom name args) = do
                 condsFromArgs <- mapM condFromArg (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
                 return (case thesign of
-                            Pos -> SQLQuery [] tables2 cond3 [] top False
-                            Neg -> SQLQuery [] [] (SQLNotCond (SQLExistsCond (SQLQuery [] tables2 cond3 [] top False))) [] top False)
+                            Pos -> SQLQuery [] tables2 cond3 [] top False []
+                            Neg -> SQLQuery [] [] (SQLNotCond (SQLExistsCond (SQLQuery [] tables2 cond3 [] top False []))) [] top False [])
             Nothing -> error (show name ++ " is not defined")
 
 
@@ -579,7 +590,7 @@ translateInsertToSQL form = do
 
 translateInsertToSQL' :: [Lit] -> Formula -> TransMonad SQLQuery
 translateInsertToSQL' lits conj = do
-    (SQLQuery _ tablelist cond orderby limit distinct) <- translateFormulaToSQL conj
+    (SQLQuery _ tablelist cond orderby limit distinct groupby) <- translateFormulaToSQL conj
     if distinct
         then error "cannot insert from distinct selection"
         else do
@@ -876,7 +887,7 @@ orderByF trans (Aggregate (OrderByAsc _) form) = do
 orderByF trans form = summarizeF trans form
 
 summarizeF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-summarizeF trans (Aggregate (Summarize _) form) = do
+summarizeF trans (Aggregate (Summarize _ _) form) = do
   ks <- get
   put ks {ksQuery = True}
   pureOrExecF trans form

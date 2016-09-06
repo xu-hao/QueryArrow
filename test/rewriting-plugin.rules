@@ -103,6 +103,19 @@ predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME property (key Text, key Text, pr
 rewrite D_USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, mts)
     D_USER_ID(zn, un, uid) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
 
+// predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, property Text, property Text, property Text)
+// rewrite insert D_USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, mts)
+//     D_USER_ID(zn, un, uid) insert USER_PASSWORD_OBJ(uid, pw) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
+
+rewrite insert D_USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, mts)
+    D_USER_ID(zn, un, uid) insert USER_PASSWORD_OBJ(uid) USER_PASSWORD_RCAT_PASSWORD(uid, pw) USER_PASSWORD_PASS_EXPIRY_TS(uid, expiryts) USER_PASSWORD_CREATE_TS(uid, cts) USER_PASSWORD_MODIFY_TS(uid, mts)
+
+
+predicate D_USER_PASSWORD_BY_USER property (key Text, property Text, property Text)
+rewrite insert D_USER_PASSWORD_BY_USER(uid, pw, mts)
+    USER_PASSWORD_OBJ(uid) insert USER_PASSWORD_RCAT_PASSWORD(uid, pw) USER_PASSWORD_MODIFY_TS(uid, mts)
+
+
 predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS object (key Text, key Text, key Text, key Text)
 rewrite delete D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS(zn, un, pw, cts)
         D_USER_ID(zn, un, uid) USER_PASSWORD_CREATE_TS(uid, pw, cts) delete USER_PASSWORD_OBJ(uid, pw)
@@ -207,6 +220,10 @@ predicate D_COLL_ID_BY_COLL property (key Text, property Text)
 rewrite D_COLL_ID_BY_COLL(cid, cid2)
     COLL_OBJ(cid) eq(cid, cid2)
 
+predicate D_COLL_ID_BY_COLL_ID property (key Text)
+rewrite D_COLL_ID_BY_COLL_ID(cid)
+    COLL_OBJ(cid)
+
 predicate D_COLL_INHERITANCE_BY_NAME property (property Text, property Text, property Text, property Text)
 rewrite insert D_COLL_INHERITANCE_BY_NAME(cn, cs, ci, ts)
     (COLL_NAME(cid, cn) | COLL_NAME(cid, cn2) like(cn2, cs)) insert COLL_INHERITANCE_TS(cid, ci, ts)
@@ -230,10 +247,6 @@ rewrite D_USER_TYPE_BY_ZONE_AND_NAME(zn, un, type)
 predicate D_PASSWORD_BY_USER_ZONE_AND_NAME_AND_DIFF_EXPIRY_TS property (key Text, key Text, key Text, property Text)
 rewrite D_PASSWORD_BY_USER_ZONE_AND_NAME_AND_DIFF_EXPIRY_TS(zn, un, expiryts, pw)
     D_USER_ID(zn, un, uid) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts2) ~eq(expiryts2, expiryts)
-
-predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, property Text, property Text, property Text)
-rewrite insert D_USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, mts)
-    D_USER_ID(zn, un, uid) insert USER_PASSWORD_OBJ(uid, pw) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) USER_PASSWORD_CREATE_TS(uid, pw, cts) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
 
 predicate D_USER_PASSWORD object (key Text, key Text, property Text, property Text, property Text)
 rewrite insert D_USER_PASSWORD(uid, pw, expiryts, cts, mts)
@@ -497,3 +510,75 @@ rewrite D_DATA_BY_RESC_NOT_IN_CHILD(rn, crn, c)
 predicate D_DATA_BY_RESC_LIST property (key Text, key Text, property Text)
 rewrite D_DATA_BY_RESC_LIST(rids, rids2, id)
     distinct (DATA_RESC_ID(id, rid) in(rid, rids) ~ in(rid, rids2) return id)
+
+predicate D_NEXT_ID object (key Text)
+rewrite D_NEXT_ID(oid)
+    nextid(oid)
+
+predicate D_USER_TYPE_BY_NAME_AND_USER_TYPE_TOKEN object (key Text, key Text, property Text, property Text)
+rewrite insert D_USER_TYPE_BY_NAME_AND_USER_TYPE_TOKEN(zn, un, typetoken, mts)
+    D_TOKEN_ID("user_type", typetoken, acc) D_USER_ID(zn, un, uid) insert USER_TYPE(uid, acc) USER_MODIFY_TS(uid, mts)
+
+predicate D_USER_ZONE_NAME_BY_ZONE_AND_NAME object (key Text, key Text, property Text, property Text)
+rewrite insert D_USER_ZONE_NAME_BY_ZONE_AND_NAME(zn, un, zn2, mts)
+    D_USER_ID(zn, un, uid) insert USER_ZONE_NAME(uid, zn2) USER_MODIFY_TS(uid, mts)
+
+predicate D_USER_AUTH_BY_USER_ZONE_AND_NAME object (key Text, key Text, property Text, property Text)
+rewrite insert D_USER_AUTH_BY_USER_ZONE_AND_NAME(zn, un, authname, cts)
+    D_USER_ID(zn, un, uid) insert USER_AUTH_OBJ(uid, authname) USER_AUTH_CREATE_TS(uid, authname, cts)
+
+predicate D_USER_AUTH_BY_USER_NAME object (key Text, key Text, property Text)
+rewrite delete D_USER_AUTH_BY_USER_NAME(zn, un, authname)
+    D_USER_ID(zn, un, uid) delete USER_AUTH_OBJ(uid, authname)
+
+predicate D_USER_INFO_BY_ZONE_AND_NAME object (key Text, key Text, property Text, property Text)
+rewrite insert D_USER_INFO_BY_ZONE_AND_NAME(zn, un, info, mts)
+    D_USER_ID(zn, un, uid) insert USER_INFO(uid, info) USER_MODIFY_TS(uid, mts)
+
+predicate D_USER_COMMENT_BY_ZONE_AND_NAME object (key Text, key Text, property Text, property Text)
+rewrite insert D_USER_COMMENT_BY_ZONE_AND_NAME(zn, un, comment, mts)
+    D_USER_ID(zn, un, uid) insert USER_COMMENT(uid, comment) USER_MODIFY_TS(uid, mts)
+
+predicate D_RESC_ID_BY_ACCESS property (key Text, key Text, key Text, key Text, property Text)
+rewrite D_RESC_ID_BY_ACCESS(rn, uz, un, acclevel, rid)
+    RESC_NAME(rid, rn) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(gid, rid, acclevel2) le(tid, acclevel2)
+
+predicate D_COLL_ID_BY_COLL_ID_AND_ACCESS property (key Text, key Text, key Text, key Text, property Text)
+rewrite D_COLL_ID_BY_COLL_ID_AND_ACCESS(rn, uz, un, acclevel, rid)
+    COLL_NAME(rid, rn) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(gid, rid, acclevel2) le(tid, acclevel2)
+
+predicate D_COLL_ID_BY_OWN property (key Text, key Text, key Text, property Text)
+rewrite D_COLL_ID_BY_OWN(rn, uz, un, cid)
+    COLL_NAME(cid, rn) COLL_OWNER_ZONE(cid, uz) COLL_OWNER_NAME(cid, un)
+
+predicate D_COLL_ID_BY_ACCESS property (key Text, key Text, key Text, key Text, property Text)
+rewrite D_COLL_ID_BY_ACCESS(cid, uz, un, acclevel, cid2)
+    COLL_OBJ(cid) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(gid, cid, acclevel2) le(tid, acclevel2) eq(cid2, cid)
+
+predicate D_COLL_ID_AND_INHERITANCE_BY_ACCESS property (key Text, key Text, key Text, key Text, property Text, property Text)
+rewrite D_COLL_ID_AND_INHERITANCE_BY_ACCESS(rn, uz, un, acclevel, rid, rinh)
+    COLL_NAME(rid, rn) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(gid, rid, acclevel2) le(tid, acclevel2) COLL_INHERITANCE(rid, rinh)
+
+predicate D_DATA_ID_BY_ACCESS property (key Text, key Text, key Text, key Text, key Text, property Text)
+rewrite D_DATA_ID_BY_ACCESS(cn, dn, uz, un, acclevel, id)
+    COLL_NAME(cid, cn) D_DATA_ID(cid, dn, id) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(gid, id, acclevel2) le(tid, acclevel2)
+
+predicate D_DATA_ID_BY_OWN property (key Text, key Text, key Text, key Text, property Text)
+rewrite D_DATA_ID_BY_OWN(cid, dn, uz, un, id)
+    D_DATA_ID(cid, dn, id)  DATA_OWNER_ZONE(id, uz) DATA_OWNER_NAME(id, un)
+
+predicate D_GROUP_ID_BY_USER property (key Text, key Text, property Text)
+rewrite D_GROUP_ID_BY_USER(uid, gn, gid)
+    USER_NAME(gid, gn) USER_TYPE(gid, "rodsgroup") USER_GROUP_OBJ(gid, uid)
+
+predicate D_DATA_ID_BY_DATA_ID_AND_ACCESS property (key Text, key Text, key Text, key Text, property Text)
+rewrite D_DATA_ID_BY_DATA_ID_AND_ACCESS(cid, uz, un, acclevel, cid2)
+    DATA_OBJ(cid, rid) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(gid, cid, acclevel2) le(tid, acclevel2) eq(cid2, cid)
+
+predicate D_GROUP_ADMIN_USER_ID property (key Text, key Text, property Text)
+rewrite D_GROUP_ADMIN_USER_ID(uz, un, uid)
+    D_USER_ID(zn, un, uid) USER_TYPE(uid, "groupadmin")
+
+predicate D_GROUP_MEMBER_COUNT property (key Text, property Int)
+rewrite D_GROUP_MEMBER_COUNT(gn, c)
+    USER_NAME(gid, gn) USER_TYPE(gid, "rodsgroup") USER_GROUP_OBJ(gid, uid) ~eq(gid, uid)

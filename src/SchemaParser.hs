@@ -134,7 +134,7 @@ findAllKeys prefix coldefs =
     case prefix of
         "SERVER_LOAD" -> (coldefs, []) -- special case for server load
         "SERVER_LOAD_DIGEST" -> (coldefs, []) -- special case for server load digest
-        "SERVER_LOAD_DIGEST" -> partition (\(ColDef key0 _ _) ->
+        "QUOTA_USAGE" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
                                           "RESC_ID" == key1 || "USER_ID" == key1 || "MODIFY_TS" == key1)  coldefs  -- specical case for quota usage
         "DATA" -> partition (\(ColDef key0 _ _) ->
@@ -143,6 +143,9 @@ findAllKeys prefix coldefs =
         "USER_PASSWORD" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
                                           "USER_ID" == key1 || "RCAT_PASSWORD" == key1)  coldefs  -- special case for user password
+        "USER_AUTH" -> partition (\(ColDef key0 _ _) ->
+                                    let key1 = map toUpper key0 in
+                                          "USER_ID" == key1 || "USER_AUTH_NAME" == key1)  coldefs  -- specical case for user auth
         _ ->
             let par@(key, _) = partition (\(ColDef key0 _ _) -> map toUpper key0 == prefix ++ "_ID")  coldefs in
                 if null key

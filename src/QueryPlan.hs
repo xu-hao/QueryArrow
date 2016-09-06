@@ -9,7 +9,7 @@ import DB.DB
 import Data.Heterogeneous.List
 
 import Prelude  hiding (lookup, null)
-import Data.List (elem, union, sortBy)
+import Data.List (elem, union, sortBy, groupBy)
 import qualified Data.List as List
 import Control.Monad.Except
 import Control.Applicative ((<|>))
@@ -322,7 +322,7 @@ checkQueryPlan dbs   (_, QPAggregate2 Not qp) = do
 checkQueryPlan dbs  (_, QPAggregate2 Exists qp) = do
     checkQueryPlan dbs qp
 
-checkQueryPlan dbs   (_, QPAggregate2 (Summarize funcs) qp@(qpd, _)) = do
+checkQueryPlan dbs   (_, QPAggregate2 (Summarize funcs groupby) qp@(qpd, _)) = do
     checkQueryPlan dbs qp
     let det = determinevs qpd
     mapM_ (\(_, func) ->
@@ -349,7 +349,9 @@ checkQueryPlan dbs   (_, QPAggregate2 (Summarize funcs) qp@(qpd, _)) = do
                 if var2 `member` det
                     then return ()
                     else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)) funcs
-
+    mapM_ (\var2 -> if var2 `member` det
+        then return ()
+        else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)) groupby
 
 checkQueryPlan dbs   (_, QPAggregate2 (Limit _) qp) = do
     checkQueryPlan dbs qp
@@ -414,7 +416,7 @@ calculateVars1 rvars  (QPAggregate agg@Not qp1) =
 calculateVars1 rvars  (QPAggregate agg@Exists qp1) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
         ( dqdb{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars} , (QPAggregate2 agg qp1'))
-calculateVars1 rvars  (QPAggregate agg@(Summarize funcs) qp1) =
+calculateVars1 rvars  (QPAggregate agg@(Summarize funcs groupby) qp1) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
         ( dqdb{freevs = freevs qpd1, determinevs = fromList (fst (unzip funcs)), linscopevs = linscopevs qpd1, rinscopevs = rvars} , (QPAggregate2 agg qp1'))
 calculateVars1 rvars  (QPAggregate agg@(Limit _) qp1) =
@@ -672,11 +674,13 @@ execQueryPlan rs (QPAggregate3 combinedvs Exists qp) = -- assume no unbounded va
         let rs2 = execQueryPlan (pure row) qp
         emp <- isResultStreamEmpty rs2
         return (not emp)))
-execQueryPlan rs (QPAggregate3 combinedvs (Summarize funcs) qp) = -- assume no unbounded vars under not
-    transformResultStream combinedvs (mapResultStream rs (\row -> do
+execQueryPlan rs (QPAggregate3 combinedvs (Summarize funcs groupby) qp) = -- assume no unbounded vars under not
+    transformResultStream combinedvs (do
+        row <- rs
         let rs2 = execQueryPlan (pure row) qp
-        rows <- getAllResultsInStream rs2
-        let rows2 = map (\(v1, func1) ->
+        rows <- lift $ getAllResultsInStream rs2
+        let groups = groupBy (\a b -> all (\var -> ext var a == ext var b) groupby) rows
+        let rows2 = map (\rows -> mconcat (reverse (map (\(v1, func1) ->
                       let m = case func1 of
                                 Max v2 ->
                                     if List.null rows
@@ -696,11 +700,11 @@ execQueryPlan rs (QPAggregate3 combinedvs (Summarize funcs) qp) = -- assume no u
                                     fromIntegral (length rows)
                                 CountDistinct v2 ->
                                     fromIntegral (length (List.nub (map (ext v2) rows))) in
-                          ret v1 m) funcs where
+                          ret v1 m) funcs))) groups where
                               average :: Fractional a => [a] -> a
                               average n = sum n / fromIntegral (length n)
 
-        return (mconcat (reverse rows2) <> row)))
+        listResultStream (map (<> row) rows2))
 execQueryPlan rs (QPAggregate3 combinedvs (Limit n) qp) =
     transformResultStream combinedvs (do
         row <- rs

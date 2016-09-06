@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "order", "by", "asc", "desc", "let", "distinct"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -130,7 +130,7 @@ formula1p = try (parens formulap)
        <|> (Aggregate Not <$> (negp >> formula1p))
        <|> (Aggregate Exists <$> (existsp >> formula1p))
        <|> (Aggregate <$> (reserved "distinct" >> return Distinct) <*> formula1p)
-       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> sepBy1 letp comma)) <*> formula1p)
+       <|> (Aggregate <$> (Summarize <$> (reserved "let" >> sepBy1 letp comma) <*> ((reserved "group" >> reserved "by" >> many varp) <|> pure [])) <*> formula1p)
        <|> (Aggregate <$> (reserved "limit" >> Limit . fromIntegral <$> integer) <*> formula1p)
        <|> (Aggregate <$> (reserved "order" >> reserved "by" >> (try (OrderByAsc <$> varp <* reserved "asc") <|> (OrderByDesc <$> varp <* reserved "desc"))) <*> formula1p)
        <|> onep *> pure FOne

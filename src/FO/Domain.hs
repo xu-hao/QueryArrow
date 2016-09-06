@@ -80,7 +80,7 @@ instance DeterminedVars Formula where
             (map1 /\ map2)
     determinedVars _ _ (Aggregate Not _) = bottom
     determinedVars _ _ (Aggregate Exists _) = bottom
-    determinedVars _ _ (Aggregate (Summarize funcs) _) = (fromList (fst (unzip funcs)))
+    determinedVars _ _ (Aggregate (Summarize funcs groupby) _) = (fromList (fst (unzip funcs)))
     determinedVars dsp vars (Aggregate (Limit _) form) = determinedVars dsp vars form
     determinedVars dsp vars (Aggregate (OrderByAsc _) form) = determinedVars dsp vars form
     determinedVars dsp vars (Aggregate (OrderByDesc _) form) = determinedVars dsp vars form

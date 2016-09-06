@@ -91,8 +91,8 @@ instance (Liftable a c, Liftable b c) => Combinable a b c where
 var :: String -> Expr
 var = VarExpr . Var
 
-aggregate :: Liftable a b => [(Var, Summary)] -> a -> Reader b Formula
-aggregate s a = Aggregate (Summarize s) <$> liftIt a
+aggregate :: Liftable a b => [(Var, Summary)] -> [Var] -> a -> Reader b Formula
+aggregate s groupby a = Aggregate (Summarize s groupby) <$> liftIt a
 
 formula :: Liftable a b => b -> a -> Formula
 formula p r = runReader (liftIt r) p

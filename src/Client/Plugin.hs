@@ -103,3 +103,29 @@ hs_modify_data sessionptr cupdatecols cupdatevals cwherecolsandops cwherevals cu
     let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
     let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
     processRes (execQuery session update params) (const (return ()))
+
+foreign export ccall hs_modify_coll :: StablePtr (Session Predicates) -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
+hs_modify_coll :: StablePtr (Session Predicates) -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
+hs_modify_coll sessionptr cupdatecols cupdatevals cupcols ccn = do
+    session@(Session _ _ predicates) <- deRefStablePtr sessionptr
+    let upcols = fromIntegral cupcols
+    cupdatecols2 <- peekArray upcols cupdatecols
+    updatecols <- mapM peekCString cupdatecols2
+    cupdatevals2 <- peekArray upcols cupdatevals
+    updatevals <- mapM peekCString cupdatevals2
+    cn <- peekCString ccn
+    let cond = formula predicates (_coll_name @@ [var "cid", var "w_coll_name"])
+    let updateatom wherecol0 =
+          let wherecol = var ("u_" ++ wherecol0)
+              p = case wherecol0 of
+                      "coll_type" -> _coll_type
+                      "coll_info1" -> _coll_info1
+                      "coll_info2" -> _coll_info2
+                      "modify_ts" -> _coll_modify_ts in
+              Atom (p predicates) [var "cid", wherecol]
+    let updateform updatecol =
+            FInsert (Lit Pos (updateatom updatecol))
+    let update = foldl FSequencing cond (map updateform updatecols)
+    let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
+    let params = Map.singleton (Var "w_coll_name") (StringValue (pack cn)) <> Map.fromList (zipWith updateparam updatecols updatevals)
+    processRes (execQuery session update params) (const (return ()))
