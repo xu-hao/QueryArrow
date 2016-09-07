@@ -582,3 +582,9 @@ rewrite D_GROUP_ADMIN_USER_ID(uz, un, uid)
 predicate D_GROUP_MEMBER_COUNT property (key Text, property Int)
 rewrite D_GROUP_MEMBER_COUNT(gn, c)
     USER_NAME(gid, gn) USER_TYPE(gid, "rodsgroup") USER_GROUP_OBJ(gid, uid) ~eq(gid, uid)
+
+predicate D_ACCESS_PERMISSION_USE_WILDCARD property(key Text, key Text, key Text, key Text, property Text)
+rewrite D_ACCESS_PERMISSION_USE_WILDCARD(un, uz, cn, dn, permission)
+    let permission = min m
+        (let m = max acc group by id
+            (D_NON_GROUP_USER_ID(un, uz, uid) D_DATA_ID(cn2, dn2, id) like (cn2, cn) like(dn2, dn) USER_GROUP_OBJ(gid, uid) OBJT_ACCESS_OBJ(gid, id, acc)))
