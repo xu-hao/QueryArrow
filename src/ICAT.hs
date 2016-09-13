@@ -9,7 +9,14 @@ standardBuiltInPreds = [
         Pred (UQPredName "eq") (PredType ObjectPred [Key "Any", Key "Any"]),
         Pred (UQPredName "like") (PredType ObjectPred [Key "String", Key "Pattern"]),
         Pred (UQPredName "like_regex") (PredType ObjectPred [Key "String", Key "Pattern"]),
-        Pred (UQPredName "in") (PredType ObjectPred [Key "String", Key "String"])]
+        Pred (UQPredName "in") (PredType ObjectPred [Key "String", Key "String"]),
+        Pred (UQPredName "add") (PredType ObjectPred [Key "Int", Key "Int", Property "Int"]),
+        Pred (UQPredName "concat") (PredType ObjectPred [Key "String", Key "String", Property "String"]),
+        Pred (UQPredName "substr") (PredType ObjectPred [Key "String", Key "Int", Key "Int", Property "String"]),
+        Pred (UQPredName "regex_replace") (PredType ObjectPred [Key "String", Key "String", Key "String", Property "String"]),
+        Pred (UQPredName "replace") (PredType ObjectPred [Key "String", Key "String", Key "String", Property "String"]),
+        Pred (UQPredName "cast_int") (PredType ObjectPred [Key "Any", Property "Int"])
+        ]
 
 
 standardBuiltInPredsMap = constructPredMap standardBuiltInPreds

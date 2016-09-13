@@ -189,8 +189,7 @@ cstringToText str = do
 textToBuffer :: CString -> Int -> Text -> IO ()
 textToBuffer str n text = do
     let str2 = Text.unpack text
-    let n2= (min (n - 1) (length str2))
-    pokeArray0 (castCharToCChar '\0') str (map castCharToCChar (take n2 str2))
+    pokeArray0 (castCharToCChar '\0') str (map castCharToCChar (take (n - 1) str2))
 
 intToBuffer :: Ptr CLong -> Int64 -> IO ()
 intToBuffer buf i =
@@ -203,7 +202,14 @@ arrayToBuffer buf n txt = do
 
 arrayToAllocatedBuffer :: CString -> Int -> Int -> [[Text]] -> IO ()
 arrayToAllocatedBuffer buf n1 n2 txt = do
-    zipWithM_ (\i txt -> pokeArray0 '\0' (plusPtr  buf (n1*i)) (take (n1-1) (Text.unpack txt))) [0..n2-1] (take n2 (concat txt))
+    zipWithM_ (\i txt -> textToBuffer (plusPtr  buf (n1*i)) n1 txt) [0..n2-1] (take n2 (concat txt))
+
+arrayToAllocatedBuffer2 :: Ptr CString -> Ptr CInt -> Int -> [[Text]] -> IO ()
+arrayToAllocatedBuffer2 buf buflens n txt = do
+    lens <- peekArray n buflens
+    bufs <- peekArray n buf
+    mapM_ (\(txt, ptr, len) -> do
+          textToBuffer ptr (fromIntegral len) txt) (zip3 (take n (concat txt)) bufs lens)
 
 arrayToAllocateBuffer :: Ptr (Ptr CString) -> [[Text]] -> IO ()
 arrayToAllocateBuffer buf txt = do
@@ -340,6 +346,12 @@ hsQuerySomeForeign name inputtypes outputtypes = do
     let b = conT (mkName "Predicates")
     sequence [ForeignD <$> (ExportF CCall ("hs_get_some_" ++ name) (mkName ("hs_get_some_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) ([t| CString -> Int -> Int -> IO Int|]))|])]
 
+hsQuerySome2Foreign :: String -> [Type2] -> [Type2] -> DecsQ
+hsQuerySome2Foreign name inputtypes outputtypes = do
+    runIO $ putStrLn ("generating foreign " ++ ("hs_get_some2_" ++ name))
+    let b = conT (mkName "Predicates")
+    sequence [ForeignD <$> (ExportF CCall ("hs_get_some2_" ++ name) (mkName ("hs_get_some2_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) ([t| Ptr CString -> Ptr CInt -> Int -> IO Int|]))|])]
+
 hsQueryAllForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryAllForeign name inputtypes outputtypes = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_all_" ++ name))
@@ -421,6 +433,29 @@ hsQuerySomeFunction n inputtypes outputtypes = do
     b <- [|processRes2 $(b0) $(retp)|]
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
+hsQuerySome2Function :: String -> [Type2] -> [Type2] -> DecsQ
+hsQuerySome2Function n inputtypes outputtypes = do
+    let fn = mkName ("get_some_" ++ n)
+    let fn2 = mkName ("hs_get_some2_" ++ n)
+    let retn = mkName ("retn")
+    let retlen = mkName ("retlen")
+    let retlen2 = mkName ("retlen2")
+    p <- [p|sessionptr|]
+    let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
+    let argnames = map mkName args
+    let ps = p : map VarP argnames ++ [VarP retn, VarP retlen, VarP retlen2]
+    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let retp = [|arrayToAllocatedBuffer2 $(varE retn) $(varE retlen) $(varE retlen2)|]
+    runIO $ putStrLn ("generating function " ++ show fn2)
+    let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) session $(varE retlen2)|] argnames
+    let b0 = foldl (\expr (arg, name) -> [|do
+                                        $(varP name) <- $(arg)
+                                        $(expr)|]) [|do
+                                                          session <- liftIO $ deRefStablePtr sessionptr
+                                                          $(app)|] (zip argList argnames)
+    b <- [|processRes2 $(b0) $(retp)|]
+    sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
+
 hsQueryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryAllFunction n inputtypes outputtypes = do
     let fn = mkName ("get_all_" ++ n)
@@ -459,6 +494,11 @@ hsCreateForeign :: String -> Int -> DecQ
 hsCreateForeign n a = do
     let b = conT (mkName "Predicates")
     ForeignD <$> (ExportF CCall ("hs_create_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|StablePtr (Session $(b)) -> $(functype a [t|IO Int|])|])
+
+hsUpdateForeign :: String -> Int -> DecQ
+hsUpdateForeign n a = do
+    let b = conT (mkName "Predicates")
+    ForeignD <$> (ExportF CCall ("hs_update_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|StablePtr (Session $(b)) -> $(functype a [t|IO Int|])|])
 
 hsCreateFunction :: String -> Int -> DecQ
 hsCreateFunction n a = do
@@ -589,11 +629,12 @@ functions path = do
                               queryFunction n inputtypes outputtypes, hsQueryFunction n inputtypes outputtypes, hsQueryForeign n inputtypes outputtypes,
                               queryLongFunction n inputtypes outputtypes, hsQueryLongFunction n inputtypes outputtypes, hsQueryLongForeign n inputtypes outputtypes,
                               querySomeFunction n inputtypes outputtypes, hsQuerySomeFunction n inputtypes outputtypes, hsQuerySomeForeign n inputtypes outputtypes,
+                              hsQuerySome2Function n inputtypes outputtypes, hsQuerySome2Foreign n inputtypes outputtypes,
                               queryAllFunction n inputtypes outputtypes, hsQueryAllFunction n inputtypes outputtypes, hsQueryAllForeign n inputtypes outputtypes]
                     ) qr
     ir1 <- concat <$> mapM (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) args) _) ->
                         let n = map toLower (drop 2 n0) in
-                            sequence [createFunction n (length args), hsCreateFunction n (length args), hsCreateForeign n (length args),
+                            sequence [createFunction n (length args), hsCreateFunction n (length args), hsCreateForeign n (length args), hsUpdateForeign n (length args),
                               createFunctionArray n (length args), hsCreateFunctionArray n, hsCreateForeignArray n]
                     ) ir
     dr1 <- concat <$> mapM (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) args) _) ->

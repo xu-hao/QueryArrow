@@ -66,6 +66,18 @@ sqlStandardTrans ns preds mappings nextid =
                                                                                               _ -> error "the second argument of in is not a string") ++ ")"))) in
                         case thesign of
                             Pos -> return sql
-                            Neg -> return (snot sql)))
+                            Neg -> return (snot sql))),
+                (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLFuncExpr "add" [a, b])]
+                    )),
+                (lookupPred "concat", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLFuncExpr "concat" [a, b])]
+                    )),
+                (lookupPred "substr", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "substr" [a, b, c])]
+                    )),
+                (lookupPred "replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "replace" [a, b, c])]
+                    )),
+                (lookupPred "regex_replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "regexp_replace" [a, b, c])]
+                    )),
+                (lookupPred "cast_int", repBuildIn (\ [Left a, Right v] -> [(v, SQLCastExpr a "integer")]
+                    ))
             ]))
             (sqlMapping ns preds mappings) nextid)

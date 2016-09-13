@@ -64,12 +64,12 @@ instance DeterminedVars Atom where
 
 instance DeterminedVars Formula where
     determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
+    determinedVars dsp vars (FReturn vars2) = fromList vars2 /\ vars
     determinedVars _  _ (FInsert _) = bottom
     determinedVars dsp _ (FTransaction ) = bottom
     determinedVars dsp vars (FSequencing form1 form2) =
-        let map1 = determinedVars dsp vars form1
-            map2 = determinedVars dsp (vars \/ map1) form2 in
-            (vars \/ map1 \/ map2)
+        let map1 = determinedVars dsp vars form1 in
+            determinedVars dsp map1 form2
     determinedVars dsp vars (FChoice form1 form2) =
         let map1 = determinedVars dsp vars form1
             map2 = determinedVars dsp vars form2 in

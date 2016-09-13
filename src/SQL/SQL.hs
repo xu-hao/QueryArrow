@@ -6,6 +6,7 @@ import DB.GenericDatabase
 import ListUtils
 import Utils
 import DB.DB
+import FO.Domain
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\),union, nub)
@@ -16,7 +17,7 @@ import Data.Monoid ((<>))
 import Data.Maybe
 import Debug.Trace
 import qualified Data.Text as T
-import Data.Set (toAscList)
+import Data.Set (toAscList, Set)
 import qualified Data.Set as Set
 import Algebra.Lattice
 import Algebra.Lattice.Dropped
@@ -46,6 +47,7 @@ data SQLExpr = SQLColExpr SQLQualifiedCol
              | SQLNullExpr
              | SQLParamExpr String
              | SQLExprText String
+             | SQLCastExpr SQLExpr String
              | SQLFuncExpr String [SQLExpr]
              | SQLFuncExpr2 String SQLExpr deriving (Eq, Ord, Show)
 
@@ -124,6 +126,7 @@ instance Show2 SQLExpr where
     show2 (SQLStringConstExpr s) _ = "'" ++ sqlStringEscape (T.unpack s) ++ "'"
     show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
     show2 (SQLParamExpr _) _ = "?"
+    show2 (SQLCastExpr arg ty) sqlvar =  "cast(" ++ show2 arg sqlvar ++ " as " ++ ty ++ ")"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
     show2 (SQLFuncExpr2 fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
     show2 (SQLExprText s) _ = s
@@ -273,6 +276,16 @@ simpleBuildIn n builtin sign args = do
     sqlExprs <- mapM (err . sqlExprFromArg) args
     builtin sign sqlExprs
 
+repBuildIn :: ([Either SQLExpr Var] -> [(Var, SQLExpr)]) -> Sign -> [Expr] -> TransMonad SQL
+repBuildIn builtin Pos args = do
+    sqlExprs <- mapM sqlExprFromArg args
+    let varexprs = builtin sqlExprs
+    mapM_ (uncurry addVarRep) varexprs
+    return mempty
+
+repBuildIn builtin Neg args =
+    return sqlfalse
+
 
 data TransState = TransState {
     builtin :: BuiltIn,
@@ -328,6 +341,7 @@ instance Params a => Params [a] where
 
 instance Params SQLExpr where
     params (SQLParamExpr p) = [Var p]
+    params (SQLCastExpr e _) = params e
     params (SQLFuncExpr _ es) = foldMap params es
     params (SQLFuncExpr2 _ e) = params e
     params _ = []
@@ -772,8 +786,8 @@ data KeyState = KeyState {
     ksQuery :: Bool
 }
 
-pureOrExecF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-pureOrExecF  (SQLTrans  builtin predtablemap _) (FAtomic (Atom n args)) = do
+pureOrExecF :: SQLTrans -> Set Var -> Formula -> StateT KeyState Maybe ()
+pureOrExecF  (SQLTrans  builtin predtablemap _) _ (FAtomic (Atom n args)) = do
     ks <- get
     if isJust (updateKey ks)
         then lift Nothing
@@ -783,29 +797,40 @@ pureOrExecF  (SQLTrans  builtin predtablemap _) (FAtomic (Atom n args)) = do
                 Just (OneTable tablename _, _) -> do
                     let key = keyComponents n args
                     put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
-pureOrExecF  trans (FTransaction ) =  lift Nothing
+pureOrExecF  trans _ (FTransaction ) =  lift Nothing
 
-pureOrExecF  trans (FSequencing form1 form2) = do
-    pureOrExecF  trans form1
-    pureOrExecF  trans form2
+pureOrExecF  trans dvars (FSequencing form1 form2) = do
+    pureOrExecF  trans dvars form1
+    let dvars2 = determinedVars (gDeterminateVars trans) dvars form1
+    pureOrExecF  trans dvars2 form2
 
-pureOrExecF  trans (FPar form1 form2) = do
-    ks <- get
-    if isJust (updateKey ks)
-        then lift Nothing
-        else do
-            put ks {ksQuery = True}
-            pureOrExecF  trans form1
-            pureOrExecF  trans form2
-pureOrExecF  trans (FChoice form1 form2) = do
-    ks <- get
-    if isJust (updateKey ks)
-        then lift Nothing
-        else do
-            put ks {ksQuery = True}
-            pureOrExecF  trans form1
-            pureOrExecF  trans form2
-pureOrExecF  (SQLTrans  builtin predtablemap _) (FInsert (Lit sign0 (Atom pred0 args))) = do
+pureOrExecF  trans dvars (FPar form1 form2) =
+    -- only works if all vars are determined
+    if freeVars form1 `Set.isSubsetOf` dvars && freeVars form2 `Set.isSubsetOf` dvars
+        then do
+            ks <- get
+            if isJust (updateKey ks)
+                then lift Nothing
+                else do
+                    put ks {ksQuery = True}
+                    pureOrExecF  trans dvars form1
+                    pureOrExecF  trans dvars form2
+        else
+            lift Nothing
+pureOrExecF  trans dvars (FChoice form1 form2) =
+    -- only works if all vars are determined
+    if freeVars form1 `Set.isSubsetOf` dvars && freeVars form2 `Set.isSubsetOf` dvars
+        then do
+            ks <- get
+            if isJust (updateKey ks)
+                then lift Nothing
+                else do
+                    put ks {ksQuery = True}
+                    pureOrExecF  trans dvars form1
+                    pureOrExecF  trans dvars form2
+        else
+            lift Nothing
+pureOrExecF  (SQLTrans  builtin predtablemap _) _ (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
             if ksQuery ks
                 then lift Nothing
@@ -846,25 +871,25 @@ pureOrExecF  (SQLTrans  builtin predtablemap _) (FInsert (Lit sign0 (Atom pred0 
                                         then lift Nothing
                                         else put ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
 
-pureOrExecF  _ FOne = return ()
-pureOrExecF  _ FZero = return ()
-pureOrExecF trans (Aggregate Not form) = do
+pureOrExecF  _ _ FOne = return ()
+pureOrExecF  _ _ FZero = return ()
+pureOrExecF trans dvars (Aggregate Not form) = do
     ks <- get
     if isJust (updateKey ks)
         then lift Nothing
         else do
             put ks {ksQuery = True}
-            pureOrExecF trans form
-pureOrExecF trans (Aggregate Exists form) = do
+            pureOrExecF trans dvars form
+pureOrExecF trans dvars (Aggregate Exists form) = do
   ks <- get
   if isJust (updateKey ks)
       then lift Nothing
       else do
           put ks {ksQuery = True}
-          pureOrExecF trans form
-pureOrExecF _ (Aggregate _ _) =
+          pureOrExecF trans dvars form
+pureOrExecF _ _ (Aggregate _ _) =
   lift Nothing
-pureOrExecF trans (FReturn _) = lift Nothing
+pureOrExecF trans _ (FReturn _) = lift Nothing
 
 
 sequenceF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
@@ -872,26 +897,26 @@ sequenceF (SQLTrans _ _ (Just nextid1)) (FAtomic (Atom (Pred nextid2 _) [_])) | 
                         return ()
 sequenceF _ _ = lift Nothing
 
-limitF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-limitF trans (Aggregate (Limit _) form) = do
+limitF :: SQLTrans -> Set Var -> Formula -> StateT KeyState Maybe ()
+limitF trans dvars (Aggregate (Limit _) form) = do
   ks <- get
   put ks {ksQuery = True}
-  limitF trans form
-limitF trans form = orderByF trans form
+  limitF trans dvars form
+limitF trans dvars form = orderByF trans dvars form
 
-orderByF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-orderByF trans (Aggregate (OrderByAsc _) form) = do
+orderByF :: SQLTrans -> Set Var -> Formula -> StateT KeyState Maybe ()
+orderByF trans dvars (Aggregate (OrderByAsc _) form) = do
   ks <- get
   put ks {ksQuery = True}
-  orderByF trans form
-orderByF trans form = summarizeF trans form
+  orderByF trans dvars form
+orderByF trans dvars form = summarizeF trans dvars form
 
-summarizeF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-summarizeF trans (Aggregate (Summarize _ _) form) = do
+summarizeF :: SQLTrans -> Set Var -> Formula -> StateT KeyState Maybe ()
+summarizeF trans dvars (Aggregate (Summarize _ _) form) = do
   ks <- get
   put ks {ksQuery = True}
-  pureOrExecF trans form
-summarizeF trans form = pureOrExecF trans form
+  pureOrExecF trans dvars form
+summarizeF trans dvars form = pureOrExecF trans dvars form
 
 
 
@@ -908,16 +933,18 @@ instance IGenericDatabase01 SQLTrans where
 
     gSupported trans form vars =
         let initstate = KeyState [] Nothing [] False [] False (not (null vars)) in
-            layeredF form && (isJust (evalStateT (limitF  trans form) initstate )
+            layeredF form && (isJust (evalStateT (limitF  trans vars form) initstate )
                                                             || isJust (evalStateT (sequenceF trans form) initstate))
 
     gDeterminateVars trans varDomainSize (Atom name args) =
-        if isBuiltIn
-            then bottom -- assume that builtins don't restrict domain size
+        if isBuiltIn  -- assume that builtins only restrict domain size of properties
+            then Set.fromList (concatMap (\expr -> case expr of
+                                  VarExpr v -> [v]
+                                  _ -> []) (propComponents name args)) \/ varDomainSize
             else (if name `member` predtablemap
                     then Set.unions (map (\arg -> case arg of
                             (VarExpr v) -> Set.singleton v
-                            _ -> bottom) args)
-                    else bottom) where
+                            _ -> bottom) args) \/ varDomainSize
+                    else varDomainSize) where
                 isBuiltIn = name `member` builtin
                 (SQLTrans (BuiltIn builtin) predtablemap _) = trans

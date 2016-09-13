@@ -2,6 +2,163 @@ import qualified all from ICAT
 import all from ICAT
 export qualified all from ICAT
 export all from ICAT
+export D_LOCAL_ZONE
+export D_ZONE_ID
+export D_NUM_DATA_BY_RESC
+export D_NUM_DATA_BY_NAME
+export D_TOKEN_ID
+export D_TOKEN_NAME_BY_NAMESPACE_AND_NAME
+export D_USER
+export D_METAMAP_BY_OBJ_ID
+export D_ACCESS_BY_OBJ_ID_AND_USER
+export D_ACCESS_BY_ACCESS_TYPE_TOKEN
+export D_METAMAP_BY_NAME
+export D_METAMAP
+export D_META_MAP_BY_OBJ_ID
+export D_RESC_GROUP_ID
+export D_META_VALUE_AND_UNITS
+export D_AVUS
+export D_RESC_PARENT_BY_ZONE_AND_NAME
+export D_RESC_TYPE_NAME_BY_ZONE_AND_NAME
+export D_RESC_PARENT_TS
+export D_COLL_CHILD_BY_NAME
+export D_COLL_BY_NAME
+export D_ACCESS_BY_OBJ_ID
+export D_ACCESS_BY_COLL_NAME
+export D_PASSWORD_BY_USER_ZONE_AND_NAME
+export D_USER_PASSWORD_BY_USER_ZONE_AND_NAME
+export D_USER_PASSWORD_BY_USER_ZONE_AND_NAME
+export D_USER_PASSWORD_BY_USER
+export D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS
+export D_USER_PASSWORD_BY_USER_AND_EXPIRY_TS
+export D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_EXPIRY_TS
+export D_USER_PASSWORD_BY_USER
+export D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS
+export D_DATA_ACCESS_BY_USER_RECURSIVE
+export D_COLL_ACCESS_BY_USER_RECURSIVE
+export D_DATA_ACCESS_RECURSIVE
+export D_COLL_ACCESS_RECURSIVE
+export D_COLL_ID_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME
+export D_COLL_IF_MODIFY_OBJECT_ACCESS_BY_USER_ZONE_AND_NAME
+export D_COLL_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME
+export D_SUB_COLL_ID_BY_NAME
+export D_USER_PASSWORD_BY_PASSWORD
+export D_USER_PASSWORD_BY_EXPIRY_TS_AND_CREATE_TS
+export D_USER_GROUP
+export D_USER_GROUP
+export D_USER_AUTH
+export D_RESC_ID
+export D_RESC_ID_BY_NAME
+export D_RESC_BY_NAME
+export D_USER_ID
+export D_USER_ID_WITH_PASSWORD
+export D_META_ID
+export D_META_ID_BY_ATTRIBUTE_AND_VALUE
+export D_META_ID_BY_ATTRIBUTE_AND_OBJ_ID
+export D_METAMAP_BY_ATTRIBUTE_AND_OBJ_ID
+export D_METAMAP_ALLOW_NULL_UNITS_USE_WILDCARDS
+export D_METAMAP_ALLOW_NULL_UNITS
+export D_METAMAP_USE_WILDCARDS
+export D_METAMAP_BY_AVU_AND_OBJ_ID
+export D_META
+export D_COLL_INHERITANCE_TS
+export D_COLL_MODIFY_TS
+export D_COLL_NAME_TS
+export D_COLL_ID_BY_DATA
+export D_COLL_ID_BY_COLL
+export D_COLL_ID_BY_COLL_ID
+export D_COLL_INHERITANCE_BY_NAME
+export D_NON_GROUP_USER_ID
+export D_USER_BY_ZONE_AND_NAME
+export D_GROUP_ID
+export D_USER_TYPE_BY_ZONE_AND_NAME
+export D_PASSWORD_BY_USER_ZONE_AND_NAME_AND_DIFF_EXPIRY_TS
+export D_USER_PASSWORD
+export D_PASSWORD_EXPIRY_TS
+export D_DATA_ID
+export D_REPL_RESC_ID
+export D_REPL2
+export D_REPL
+export D_ACCESS_INHERIT_COLL
+export D_ACCESS_BY_USER_ZONE_AND_NAME
+export D_ACCESS_RECURSIVE
+export D_MAX_REPL_NUM
+export D_DIFF_REPL_NUM
+export D_REPL_BY_NAME
+export D_DATA_BY_NAME
+export D_RESC_PARENT
+export D_RESC_CHILD
+export D_RULE_EXEC
+export D_RESC
+export D_COLL
+export D_ZONE
+export D_ZONE_COMMENT_TS
+export D_RESC_COMMENT_TS
+export D_RESC_INFO_TS
+export D_ZONE_CONN_STRING_TS
+export D_ZONE_NAME_TS
+export D_COLL_OWNER_ZONE_BY_ZONE_NAME
+export D_DATA_OWNER_ZONE_BY_ZONE_NAME
+export D_RESC_ZONE_BY_ZONE_NAME
+export D_RESC_FREE_SPACE_BY_NAME
+export D_RESC_FREE_SPACE_TS
+export D_RESC_NET_TS
+export D_RESC_TYPE_NAME_TS
+export D_RESC_DEF_PATH
+export D_RESC_DEF_PATH_TS
+export D_RESC_STATUS_TS
+export D_RESC_NAME_TS
+export D_SERVER_LOAD_RESC_NAME_BY_RESC_NAME
+export D_SERVER_LOAD_DIGEST_RESC_NAME_BY_RESC_NAME
+export D_RESC_CONTEXT_TS
+export D_RULE_OWNER_ZONE_BY_ZONE_NAME
+export D_USER_ZONE_BY_ZONE_NAME
+export D_ZONE_NAME_BY_ZONE_NAME
+export D_ZONE_TYPE_BY_NAME
+export D_ZONE_BY_NAME
+export D_NUM_PASSWORD_BY_USER_NAME
+export D_DATA_NAME
+export D_COLL_NAME
+export D_DATA_COLL_ID_TS
+export D_TOKEN
+export D_TOKEN_BY_NAMESPACE_AND_NAME
+export D_SERVER_LOAD
+export D_SERVER_LOAD_BY_CREATE_TS
+export D_SERVER_LOAD_DIGEST
+export D_SERVER_LOAD_DIGEST_BY_CREATE_TS
+export D_QUOTA_USAGE_BY_MODIFY_TS
+export D_QUOTA_USAGE
+export D_QUOTA_BY_USER_ID_AND_RESC_ID
+export D_QUOTA
+export D_QUOTA_BY_USER_NAME_AND_RESC_NAME
+export D_NUM_DATA_BY_RESC_RECURSIVE
+export D_DATA_BY_RESC_NOT_IN_CHILD
+export D_DATA_BY_RESC_LIST
+export D_NEXT_ID
+export D_USER_TYPE_BY_NAME_AND_USER_TYPE_TOKEN
+export D_USER_ZONE_NAME_BY_ZONE_AND_NAME
+export D_USER_AUTH_BY_USER_ZONE_AND_NAME
+export D_USER_AUTH_BY_USER_NAME
+export D_USER_INFO_BY_ZONE_AND_NAME
+export D_USER_COMMENT_BY_ZONE_AND_NAME
+export D_RESC_ID_BY_ACCESS
+export D_COLL_ID_BY_COLL_ID_AND_ACCESS
+export D_COLL_ID_BY_OWN
+export D_COLL_ID_BY_ACCESS
+export D_COLL_ID_AND_INHERITANCE_BY_ACCESS
+export D_DATA_ID_BY_ACCESS
+export D_DATA_ID_BY_OWN
+export D_GROUP_ID_BY_USER
+export D_DATA_ID_BY_DATA_ID_AND_ACCESS
+export D_GROUP_ADMIN_USER_ID
+export D_GROUP_MEMBER_COUNT
+export D_ACCESS_PERMISSION_USE_WILDCARD
+export D_DATA_PATH_BY_USER_ZONE_AND_NAME_AND_RESC_NAME
+export D_DATA_PATH
+export D_COLL_NAME_RECURSIVE
+export D_DATA_RESC_HIER_RECURSIVE
+export D_DATA_RESC_HIER
+export D_COLL_PARENT_COLL_NAME_RECURSIVE
 
 predicate D_LOCAL_ZONE property (property Text)
 rewrite D_LOCAL_ZONE(zn)
@@ -118,11 +275,61 @@ rewrite insert D_USER_PASSWORD_BY_USER(uid, pw, mts)
 
 predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS object (key Text, key Text, key Text, key Text)
 rewrite delete D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS(zn, un, pw, cts)
-        D_USER_ID(zn, un, uid) USER_PASSWORD_CREATE_TS(uid, pw, cts) delete USER_PASSWORD_OBJ(uid, pw)
+    D_USER_ID(zn, un, uid) USER_PASSWORD_CREATE_TS(uid, pw, cts) delete USER_PASSWORD_OBJ(uid, pw)
+
+predicate D_USER_PASSWORD_BY_USER_AND_EXPIRY_TS object (key Text, key Int, key Int)
+rewrite D_USER_PASSWORD_BY_USER_AND_EXPIRY_TS(uid, minx, maxx)
+    USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) ~like(expiryts, "9999%") cast_int(expiryts, pw, x) le(minx, x) le(x, maxx)
+
+predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_EXPIRY_TS object (key Text, key Text, key Text, key Text)
+rewrite delete D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_EXPIRY_TS(zn, un, minx, maxx)
+    D_USER_ID(zn, un, uid) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) ~like(expiryts, "9999%") cast_int(expiryts, pw, x) le(minx, x) le(x, maxx) delete USER_PASSWORD_OBJ(uid, pw)
 
 predicate D_USER_PASSWORD_BY_USER object (key Text)
 rewrite delete D_USER_PASSWORD_BY_USER(uid)
     USER_PASSWORD_OBJ(uid, pw) delete USER_PASSWORD_OBJ(uid, pw)
+
+predicate D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS object (key Text, key Text, key Text)
+rewrite delete D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS (minx, maxx, curr)
+    USER_PASSWORD_PASS_EXPIRY_TS(uid, expiryts) ~like(expiryts, "9999%") cast_int(expiryts, x) le(minx, x) le(x, maxx) USER_PASSWORD_MODIFY_TS(uid, mts) cast_int(mts, y) add(x, y, z) lt(z, curr) delete USER_PASSWORD_OBJ(uid)
+
+predicate D_DATA_ACCESS_BY_USER_RECURSIVE object (key Text, key Text)
+rewrite delete D_DATA_ACCESS_BY_USER_RECURSIVE (uid, cn)
+    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) DATA_COLL_ID(id, cid) OBJT_ACCESS_OBJ(uid, id, tid) delete OBJT_ACCESS_OBJ(uid, id, tid)
+
+predicate D_COLL_ACCESS_BY_USER_RECURSIVE object (key Text, key Text)
+rewrite delete D_COLL_ACCESS_BY_USER_RECURSIVE (uid, cn)
+    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) OBJT_ACCESS_OBJ(uid, cid, tid) delete OBJT_ACCESS_OBJ(uid, cid, tid)
+
+predicate D_DATA_ACCESS_RECURSIVE object (key Text, key Text, key Text, key Text, key Text)
+rewrite insert D_DATA_ACCESS_BY_USER_RECURSIVE (uid, cn, acc, cts, mts)
+    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) DATA_COLL_ID(id, cid)
+    D_TOKEN_ID("access_type", acc, tid)
+    insert OBJT_ACCESS_OBJ(uid, id, tid) OBJT_ACCESS_CRAETE_TS(uid, id, tid, cts) OBJT_ACCESS_MODIFY_TS(uid, id, tid, mts)
+
+predicate D_COLL_ACCESS_RECURSIVE object (key Text, key Text, key Text, key Text, key Text)
+rewrite insert D_COLL_ACCESS_BY_USER_RECURSIVE (uid, cn, acc, cts, mts)
+    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern))
+    D_TOKEN_ID("access_type", acc, tid)
+    insert OBJT_ACCESS_OBJ(uid, cid, tid) OBJT_ACCESS_CRAETE_TS(uid, id, tid, cts) OBJT_ACCESS_MODIFY_TS(uid, id, tid, mts)
+
+
+predicate D_COLL_ID_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, property Text)
+rewrite D_COLL_ID_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME(uz, un, id, cid)
+    D_TOKEN_ID("access_type", "own", tid) D_NON_GROUP_USER_ID(uz, un, uid) OBJT_ACCESS_OBJ(uid, id, tid) DATA_COLL_ID(id, cid)
+
+predicate D_COLL_IF_MODIFY_OBJECT_ACCESS_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, property Text, property Text)
+rewrite D_COLL_IF_MODIFY_OBJECT_ACCESS_BY_USER_ZONE_AND_NAME(uz, un, id, cn, pcn)
+    D_TOKEN_ID("access_type", "modify object", tid) D_NON_GROUP_USER_ID(uz, un, uid) OBJT_ACCESS_OBJ(uid, id, tid) COLL_NAME(id, cn) COLL_PARENT_COLL_NAME(id, pcn)
+
+predicate D_COLL_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME object (key Text, key Text, key Text, property Text, property Text)
+rewrite D_COLL_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME(uz, un, id, cn, pcn)
+    D_TOKEN_ID("access_type", "own", tid) D_NON_GROUP_USER_ID(uz, un, uid) OBJT_ACCESS_OBJ(uid, id, tid) COLL_NAME(id, cn) COLL_PARENT_COLL_NAME(id, pcn)
+
+predicate D_SUB_COLL_ID_BY_NAME object (key Text, key Text, key Text)
+rewrite D_SUB_COLL_ID_BY_NAME(cid, scn, scid)
+    COLL_NAME(cid, cn) concat (cn, "/", cn2) concat(cn2, scn, scn2) COLL_NAME(scid, scn2)
+
 
 predicate D_USER_PASSWORD_BY_PASSWORD object (key Text)
 rewrite delete D_USER_PASSWORD_BY_PASSWORD(pw)
@@ -588,3 +795,32 @@ rewrite D_ACCESS_PERMISSION_USE_WILDCARD(un, uz, cn, dn, permission)
     let permission = min m
         (let m = max acc group by id
             (D_NON_GROUP_USER_ID(un, uz, uid) D_DATA_ID(cn2, dn2, id) like (cn2, cn) like(dn2, dn) USER_GROUP_OBJ(gid, uid) OBJT_ACCESS_OBJ(gid, id, acc)))
+
+predicate D_DATA_PATH_BY_USER_ZONE_AND_NAME_AND_RESC_NAME object (key Text, key Text, key Text, key Text, key Text)
+rewrite insert D_DATA_PATH_BY_USER_ZONE_AND_NAME_AND_RESC_NAME(uz, un, rn, old, new)
+    DATA_OWNER_ZONE(id, uz) DATA_OWNER_NAME(id, un) DATA_RESC_NAME(id, rn) DATA_FILE_PATH(id, path) replace(path, old, new, pathnew) insert DATA_FILE_PATH(id, pathnew)
+
+predicate D_DATA_PATH object (key Text, key Text, key Text, key Text, key Text)
+rewrite insert D_DATA_PATH(rn, old, new)
+    DATA_RESC_NAME(id, rn) DATA_FILE_PATH(id, path) replace(path, old, new, pathnew) insert DATA_FILE_PATH(id, pathnew)
+
+predicate D_COLL_NAME_RECURSIVE property(key Text, property Text)
+rewrite insert D_COLL_NAME_RECURSIVE (oldcn, newcn)
+    concat(oldcn, "/%", pattern) COLL_PARENT_COLL_NAME(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern)) COLL_NAME(cid, cn)
+    strlen(oldcn, oldl) strlen(cn, l) substr(oldcn, oldl, l, scn) concat(newcn, scn, newcn2) insert COLL_NAME(cid, newcn2)
+
+predicate D_DATA_RESC_HIER_RECURSIVE property(key Text, key Text, property Text)
+rewrite insert D_DATA_RESC_HIER_RECURSIVE (delim, oldcn, newcn)
+    concat(oldcn, delim, pattern0) concat(pattern0, "%", pattern) DATA_RESC_HIER(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern))
+    strlen(oldcn, oldl) strlen(cn, l) substr(oldcn, oldl, l, scn) concat(newcn, scn, newcn2) insert DATA_RESC_HIER(cid, newcn2)
+
+predicate D_DATA_RESC_HIER property(key Text, key Text, property Text)
+rewrite insert D_DATA_RESC_HIER (delim, oldcn, newcn)
+    concat("(^|(.+", delim, pattern0) concat(pattern0, "))", pattern1) concat(pattern1, oldcn, pattern2) concat(pattern2, "($|(", pattern3) concat(pattern3, delim, pattern4) concat(pattern4, ".+))", pattern)
+    concat("\\1", newcn, replace0) concat(replace0, "\\3", replace)
+    DATA_RESC_HIER(cid, pcn) regex_replace(pcn, pattern, replace, newcn2) insert DATA_RESC_HIER(cid, newcn2)
+
+predicate D_COLL_PARENT_COLL_NAME_RECURSIVE property(key Text, key Text, property Text)
+rewrite insert D_COLL_PARENT_COLL_NAME_RECURSIVE (oldscn, newscn)
+    concat(oldcn, "/%", pattern) COLL_PARENT_COLL_NAME(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern))
+    strlen(oldcn, oldl) strlen(pcn, l) substr(oldcn, oldl, l, scn) concat(newcn, scn, newcn2) insert COLL_PARENT_COLL_NAME(cid, newcn2)

@@ -36,9 +36,9 @@ instance IDatabase0 MapDB where
     determinateVars db vars (Atom thepred args)
         | thepred `elem` getPreds db = (Set.unions (map (\arg -> case arg of
                                                         (VarExpr v) -> Set.singleton v
-                                                        _ -> bottom) args) \\\ vars)
+                                                        _ -> bottom) args) \/ vars)
              -- this just look up each var from the varDomainSize
-    determinateVars _ _ _ = bottom
+    determinateVars _ vars _ = vars
     supported (MapDB name predname _) (FAtomic (Atom (Pred p _) _)) _ | predNameMatches (QPredName name [] predname) p = True
     supported _ _ _ = False
 
@@ -70,8 +70,8 @@ instance IDatabase0 StateMapDB where
     determinateVars db vars  (Atom thepred args)
         | thepred `elem` getPreds db = (Set.unions (map (\arg -> case arg of
                                                         (VarExpr v) -> Set.singleton v
-                                                        _ -> bottom) args) \\\ vars)
-    determinateVars _ _ _ = bottom
+                                                        _ -> bottom) args) \/ vars)
+    determinateVars _ vars _ = vars
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
     supported _ _ _ = False
@@ -150,7 +150,7 @@ instance IDatabase0 RegexDB where
     type DBFormulaType RegexDB = Formula
     getName (RegexDB name) = name
     getPreds db = [ RegexPred (getName db)]
-    determinateVars _ _ _ = bottom
+    determinateVars _ vars _ = vars
     supported _ (FAtomic (Atom (RegexPred _) _)) _ = True
     supported _ _ _ = False
 instance IDatabase1 RegexDB where
@@ -182,7 +182,7 @@ instance IDatabase0 EqDB where
     type DBFormulaType EqDB = Formula
     getName (EqDB name) = name
     getPreds db = [ EqPred (getName db)]
-    determinateVars _ _ _ = bottom
+    determinateVars _ vars _ = vars
     supported _ (FAtomic (Atom (EqPred _) _)) _ = True
     supported _ _ _ = False
 
@@ -219,7 +219,7 @@ instance IDatabase0 UtilsDB where
     type DBFormulaType UtilsDB = Formula
     getName (UtilsDB name) = name
     getPreds db = [ SleepPred (getName db)]
-    determinateVars _ _ _ = bottom
+    determinateVars _ vars _ = vars
     supported _ (FAtomic (Atom (SleepPred _) [_])) _ = True
     supported _ _ _ = False
 instance IDatabase1 UtilsDB where

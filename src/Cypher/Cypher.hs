@@ -694,13 +694,15 @@ instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
     type GDBFormulaType CypherTrans = Formula
     gDeterminateVars trans varDomainSize (Atom name args) =
-        (if isBuiltIn
-            then bottom
+        (if isBuiltIn  -- assume that builtins only restrict domain size of properties
+            then Set.fromList (concatMap (\expr -> case expr of
+                              VarExpr v -> [v]
+                              _ -> []) (propComponents name args)) \/ varDomainSize
             else if name `member` predtablemap
                 then Set.unions (map (\arg -> case arg of
                     (VarExpr v) -> Set.singleton v
-                    _ -> bottom) args)
-                else bottom) where
+                    _ -> bottom) args) \/ varDomainSize
+                else varDomainSize) where
                     isBuiltIn = name `member` builtin
                     (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
 
