@@ -48,6 +48,7 @@ data SQLExpr = SQLColExpr SQLQualifiedCol
              | SQLParamExpr String
              | SQLExprText String
              | SQLCastExpr SQLExpr String
+             | SQLInfixFuncExpr String SQLExpr SQLExpr
              | SQLFuncExpr String [SQLExpr]
              | SQLFuncExpr2 String SQLExpr deriving (Eq, Ord, Show)
 
@@ -127,6 +128,7 @@ instance Show2 SQLExpr where
     show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
     show2 (SQLParamExpr _) _ = "?"
     show2 (SQLCastExpr arg ty) sqlvar =  "cast(" ++ show2 arg sqlvar ++ " as " ++ ty ++ ")"
+    show2 (SQLInfixFuncExpr fn a b) sqlvar = "(" ++ show2 a sqlvar ++ fn ++ show2 b sqlvar ++ ")"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
     show2 (SQLFuncExpr2 fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
     show2 (SQLExprText s) _ = s
@@ -141,7 +143,7 @@ showWhereCond2 cond sqlvar = case cond of
     _ -> " WHERE " ++ show2 cond sqlvar
 
 instance Show2 SQL where
-    show2 (SQLQuery cols tables conds orderby limit distinct groupby) sqlvar = "SELECT " ++ (if distinct then "DISTINCT " else "") ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ show var) cols)) ++
+    show2 (SQLQuery cols tables conds orderby limit distinct groupby) sqlvar = "SELECT " ++ (if distinct then "DISTINCT " else "") ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ serialize var) cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map serialize tables)) ++
@@ -342,6 +344,7 @@ instance Params a => Params [a] where
 instance Params SQLExpr where
     params (SQLParamExpr p) = [Var p]
     params (SQLCastExpr e _) = params e
+    params (SQLInfixFuncExpr _ a b) = params a ++ params b
     params (SQLFuncExpr _ es) = foldMap params es
     params (SQLFuncExpr2 _ e) = params e
     params _ = []
