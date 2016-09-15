@@ -143,7 +143,7 @@ showWhereCond2 cond sqlvar = case cond of
     _ -> " WHERE " ++ show2 cond sqlvar
 
 instance Show2 SQL where
-    show2 (SQLQuery cols tables conds orderby limit distinct groupby) sqlvar = "SELECT " ++ (if distinct then "DISTINCT " else "") ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS " ++ serialize var) cols)) ++
+    show2 (SQLQuery cols tables conds orderby limit distinct groupby) sqlvar = "SELECT " ++ (if distinct then "DISTINCT " else "") ++ (if null cols then "1" else intercalate "," (map (\(var, expr) -> show2 expr sqlvar ++ " AS \"" ++ serialize var ++ "\"") cols)) ++
             (if null tables
                 then ""
                 else " FROM " ++ intercalate "," (map serialize tables)) ++

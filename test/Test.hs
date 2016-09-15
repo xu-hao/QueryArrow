@@ -345,7 +345,7 @@ main = hspec $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
             sql <- translateQuery1 <$> (sqlStandardTrans "cat") <*> pure (Set.fromList [Var "x", Var "y"]) <*> pure qu <*> pure (Set.fromList [Var "z"])
             ((\(x,_,_) -> x) sql) `shouldBe` [Var "x", Var "y"]
-            serialize ((\(_,x,_) -> x) sql) `shouldBe` "SELECT r_data_main.data_id AS x,r_data_main.resc_name AS y FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
+            serialize ((\(_,x,_) -> x) sql) `shouldBe` "SELECT r_data_main.data_id AS \"x\",r_data_main.resc_name AS \"y\" FROM r_data_main r_data_main WHERE r_data_main.data_name = ?"
             (params sql) `shouldBe` [Var "z"]
         it "test translate sql insert 0" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, y, \"foo\") insert cat.DATA_SIZE(x, y, 1000)" "UPDATE r_data_main SET data_size = 1000 WHERE data_name = 'foo'"
@@ -409,7 +409,7 @@ main = hspec $ do
         it "test translate sql 17" $ do
             qu <- qParseStandardQuery "cat" "cat.add(y, 1, z)"
             sql <- translateQuery1 <$> (sqlStandardTrans "cat") <*> pure (Set.singleton (Var "z")) <*> pure qu <*> pure (Set.singleton (Var "y"))
-            (serialize ((\(_,x,_) -> x)sql)) `shouldBe` "SELECT (?+1) AS z"
+            (serialize ((\(_,x,_) -> x)sql)) `shouldBe` "SELECT (?+1) AS \"z\""
         it "test translate sql insert 18" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y)"
                 sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure qu <*> pure Set.empty
