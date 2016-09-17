@@ -1,0 +1,63 @@
+name:           QueryArrow-sql
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   SQL.HDBC.PostgreSQL
+                   SQL.HDBC.CockroachDB
+                   SQL.HDBC.Sqlite3
+                   SQL.ICAT
+                   SQL.SQL
+                   SQL.HDBC
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   HDBC-sqlite3,
+                   HDBC-postgresql,
+                   HDBC,
+                   aeson,
+                   bytestring,
+                   haskell-neo4j-client,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   array,
+                   temporary,
+                   process,
+                   distributive,
+                   pretty-tree,
+                   conduit-combinators,
+                   conduit,
+                   http-conduit,
+                   resourcet,
+                   async,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   regex-tdfa,
+                   monad-control,
+                   lifted-async,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   network,
+                   conduit-extra,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   lrucache,
+                   QueryArrow,
+                   template-haskell
+  ghc-options:     -Wall -fPIC -threaded
+  other-modules:

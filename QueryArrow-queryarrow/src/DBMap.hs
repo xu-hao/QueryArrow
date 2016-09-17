@@ -13,7 +13,8 @@ import ListUtils
 import Cache
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (foldrWithKey, fromList)
+import Data.Map.Strict (foldrWithKey, fromList, Map, lookup)
+import Data.Heterogeneous.List
 import Control.Monad.Except
 import Data.Namespace.Namespace
 import Data.Monoid
@@ -27,6 +28,22 @@ import qualified InMemory as InMemory
 import qualified ElasticSearch.ElasticSearch as ElasticSearch
 import qualified SQL.HDBC.Sqlite3 as Sqlite3
 
+type DBMap = Map String (ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula))
+
+getDB :: DBMap -> ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
+getDB dbMap ps = case lookup (catalog_database_type ps) dbMap of
+    Just getDBFunc -> getDBFunc ps
+    Nothing -> error ("unimplemented database type " ++ (catalog_database_type ps))
+
+getDBs :: DBMap -> [DBTrans] -> IO (AbstractDBList MapResultRow)
+getDBs _ [] = return (AbstractDBList HNil)
+getDBs dbMap (DBTrans ps : l) = do
+    db0 <- getDB dbMap ps
+    case db0 of
+      AbstractDatabase db -> do
+        dbs <- getDBs dbMap l
+        case dbs of
+          AbstractDBList dbs -> return (AbstractDBList (HCons db dbs))
 
 dbMap :: DBMap
 dbMap = fromList [

@@ -13,7 +13,9 @@ class (IDBConnection0 conn, IResultRow (NPSRowType conn)) => INPSDBConnection co
 
 -- instance for IDBConnection
 
-newtype NPSDBConnection conn = NPSDBConnection conn deriving IDBConnection0 conn) => IDBConnection0 (NPSDBConnection conn) where
+newtype NPSDBConnection conn = NPSDBConnection conn
+
+instance (IDBConnection0 conn) => IDBConnection0 (NPSDBConnection conn) where
     dbClose (NPSDBConnection conn) = dbClose conn
     dbBegin (NPSDBConnection conn) = dbBegin conn
     dbCommit (NPSDBConnection conn) = dbCommit conn

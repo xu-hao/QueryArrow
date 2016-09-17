@@ -73,7 +73,7 @@ hs_modify_data sessionptr cupdatecols cupdatevals cwherecolsandops cwherevals cu
                                       "data_repl_num" -> _data_repl_num
                                       "data_type_name" -> _data_type_name
                                       "data_size" -> _data_size
-                                      "resc_name" -> _data_resc_name
+                                      -- "resc_name" -> _data_resc_name
                                       "data_path" -> _data_path
                                       "data_owner_name" -> _data_owner_name
                                       "data_owner_zone" -> _data_owner_zone
