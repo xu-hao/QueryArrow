@@ -1,7 +1,7 @@
-/dist/
+/*/dist/
 /*/gen/
 /**/.stack-work/
 /*/obs/
-/coverage/
-/build/
-/.hpc/
+/*/coverage/
+/*/build/
+/*/.hpc/
