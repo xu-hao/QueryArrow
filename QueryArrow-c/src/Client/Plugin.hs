@@ -7,12 +7,16 @@ import DB.DB
 import QueryPlan
 import DB.ResultStream
 import Client.Template
+import Config
+import DBMap(transDB)
+import Utils(constructDBPredMap)
 
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList, empty)
 import Data.Text (Text, pack)
 import qualified Data.Text as Text
 import Data.Monoid ((<>))
+import Control.Exception (catch, SomeException)
 import Control.Monad.Reader
 import Control.Applicative (liftA2, pure)
 import Control.Monad.Trans.Resource (runResourceT)
@@ -27,8 +31,35 @@ import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
 import Foreign.Marshal.Array
+import System.Log.Logger (errorM)
 
 $(functions "test/tdb-plugin.json")
+
+foreign export ccall hs_connect :: Ptr (StablePtr (Session Predicates)) -> IO Int
+hs_connect :: Ptr (StablePtr (Session Predicates)) -> IO Int
+hs_connect ptr = do
+    ps <- getConfig "test/tdb-plugin.json"
+    db <- transDB "plugin" ps
+    case db of
+        AbstractDatabase db ->
+            catch (do
+                conn <- dbOpen db
+                let pm = constructDBPredMap db
+                sessionptr <- newStablePtr (Session db conn (predicates pm))
+                poke ptr sessionptr
+                return 0) (\e -> do
+                    errorM "C Api" (show (e :: SomeException))
+                    return (0-1))
+
+foreign export ccall hs_disconnect :: StablePtr (Session Predicates) -> IO Int
+hs_disconnect :: StablePtr (Session Predicates) -> IO Int
+hs_disconnect stptr = do
+    Session _ conn _ <- deRefStablePtr stptr
+    catch (do
+        dbClose conn
+        return 0) (\e -> do
+            errorM "C Api" (show (e :: SomeException))
+            return (0-1))
 
 foreign export ccall hs_commit :: StablePtr (Session Predicates) -> IO Int
 hs_commit :: StablePtr (Session Predicates) -> IO Int

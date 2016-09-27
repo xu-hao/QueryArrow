@@ -12,6 +12,7 @@ import Rewriting
 import Config
 import Utils
 import Data.Namespace.Path
+import Data.Namespace.Namespace (lookupObject)
 import qualified SQL.HDBC.PostgreSQL as PostgreSQL
 
 import Prelude hiding (lookup)
@@ -30,6 +31,7 @@ import Language.Haskell.TH hiding (Pred)
 import Language.Haskell.TH.Syntax (VarBangType)
 import Data.Char (toLower)
 import Data.List (nub)
+import Data.Maybe (fromJust)
 import Foreign.C.String
 import Foreign.Ptr
 import Foreign.Storable
@@ -174,6 +176,20 @@ field x = (mkName x, Bang NoSourceUnpackedness NoSourceStrictness, ConT (mkName 
 
 struct :: [String] -> DecQ
 struct xs = dataD (return []) (mkName "Predicates") [] Nothing [return (RecC (mkName "Predicates") (map field xs))] (return [])
+
+pathE :: ObjectPath String -> ExpQ
+pathE (ObjectPath (NamespacePath as) a) = do
+    let l = listE (map stringE as)
+    [|ObjectPath (NamespacePath $(l)) $(stringE a)|]
+
+structval :: [(String, ObjectPath String)] -> DecsQ
+structval xs = do
+      let pm = mkName "pm"
+      let exprs = map (\(n, pn) -> do
+          pval <- [|fromJust (lookupObject $(pathE pn) $(varE pm)) |]
+          return (mkName n, pval)) xs
+      let expr = recConE (mkName "Predicates") exprs
+      [d| predicates pm = $(expr)|]
 
 functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
@@ -643,5 +659,8 @@ functions path = do
                     ) dr
     preds <- runIO (getPredicates path)
     runIO $ mapM_ (\(Pred (ObjectPath _ n0) _) -> putStrLn ("generating struct field: _" ++ map toLower n0)) preds
-    st <- struct (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
-    return  (st : qr1 ++ ir1 ++ dr1)
+    let n = (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
+    let pn = (nub (map (\(InsertRewritingRule (Atom (Pred n0 _) _) _) -> n0) (qr ++ ir ++ dr)) ++ map (\(Pred n0 _) -> n0) preds)
+    st <- struct n
+    stv <- structval (zip n pn)
+    return (st : stv ++ qr1 ++ ir1 ++ dr1)
