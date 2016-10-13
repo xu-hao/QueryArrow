@@ -43,7 +43,7 @@ packages:
     - QueryArrow-elastic/
     - QueryArrow-cypher/
     - QueryArrow-sql/
-    - QueryArrow-queryarrow/
+    - QueryArrow-common/
     - location:
         git: https://github.com/xu-hao/hdbc-postgresql.git
         commit : 523759ee1742a54005888415e5ce5f4c729f9d52
