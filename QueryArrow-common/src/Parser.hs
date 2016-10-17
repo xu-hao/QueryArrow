@@ -67,8 +67,8 @@ atomp :: FOParser Atom
 atomp = do
     predname <- prednamep
     arglist <- arglistp
-    (_, predmap, _) <- getState
-    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show predmap)) (lookupObject predname predmap)
+    (_, workspace, _) <- getState
+    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show workspace)) (lookupObject predname workspace)
     return (Atom thepred arglist)
 
 negp :: FOParser ()
@@ -195,13 +195,12 @@ progp = do
           <|> (reserved "rollback" *> return Rollback)
           <|> (Execute <$> formulap))
     eof
-    (_, predmap, _) <- getState
-    return (commands, predmap)
+    (_, workspace, exports) <- getState
+    return (commands, workspace)
 
 
 rulep :: FOParser [Action]
 rulep = (do
-    whiteSpace
     reserved "rewrite"
     reserved "insert" *> irulep
       <|> reserved "delete" *> drulep
@@ -223,7 +222,7 @@ namespacepathp = do
 
 importp :: FOParser [Action]
 importp = do
-    (predmap, workspace, predmap2) <- getState
+    (predmap, workspace, exports) <- getState
     reserved "import"
     predmap2' <- (do
         reserved "qualified"
@@ -234,15 +233,15 @@ importp = do
             (do
                 reserved "except"
                 preds <- many1 identifier
-                return (importQualifiedExceptFromNamespace ns preds predmap predmap2)
+                return (importQualifiedExceptFromNamespace ns preds predmap workspace)
                 ) <|> (
-                return (importAllFromNamespace ns predmap predmap2)
+                return (importAllFromNamespace ns predmap exports)
                 )
             ) <|> (do
             prednames <- many1 identifier
             reserved "from"
             ns <- namespacepathp
-            return (importQualifiedFromNamespace ns prednames predmap predmap2)
+            return (importQualifiedFromNamespace ns prednames predmap workspace)
             )
         ) <|> (do
             reserved "all"
@@ -251,17 +250,17 @@ importp = do
             (do
                 reserved "except"
                 preds <- many1 identifier
-                return (importExceptFromNamespace ns preds predmap predmap2)
+                return (importExceptFromNamespace ns preds predmap workspace)
                 ) <|> (
-                return (importAllFromNamespace ns predmap predmap2)
+                return (importAllFromNamespace ns predmap workspace)
                 )
             ) <|> (do
             prednames <- many1 identifier
             reserved "from"
             ns <- namespacepathp
-            return (importFromNamespace ns prednames predmap predmap2)
+            return (importFromNamespace ns prednames predmap workspace)
             )
-    setState (predmap, workspace, fromMaybe (error "import") predmap2')
+    setState (predmap, fromMaybe (error "import") predmap2', exports)
     return []
 
 
@@ -278,32 +277,32 @@ data Action =
 execAction :: Action -> FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
 execAction (ExportQualifiedExceptFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importQualifiedExceptFromNamespace ns prednames workspace exports
+    let exports' = importQualifiedExceptFromNamespace ns prednames predmap exports
     setState (predmap, workspace, fromMaybe (error "export") exports')
     return mempty
 execAction (ExportQualifiedAllFrom ns) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importQualifiedAllFromNamespace ns workspace exports
+    let exports' = importQualifiedAllFromNamespace ns predmap exports
     setState (predmap, workspace, fromMaybe (error "export") exports')
     return mempty
 execAction (ExportQualifiedFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importQualifiedFromNamespace ns prednames workspace exports
+    let exports' = importQualifiedFromNamespace ns prednames predmap exports
     setState (predmap, workspace, fromMaybe (error "export") exports')
     return mempty
 execAction (ExportExceptFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importExceptFromNamespace ns prednames workspace exports
+    let exports' = importExceptFromNamespace ns prednames predmap exports
     setState (predmap, workspace, fromMaybe (error "export") exports')
     return mempty
 execAction (ExportAllFrom ns) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importAllFromNamespace ns workspace exports
+    let exports' = importAllFromNamespace ns predmap exports
     setState (predmap, workspace, fromMaybe (error "export") exports')
     return mempty
 execAction (ExportFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importFromNamespace ns prednames workspace exports
+    let exports' = importFromNamespace ns prednames predmap exports
     setState (predmap, workspace, fromMaybe (error "export") exports')
     return mempty
 execAction (Export prednames) = do
@@ -361,11 +360,12 @@ exportp = do
 
 rulesp :: FOParser (([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), PredMap, PredMap)
 rulesp = do
-    actions <- many (importp <|> exportp <|> predp <|> rulep)
+    whiteSpace
+    actions <- many ((importp <|> exportp <|> predp <|> rulep) <* whiteSpace)
     eof
-    (_, st, exports) <- getState
     rules <- mapM execAction (concat actions)
-    return (mconcat rules, st, exports)
+    (_, workspace, exports) <- getState
+    return (mconcat rules, workspace, exports)
 
 samePredAndKey :: Atom -> Atom -> Bool
 samePredAndKey (Atom p1 args1) (Atom p2 args2) | p1 == p2 =

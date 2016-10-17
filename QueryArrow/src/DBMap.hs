@@ -66,7 +66,7 @@ transDB name transinfo = do
             let sumdb = SumDB "sum" dbs
             let predmap0 = constructDBPredMap sumdb
             -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
-            (rewriting, predmap0', exports) <- getRewriting predmap0 transinfo
+            (rewriting, _, exports) <- getRewriting predmap0 transinfo
             let exportmap = allObjects exports
             let (rules0, exportedpreds) = foldrWithKey (\key pred1@(Pred pn predtype@(PredType _ paramTypes)) (rules0', exportedpreds') ->
                     if key /= pn
@@ -77,7 +77,7 @@ transDB name transinfo = do
                                 atom1 = Atom pred1 params in
                                 (([InsertRewritingRule atom (FAtomic atom1)], [InsertRewritingRule atom (FInsert (Lit Pos atom1))], [InsertRewritingRule atom (FInsert (Lit Neg atom1))]) <> rules0', pred0 : exportedpreds')
                         else
-                            (rules0', pred1 : exportedpreds')) (([], [], []), []) (allObjects exports)
+                            (rules0', pred1 : exportedpreds')) (([], [], []), []) exportmap
             -- trace (intercalate "\n" (map show (exports))) $ return ()
             -- trace (intercalate "\n" (map show (predmap1))) $ return ()
             let repeats = findRepeats exportedpreds

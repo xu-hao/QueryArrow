@@ -7,7 +7,7 @@
            "db_password" : "testpassword",
            "db_host" : "localhost",
            "db_username" : "irods",
-           "db_icat" : ["gen/ICATGen", "gen/SQL/ICATGen"],
+           "db_icat" : ["../QueryArrow-gen/gen/ICATGen", "../QueryArrow-gen/gen/SQL/ICATGen"],
            "catalog_database_type" : "SQL/HDBC/PostgreSQL"
         }
     }],
