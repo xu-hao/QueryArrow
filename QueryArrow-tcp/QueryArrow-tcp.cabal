@@ -53,7 +53,7 @@ executable QueryArrowTcp
                    constraints,
                    lrucache,
                    QueryArrow,
-                   QueryArrow-queryarrow,
+                   QueryArrow-common,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

@@ -51,7 +51,7 @@ library
                    monad-logger,
                    fast-logger,
                    constraints,
-                   QueryArrow,
+                   QueryArrow-common,
                    QueryArrow-sql,
                    template-haskell
   ghc-options:     -Wall -fPIC

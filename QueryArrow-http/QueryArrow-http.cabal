@@ -51,7 +51,7 @@ executable QueryArrowHttp
                    fast-logger,
                    constraints,
                    yesod,
-                   QueryArrow-queryarrow,
+                   QueryArrow-common,
                    QueryArrow,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded

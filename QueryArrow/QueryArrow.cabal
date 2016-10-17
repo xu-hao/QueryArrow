@@ -1,4 +1,4 @@
-name:           QueryArrow-queryarrow
+name:           QueryArrow
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -52,7 +52,7 @@ library
                    fast-logger,
                    constraints,
                    lrucache,
-                   QueryArrow,
+                   QueryArrow-common,
                    QueryArrow-sql,
                    QueryArrow-cypher,
                    QueryArrow-elastic,

@@ -57,7 +57,7 @@ library
                    fast-logger,
                    constraints,
                    lrucache,
-                   QueryArrow,
+                   QueryArrow-common,
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
