@@ -116,8 +116,8 @@ runQuery dbs query2 =
             Right (qu2, _) -> unsafePerformIO (getAllResults2 dbs  qu2)
 -}
 
-standardPreds = (++) <$> (ICAT.loadPreds "QueryArrow-gen/gen/ICATGen") <*> pure ICAT.standardBuiltInPreds
-standardMappings =  (SQL.ICAT.loadMappings "QueryArrow-gen/gen/SQL/ICATGen")
+standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen") <*> pure ICAT.standardBuiltInPreds
+standardMappings =  (SQL.ICAT.loadMappings "../QueryArrow-gen/gen/SQL/ICATGen")
 
 sqlStandardTrans ns = SQL.ICAT.sqlStandardTrans ns <$> standardPreds <*> standardMappings <*> pure (Just "nextid")
 
