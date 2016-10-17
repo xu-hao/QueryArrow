@@ -17,7 +17,7 @@ import ListUtils
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
     T.commentEnd = "*/",
-    T.commentLine = "",
+    T.commentLine = "--",
     T.nestedComments = False,
     T.identStart = letter <|> char '_',
     T.identLetter = alphaNum <|> char '_',
@@ -65,9 +65,9 @@ ifdef = do
 index :: Parser ()
 index = do
     try $ do
-        reserved "create"
-        optional (reserved "unique")
-        reserved "index"
+        (reserved "create" <|> reserved "CREATE")
+        optional (reserved "unique" <|> reserved "UNIQUE")
+        (reserved "index" <|> reserved "INDEX")
     manyTill anyChar (try semi)
     return ()
 
@@ -98,8 +98,8 @@ create_sequence = do
 create_stmt :: Parser Stmt2
 create_stmt = do
       try $ do
-          reserved "create"
-          reserved "table"
+          (reserved "create" <|> reserved "CREATE")
+          (reserved "table" <|> reserved "TABLE")
       id <- identifier
       coldefs <- parens col_def_list
       semi
@@ -114,16 +114,19 @@ col_def =
     ColDef <$> identifier <*> typep <*> constraints
 
 typep :: Parser ColType
-typep = reserved "INTEGER" *> return Number
+typep = reserved "integer" *> return Number
+    <|> reserved "INTEGER" *> return Number
     <|> reserved "INT64TYPE" *> return Number
+    <|> reserved "bigint" *> return Number
     <|> reserved "int" *> return Number
     <|> reserved "varchar" *> parens integer *> return Text
+    <|> reserved "character" *> reserved "varying" *> parens integer *> return Text
 
 constraints :: Parser [Constraint]
 constraints = many constraint
 
 constraint :: Parser Constraint
-constraint = reserved "not" *> reserved "null" *> return NotNull
+constraint = (reserved "not" <|> reserved "NOT") *> (reserved "null" <|> reserved "NULL") *> return NotNull
          <|> try(reserved "DEFAULT" *> (DI <$> integer))
          <|> reserved "DEFAULT" *> (DS <$> stringp)
 
@@ -139,7 +142,7 @@ findAllKeys prefix coldefs =
                                           "RESC_ID" == key1 || "USER_ID" == key1 || "MODIFY_TS" == key1)  coldefs  -- specical case for quota usage
         "DATA" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
-                                          "DATA_ID" == key1 || "RESC_NAME" == key1)  coldefs  -- specical case for data
+                                          "DATA_ID" == key1 || "RESC_ID" == key1)  coldefs  -- specical case for data
         "USER_PASSWORD" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
                                           "USER_ID" == key1 || "RCAT_PASSWORD" == key1)  coldefs  -- special case for user password
@@ -157,7 +160,7 @@ findAllNotNulls :: [ColDef] -> [ColDef]
 findAllNotNulls = filter (\(ColDef _ _ cs) -> any (\c -> case c of NotNull -> True ; _ -> False) cs)
 
 extractPrefix tablename =
-    let predname0 = drop 2 tablename in
+    let predname0 = drop 2 (map toUpper tablename) in
         replace  "_MAIN" "" predname0
 
 prefixToPredName prefix =

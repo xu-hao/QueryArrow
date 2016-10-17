@@ -12,10 +12,11 @@ cabalprof:
 gen: src/*
 	mkdir -p gen
 	mkdir -p gen/SQL
-	wget -O gen/schema.sql https://raw.githubusercontent.com/irods/irods/master/plugins/database/src/icatSysTables.sql.pp
+	# wget -O gen/schema.sql https://raw.githubusercontent.com/irods/irods/master/plugins/database/src/icatSysTables.sql.pp
+	cp schema.sql gen/schema.sql
 	echo "create table R_META_ACCESS ( meta_id INT64TYPE not null, object_id INT64TYPE not null, user_id INT64TYPE not null, access_type_id INT64TYPE not null, create_ts varchar(32), modify_ts varchar(32)) ;" >> gen/schema.sql
 	# cp src/schema.sql gen/
-	stack runhaskell -- -isrc -igen src/schema_parser_main.hs
+	stack runhaskell -- -isrc -igen -i../QueryArrow-sql/src -i../QueryArrow-common/src src/schema_parser_main.hs
 
 build: gen src/*
 	mkdir -p build
