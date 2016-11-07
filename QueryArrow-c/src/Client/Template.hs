@@ -40,6 +40,7 @@ import Foreign.Marshal.Array
 import Foreign.StablePtr
 import Control.Arrow ((+++), (***))
 import Data.Int
+import System.IO
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -1
@@ -195,7 +196,7 @@ functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
 functype n t = functype (n - 1) [t|CString -> $(t)|]
 
-data Type2 = StringType | IntType
+data Type2 = StringType | IntType deriving (Show)
 
 cstringToText :: CString -> IO Text
 cstringToText str = do
@@ -295,7 +296,9 @@ queryLongFunction name inputtypes outputtypes = do
                       runIO $ putStrLn ("generating function " ++ show fn)
                       b <- [|getIntResult session $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
-                  _ -> return []
+                  _ -> do
+                      runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
+                      return []
 
 querySomeFunction :: String -> [Type2] -> [Type2] -> DecsQ
 querySomeFunction name inputtypes outputtypes = do
@@ -349,12 +352,15 @@ hsQueryForeign name inputtypes outputtypes = do
 
 hsQueryLongForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryLongForeign name inputtypes outputtypes = do
-    runIO $ putStrLn ("generating foreign " ++ ("hs_get_int_" ++ name))
+    let fn = "hs_get_int_" ++ name
+    runIO $ putStrLn ("generating foreign " ++ fn)
     let b = conT (mkName "Predicates")
     case outputtypes of
         [StringType] ->
-            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName ("hs_get_int_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
-        _ -> return []
+            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
+        _ -> do
+            runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
+            return []
 
 hsQuerySomeForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQuerySomeForeign name inputtypes outputtypes = do
@@ -403,10 +409,10 @@ hsQueryFunction n inputtypes outputtypes = do
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
 hsQueryLongFunction :: String -> [Type2] -> [Type2] -> DecsQ
-hsQueryLongFunction n inputtypes outputtypes =
+hsQueryLongFunction n inputtypes outputtypes = do
+  let fn = mkName ("get_int_" ++ n)
   case outputtypes of
       [StringType] -> do
-          let fn = mkName ("get_int_" ++ n)
           let fn2 = mkName ("hs_get_int_" ++ n)
           let retn = mkName ("retn")
           let retlen = mkName ("retlen")
@@ -424,7 +430,9 @@ hsQueryLongFunction n inputtypes outputtypes =
                                                                 $(app)|] (zip argList argnames)
           b <- [|processRes $(b0) (intToBuffer $(varE retn))|]
           sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
-      _ -> return []
+      _ -> do
+          runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
+          return []
 
 hsQuerySomeFunction :: String -> [Type2] -> [Type2] -> DecsQ
 hsQuerySomeFunction n inputtypes outputtypes = do
