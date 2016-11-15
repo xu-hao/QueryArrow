@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "Plugin_stub.h"
 
-// stack ghc -- --make -I.stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/Client/ -I/home/xuh/.stack/programs/x86_64-linux/ghc-8.0.1/lib/ghc-8.0.1/include/ test/test.cpp -package QueryArrow-c -no-hs-main
+// stack ghc -- --make -I.stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/Client/ test/test.cpp -package QueryArrow-c -no-hs-main
 
 int main(int argc, char **argv) {
   void *ptr;
