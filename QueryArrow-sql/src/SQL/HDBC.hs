@@ -77,6 +77,8 @@ instance IDBConnection0 HDBCDBConnection  where
 instance IDBConnection HDBCDBConnection where
         type StatementType HDBCDBConnection = PSDBStatement HDBCStatement
         type QueryType HDBCDBConnection = (Bool, [Var], String, [Var])
-        prepareQuery (HDBCDBConnection conn) query = PSDBStatement <$> prepareHDBCStatement conn query
+        prepareQuery (HDBCDBConnection conn) query = do
+            infoM "SQL" ("prepare statement " ++ show query)
+            PSDBStatement <$> prepareHDBCStatement conn query
 
 -- the QueryDB instance is provided for each DB type

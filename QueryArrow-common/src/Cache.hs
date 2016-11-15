@@ -9,6 +9,7 @@ import Prelude  hiding (lookup)
 import Control.Applicative ((<$>))
 import Data.Set (Set)
 import Data.Cache.LRU.IO
+import System.Log.Logger
 
 type TransCache query = AtomicLRU (Set Var, Formula, Set Var) query
 
@@ -24,6 +25,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (CacheTransDB db) 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) where
     type DBQueryType (CacheTransDB db) = DBQueryType db
     translateQuery (CacheTransDB _ db cache ) vars2 qu vars = do
+        infoM "TransCache" ("looking up " ++ show qu)
         qu' <- lookup (vars2, qu, vars) cache
         case qu' of
             Just qu2 -> return qu2

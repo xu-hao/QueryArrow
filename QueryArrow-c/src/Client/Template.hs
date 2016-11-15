@@ -43,7 +43,10 @@ import Data.Int
 import System.IO
 
 eCAT_NO_ROWS_FOUND :: Int
-eCAT_NO_ROWS_FOUND = -1
+eCAT_NO_ROWS_FOUND = -808000
+
+eNULL :: Int
+eNULL = -1095000
 
 type Error = (Int, Text)
 
@@ -116,7 +119,7 @@ getResultValues (Session db conn predicates) vars form params = do
   case count of
       row : _ -> case mapM (\var -> lookup var row) vars of
                   Just r -> return r
-                  Nothing -> throwError (-1, "error 1")
+                  Nothing -> throwError (eNULL, "error 1")
       _ -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
 
 getAllResultValues :: (Liftable a b) => Session b -> [Var] -> a -> MapResultRow -> EitherT Error IO [[ResultValue]]
@@ -127,7 +130,7 @@ getAllResultValues (Session db conn predicates) vars form params = do
       rows ->
           case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
               Just r -> return r
-              Nothing -> throwError (-1, "error 1")
+              Nothing -> throwError (eNULL, "error 1")
 
 getSomeResultValues :: (Liftable a b) => Session b -> Int -> [Var] -> a -> MapResultRow -> EitherT Error IO [[ResultValue]]
 getSomeResultValues (Session db conn predicates) n vars form params = do
@@ -137,7 +140,7 @@ getSomeResultValues (Session db conn predicates) n vars form params = do
       rows ->
           case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
               Just r -> return r
-              Nothing -> throwError (-1, "error 1")
+              Nothing -> throwError (eNULL, "error 1")
 
 getIntResult :: (Liftable a b) => Session b ->[ Var ]-> a -> MapResultRow -> EitherT Error IO Int64
 getIntResult session vars form params = do
@@ -258,6 +261,7 @@ processRes2 a f = do
 queryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryFunction name inputtypes outputtypes = do
     let fn = mkName ("get_" ++ name)
+    let pn = varE (mkName name)
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
@@ -274,12 +278,13 @@ queryFunction name inputtypes outputtypes = do
                     [IntType] -> [|getIntResult|]
                     _ -> [|getStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) session $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryLongFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryLongFunction name inputtypes outputtypes = do
     let fn = mkName ("get_int_" ++ name)
+    let pn = varE (mkName name)
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
@@ -294,7 +299,7 @@ queryLongFunction name inputtypes outputtypes = do
     case outputtypes of
                   [StringType] -> do
                       runIO $ putStrLn ("generating function " ++ show fn)
-                      b <- [|getIntResult session $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+                      b <- [|getIntResult session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
                   _ -> do
                       runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
@@ -303,6 +308,7 @@ queryLongFunction name inputtypes outputtypes = do
 querySomeFunction :: String -> [Type2] -> [Type2] -> DecsQ
 querySomeFunction name inputtypes outputtypes = do
     let fn = mkName ("get_some_" ++ name)
+    let pn = varE (mkName name)
     p <- [p|session|]
     let n = mkName ("a")
     np <- [p|a|]
@@ -318,12 +324,13 @@ querySomeFunction name inputtypes outputtypes = do
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = [|getSomeStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) session $(varE n) $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session $(varE n) $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryAllFunction name inputtypes outputtypes = do
     let fn = mkName ("get_all_" ++ name)
+    let pn = varE (mkName name)
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
@@ -337,7 +344,7 @@ queryAllFunction name inputtypes outputtypes = do
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = [|getAllStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) session $(retList) (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 
@@ -504,6 +511,7 @@ hsQueryAllFunction n inputtypes outputtypes = do
 createFunction :: String -> Int -> DecQ
 createFunction n a = do
     let fn = mkName ("create_" ++ n)
+    let pn = varE (mkName n)
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
@@ -511,7 +519,7 @@ createFunction n a = do
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) session (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeign :: String -> Int -> DecQ
@@ -545,6 +553,7 @@ hsCreateFunction n a = do
 createFunctionArray :: String -> Int -> DecQ
 createFunctionArray n a = do
     let fn = mkName ("array_create_" ++ n)
+    let pn = varE (mkName n)
     p <- [p|session|]
     p2 <- [p|argarray|]
     let args = map (\i -> "arg" ++ show i) [1..a]
@@ -552,7 +561,7 @@ createFunctionArray n a = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) session (local_zone @@ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
+    b <- [|$(func) session ($(pn) @@ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ
@@ -579,6 +588,8 @@ hsCreateFunctionArray n = do
 deleteFunction :: String -> Int -> DecQ
 deleteFunction n a = do
     let fn = mkName ("delete_" ++ n)
+    let pn = varE (mkName n)
+
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
@@ -586,7 +597,7 @@ deleteFunction n a = do
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) session (local_zone @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsDeleteForeign :: String -> Int -> DecQ

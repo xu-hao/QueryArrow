@@ -231,9 +231,9 @@ predicate D_RESC_PARENT_BY_ZONE_AND_NAME property (key Text, key Text, property 
 rewrite D_RESC_PARENT_BY_ZONE_AND_NAME(zn, rn, p)
     RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_PARENT(rid, p)
 
-    predicate D_RESC_TYPE_NAME_BY_ZONE_AND_NAME property (key Text, key Text, property Text)
-    rewrite D_RESC_TYPE_NAME_BY_ZONE_AND_NAME(zn, rn, p)
-        RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_TYPE_NAME(rid, p)
+predicate D_RESC_TYPE_NAME_BY_ZONE_AND_NAME property (key Text, key Text, property Text)
+rewrite D_RESC_TYPE_NAME_BY_ZONE_AND_NAME(zn, rn, p)
+    RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_TYPE_NAME(rid, p)
 
 predicate D_RESC_PARENT_TS property (key Text, property Text, property Text, property Text)
 rewrite insert D_RESC_PARENT_TS(rid, p, pc, ts)

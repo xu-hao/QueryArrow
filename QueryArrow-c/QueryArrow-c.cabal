@@ -6,7 +6,7 @@ author:         Hao Xu
 
 library
   hs-source-dirs:  src
-  exposed-modules: Client.Plugin
+  exposed-modules: Client.Plugin Client.Template
   build-depends:
                    base >= 4,
                    containers,

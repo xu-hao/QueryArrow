@@ -32,8 +32,13 @@ import Foreign.C.String
 import Foreign.Storable
 import Foreign.Marshal.Array
 import System.Log.Logger (errorM)
+import Logging
 
 $(functions "test/tdb-plugin.json")
+
+foreign export ccall hs_setup :: IO ()
+hs_setup :: IO ()
+hs_setup = setup
 
 foreign export ccall hs_connect :: Ptr (StablePtr (Session Predicates)) -> IO Int
 hs_connect :: Ptr (StablePtr (Session Predicates)) -> IO Int
