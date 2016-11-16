@@ -57,5 +57,5 @@ library
                    QueryArrow-sql,
                    QueryArrow,
                    template-haskell
-  ghc-options:     -Wall -fPIC -threaded
+  ghc-options:     -Wall -fPIC
   other-modules:

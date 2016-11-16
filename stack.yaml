@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: nightly-2016-08-27
+resolver: lts-7.9
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -47,6 +47,7 @@ packages:
     - location:
         git: https://github.com/xu-hao/hdbc-postgresql.git
         commit : 523759ee1742a54005888415e5ce5f4c729f9d52
+      extra-dep: true
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.
@@ -56,7 +57,7 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
     - pretty-tree-0.1.0.0
-    - semibounded-lattices-0.1.0.0
+    - semibounded-lattices-0.1.0.1
     - namespace-0.1.2.2
     - json-rpc-0.7.1.1
     - HDBC-sqlite3-2.3.3.1
