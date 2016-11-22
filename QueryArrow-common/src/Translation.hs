@@ -70,8 +70,14 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db _ (qr, ir, dr) ) vars2 qu vars =
-        let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
-            translateQuery db vars2 qu' vars
+        case runExcept (checkQuery qu) of
+            Right () ->
+                let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
+                    case runExcept (checkQuery qu') of
+                        Right () -> translateQuery db vars2 qu' vars
+                        Left err -> error err
+            Left err -> error err
+
 
 instance (IDatabase db) => IDatabase2 (TransDB db) where
     newtype ConnectionType (TransDB db) = TransDBConnection (ConnectionType db)
@@ -97,5 +103,8 @@ getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
     case runParser rulesp (predmap, mempty, mempty) "" d0 of
         Left err -> error (show err)
-        Right ((qr, ir, dr), predmap, exports) ->
+        Right ((qr, ir, dr), predmap, exports) -> do
+            mapM_ print qr
+            mapM_ print ir
+            mapM_ print dr
             return ((qr, ir, dr), predmap, exports)

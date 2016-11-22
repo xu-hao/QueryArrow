@@ -28,6 +28,7 @@ instance Fractional ResultValue where
 instance Convertible ResultValue Expr where
     safeConvert (StringValue s) = Right (StringExpr s)
     safeConvert (IntValue i) = Right (IntExpr i)
+    safeConvert Null = Right (NullExpr)
     safeConvert v = Left (ConvertError (show v) "ResultValue" "Expr" "")
 
 instance Convertible Expr ResultValue where

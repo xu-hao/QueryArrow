@@ -1,12 +1,12 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, TemplateHaskell , ForeignFunctionInterface #-}
 
-module Client.Plugin where
+module QueryArrow.C.Plugin where
 
 import FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
 import DB.DB
 import QueryPlan
 import DB.ResultStream
-import Client.Template
+import QueryArrow.C.Template
 import Config
 import DBMap(transDB)
 import Utils(constructDBPredMap)
@@ -31,19 +31,21 @@ import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
 import Foreign.Marshal.Array
-import System.Log.Logger (errorM)
+import System.Log.Logger (errorM, infoM)
 import Logging
-
-$(functions "test/tdb-plugin.json")
+import QueryArrow.C.PluginGen
 
 foreign export ccall hs_setup :: IO ()
 hs_setup :: IO ()
 hs_setup = setup
 
-foreign export ccall hs_connect :: Ptr (StablePtr (Session Predicates)) -> IO Int
-hs_connect :: Ptr (StablePtr (Session Predicates)) -> IO Int
-hs_connect ptr = do
-    ps <- getConfig "test/tdb-plugin.json"
+foreign export ccall hs_connect :: CString -> Ptr (StablePtr (Session Predicates)) -> IO Int
+hs_connect :: CString -> Ptr (StablePtr (Session Predicates)) -> IO Int
+hs_connect cpath ptr = do
+    path <- peekCString cpath
+    infoM "Plugin" ("loading configuration from " ++ path)
+    ps <- getConfig path
+    infoM "Plugin" ("configuration: " ++ show ps)
     db <- transDB "plugin" ps
     case db of
         AbstractDatabase db ->
@@ -96,34 +98,31 @@ hs_modify_data sessionptr cupdatecols cupdatevals cwherecolsandops cwherevals cu
     wherevals <- mapM peekCString cwherevals2
     let parse wherecolandcond =
             if drop (length wherecolandcond - 2) wherecolandcond == "!="
-                then (drop (length wherecolandcond - 2) wherecolandcond, "!=")
-                else (drop (length wherecolandcond - 1) wherecolandcond, "=")
+                then (take (length wherecolandcond - 2) wherecolandcond, "!=")
+                else (take (length wherecolandcond - 1) wherecolandcond, "=")
     let (wherecols, whereops) = unzip (map parse wherecolsandops)
     let whereatom pre wherecol0 =
-          let wherecol = var (pre ++ wherecol0) in
-                  case wherecol0 of
-                      "data_id" -> Atom (_eq predicates) [var "id", wherecol]
-                      "data_resc_id" -> Atom (_data_obj predicates) [var "id", wherecol]
-                      _ ->
-                          let p = case wherecol0 of
-                                      "data_repl_num" -> _data_repl_num
-                                      "data_type_name" -> _data_type_name
-                                      "data_size" -> _data_size
-                                      -- "resc_name" -> _data_resc_name
-                                      "data_path" -> _data_path
-                                      "data_owner_name" -> _data_owner_name
-                                      "data_owner_zone" -> _data_owner_zone
-                                      "data_is_dirty" -> _data_is_dirty
-                                      "data_checksum" -> _data_checksum
-                                      "data_expiry_ts" -> _data_expiry_ts
-                                      "data_r_comment" -> _data_comment
-                                      "data_create_ts" -> _data_create_ts
-                                      "data_modify_ts" -> _data_modify_ts
-                                      "data_mode" -> _data_mode
-                                      "data_resc_hier" -> _data_resc_hier  in
-                              Atom (p predicates) [var "id", var "rid", wherecol]
-    let whereform wherecol =
-            FAtomic (whereatom "w_" wherecol)
+          let wherecol = var (pre ++ wherecol0)
+              p = case wherecol0 of
+                      "data_repl_num" -> _data_repl_num
+                      "data_type_name" -> _data_type_name
+                      "data_size" -> _data_size
+                      -- "resc_name" -> _data_resc_name
+                      "data_path" -> _data_path
+                      "data_owner_name" -> _data_owner_name
+                      "data_owner_zone" -> _data_owner_zone
+                      "data_is_dirty" -> _data_is_dirty
+                      "data_checksum" -> _data_checksum
+                      "data_expiry_ts" -> _data_expiry_ts
+                      "data_r_comment" -> _data_comment
+                      "data_create_ts" -> _data_create_ts
+                      "data_modify_ts" -> _data_modify_ts
+                      "data_mode" -> _data_mode
+                      "data_resc_hier" -> _data_resc_hier
+                      _ -> error ("unsupported " ++ wherecol0) in
+               Atom (p predicates) [var "w_data_id", var "w_resc_id", wherecol]
+    let whereform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = FAtomic (whereatom "w_" wherecol)
+                           | otherwise = FOne
     let wherelit :: String -> String -> Formula
         wherelit wherecol "!=" =
             Aggregate Not (whereform wherecol)

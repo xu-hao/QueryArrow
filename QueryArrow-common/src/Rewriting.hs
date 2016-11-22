@@ -15,7 +15,10 @@ import Algebra.SemiBoundedLattice
 
 type Pattern = Atom
 
-data InsertRewritingRule = InsertRewritingRule Pattern Formula deriving Show
+data InsertRewritingRule = InsertRewritingRule Pattern Formula
+
+instance Show InsertRewritingRule where
+  show (InsertRewritingRule pat form) = serialize pat ++ " -> " ++ serialize form
 
 class Match a b where
     match :: a -> b -> Maybe Substitution

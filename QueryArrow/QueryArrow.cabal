@@ -51,7 +51,7 @@ executable QueryArrow
                    lrucache,
                    QueryArrow-common,
                    template-haskell
-  ghc-options:     -Wall -fPIC -threaded
+  ghc-options:     -Wall -fPIC
   other-modules:
 
 library
@@ -107,7 +107,7 @@ library
                    QueryArrow-cypher,
                    QueryArrow-elastic,
                    template-haskell
-  ghc-options:     -Wall -fPIC -threaded
+  ghc-options:     -Wall -fPIC
   other-modules:
 Test-Suite Test
     type:       exitcode-stdio-1.0
@@ -136,7 +136,6 @@ Test-Suite Test
                      array,
                      temporary,
                      process,
-                     lens,
                      distributive,
                      pretty-tree,
                      conduit-combinators,

@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
 
-module Client.Template where
+module QueryArrow.C.Template where
 
-import FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..))
+import FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..))
 import DB.DB
 import Translation
 import QueryPlan
@@ -31,16 +31,16 @@ import Language.Haskell.TH hiding (Pred)
 import Language.Haskell.TH.Syntax (VarBangType)
 import Data.Char (toLower)
 import Data.List (nub)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromMaybe)
 import Foreign.C.String
 import Foreign.Ptr
 import Foreign.Storable
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign.StablePtr
-import Control.Arrow ((+++), (***))
 import Data.Int
-import System.IO
+import Control.Arrow ((***))
+import System.Log.Logger (infoM)
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -808000
@@ -51,6 +51,8 @@ eNULL = -1095000
 type Error = (Int, Text)
 
 infixl 5 @@
+infixl 5 @@+
+infixl 5 @@-
 infixl 4 .*.
 infixl 3 .+.
 
@@ -58,6 +60,16 @@ infixl 3 .+.
 label @@ args = do
     p <- ask
     return (FAtomic (Atom (label p) args))
+
+(@@+) :: (a -> Pred) -> [Expr] -> Reader a Formula
+label @@+ args = do
+    p <- ask
+    return (FInsert (Lit Pos (Atom (label p) args)))
+
+(@@-) :: (a -> Pred) -> [Expr] -> Reader a Formula
+label @@- args = do
+    p <- ask
+    return (FInsert (Lit Neg (Atom (label p) args)))
 
 cre :: (a -> Pred) -> [Expr] -> Reader a Formula
 cre label args = do
@@ -106,12 +118,13 @@ formula p r = runReader (liftIt r) p
 data Session a = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula db) => Session db (ConnectionType db) a
 
 execQuery :: (Liftable a b) => Session b -> a -> MapResultRow -> EitherT Error IO ()
-execQuery (Session db conn predicates) form params =
+execQuery (Session db conn predicates) form params = do
+  liftIO $ putStrLn ("execQuery: " ++ serialize (formula predicates form) ++ show params)
   liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn empty (formula predicates form) (fromList (Map.keys params)) (listResultStream [params])))
 
-getResults :: (Liftable a b) => Session b -> a -> MapResultRow -> EitherT Error IO [MapResultRow]
-getResults (Session db conn predicates) form params =
-  liftIO $ runResourceT (getAllResultsInStream (doQueryWithConn db conn empty (formula predicates form) (fromList (Map.keys params)) (listResultStream [params])))
+getResults :: (Liftable a b) => Session b -> [Var] -> a -> MapResultRow -> EitherT Error IO [MapResultRow]
+getResults (Session db conn predicates) vars form params =
+  liftIO $ runResourceT (getAllResultsInStream (doQueryWithConn db conn (fromList vars) (formula predicates form) (fromList (Map.keys params)) (listResultStream [params])))
 
 getResultValues :: (Liftable a b) => Session b -> [Var] -> a -> MapResultRow -> EitherT Error IO [ResultValue]
 getResultValues (Session db conn predicates) vars form params = do
@@ -119,7 +132,9 @@ getResultValues (Session db conn predicates) vars form params = do
   case count of
       row : _ -> case mapM (\var -> lookup var row) vars of
                   Just r -> return r
-                  Nothing -> throwError (eNULL, "error 1")
+                  Nothing -> do
+                    liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in map " ++ show row)
+                    throwError (eNULL, "error 1")
       _ -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
 
 getAllResultValues :: (Liftable a b) => Session b -> [Var] -> a -> MapResultRow -> EitherT Error IO [[ResultValue]]
@@ -130,17 +145,21 @@ getAllResultValues (Session db conn predicates) vars form params = do
       rows ->
           case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
               Just r -> return r
-              Nothing -> throwError (eNULL, "error 1")
+              Nothing -> do
+                liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
+                throwError (eNULL, "error 1")
 
 getSomeResultValues :: (Liftable a b) => Session b -> Int -> [Var] -> a -> MapResultRow -> EitherT Error IO [[ResultValue]]
 getSomeResultValues (Session db conn predicates) n vars form params = do
-  count <- liftIO $ runResourceT (resultStreamTake n (doQueryWithConn db conn (fromList vars) (Aggregate (Limit n) (formula predicates form)) (fromList (Map.keys params)) (listResultStream [params])))
+  count <- liftIO $ runResourceT (resultStreamTake n (doQueryWithConn db conn (fromList vars) (Aggregate (Limit (n `div` length vars)) (formula predicates form)) (fromList (Map.keys params)) (listResultStream [params])))
   case count of
       [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
       rows ->
           case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
               Just r -> return r
-              Nothing -> throwError (eNULL, "error 1")
+              Nothing -> do
+                liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
+                throwError (eNULL, "error 1")
 
 getIntResult :: (Liftable a b) => Session b ->[ Var ]-> a -> MapResultRow -> EitherT Error IO Int64
 getIntResult session vars form params = do
@@ -174,6 +193,7 @@ resultValueToInt (StringValue i) = read (Text.unpack i)
 resultValueToString :: ResultValue -> Text
 resultValueToString (IntValue i) = Text.pack (show i)
 resultValueToString (StringValue i) = i
+resultValueToString Null = Text.pack ""
 
 field :: String -> VarBangType
 field x = (mkName x, Bang NoSourceUnpackedness NoSourceStrictness, ConT (mkName "Pred"))
@@ -190,7 +210,7 @@ structval :: [(String, ObjectPath String)] -> DecsQ
 structval xs = do
       let pm = mkName "pm"
       let exprs = map (\(n, pn) -> do
-          pval <- [|fromJust (lookupObject $(pathE pn) $(varE pm)) |]
+          pval <- [|fromMaybe (error ("cannot find " ++ $(stringE n) ++ " from path " ++ $(stringE (show pn)) ++ " available predicates " ++ show $(varE pm))) (lookupObject $(pathE pn) $(varE pm)) |]
           return (mkName n, pval)) xs
       let expr = recConE (mkName "Predicates") exprs
       [d| predicates pm = $(expr)|]
@@ -222,6 +242,7 @@ arrayToBuffer buf n txt = do
 
 arrayToAllocatedBuffer :: CString -> Int -> Int -> [[Text]] -> IO ()
 arrayToAllocatedBuffer buf n1 n2 txt = do
+    infoM "Plugin" ("arrayToAllocatedBuffer: converting " ++ show txt)
     zipWithM_ (\i txt -> textToBuffer (plusPtr  buf (n1*i)) n1 txt) [0..n2-1] (take n2 (concat txt))
 
 arrayToAllocatedBuffer2 :: Ptr CString -> Ptr CInt -> Int -> [[Text]] -> IO ()
@@ -231,11 +252,14 @@ arrayToAllocatedBuffer2 buf buflens n txt = do
     mapM_ (\(txt, ptr, len) -> do
           textToBuffer ptr (fromIntegral len) txt) (zip3 (take n (concat txt)) bufs lens)
 
-arrayToAllocateBuffer :: Ptr (Ptr CString) -> [[Text]] -> IO ()
-arrayToAllocateBuffer buf txt = do
-    arr <- mallocArray (length txt)
-    arrelems <- mapM (newCString . Text.unpack) (concat txt)
-    pokeArray arr arrelems
+arrayToAllocateBuffer :: Ptr (Ptr CString) -> Ptr CInt -> [[Text]] -> IO ()
+arrayToAllocateBuffer buf lenbuf txt = do
+    infoM "Plugin" ("return all " ++ show txt)
+    let totaltxt = concat txt
+    let totallen = length totaltxt
+    poke lenbuf (fromIntegral totallen)
+    arrelems <- mapM (newCString . Text.unpack) totaltxt
+    arr <- newArray arrelems
     poke buf arr
 
 processRes :: EitherT Error IO a -> (a -> IO ()) -> IO Int
@@ -385,7 +409,7 @@ hsQueryAllForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryAllForeign name inputtypes outputtypes = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_all_" ++ name))
     let b = conT (mkName "Predicates")
-    sequence [ForeignD <$> (ExportF CCall ("hs_get_all_" ++ name) (mkName ("hs_get_all_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) ([t| Ptr (Ptr CString) -> IO Int|]))|])]
+    sequence [ForeignD <$> (ExportF CCall ("hs_get_all_" ++ name) (mkName ("hs_get_all_" ++ name)) <$> [t|StablePtr (Session $(b)) -> $(functype (length inputtypes) ([t| Ptr (Ptr CString) -> Ptr CInt -> IO Int|]))|])]
 
 hsQueryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryFunction n inputtypes outputtypes = do
@@ -492,12 +516,13 @@ hsQueryAllFunction n inputtypes outputtypes = do
     let fn = mkName ("get_all_" ++ n)
     let fn2 = mkName ("hs_get_all_" ++ n)
     let retn = mkName ("retn")
+    let retlen = mkName ("retlen")
     p <- [p|sessionptr|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
-    let ps = p : map VarP argnames ++ [VarP retn]
+    let ps = p : map VarP argnames ++ [VarP retn, VarP retlen]
     let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
-    let retp = [|arrayToAllocateBuffer $(varE retn)|]
+    let retp = [|arrayToAllocateBuffer $(varE retn) $(varE retlen)|]
     runIO $ putStrLn ("generating function " ++ show fn2)
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) session|] argnames
     let b0 = foldl (\expr (arg, name) -> [|do
@@ -519,7 +544,7 @@ createFunction n a = do
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) session ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session ($(pn) @@+ $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeign :: String -> Int -> DecQ
@@ -561,7 +586,7 @@ createFunctionArray n a = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) session ($(pn) @@ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
+    b <- [|$(func) session ($(pn) @@+ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ
@@ -597,7 +622,7 @@ deleteFunction n a = do
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) session ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) session ($(pn) @@- $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsDeleteForeign :: String -> Int -> DecQ

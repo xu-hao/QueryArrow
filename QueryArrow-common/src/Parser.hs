@@ -23,7 +23,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "integer", "text", "null"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -54,7 +54,9 @@ type FOParser = GenParser Char (PredMap, PredMap, PredMap)
 
 argp :: FOParser Expr
 argp =
-    (VarExpr <$> Var <$> identifier)
+    (reserved "null" >> return NullExpr)
+    <|> (CastExpr <$> ((reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType)) <*> argp)
+    <|> (VarExpr <$> Var <$> identifier)
     <|> (IntExpr . fromIntegral <$> integer)
     <|> (reserved "pattern" >> PatternExpr. TE.pack <$> stringp )
     <|> (StringExpr . TE.pack <$> stringp)
@@ -278,37 +280,37 @@ execAction :: Action -> FOParser ([InsertRewritingRule], [InsertRewritingRule], 
 execAction (ExportQualifiedExceptFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
     let exports' = importQualifiedExceptFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error "export1") exports')
     return mempty
 execAction (ExportQualifiedAllFrom ns) = do
     (predmap, workspace, exports) <- getState
     let exports' = importQualifiedAllFromNamespace ns predmap exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error "export2") exports')
     return mempty
 execAction (ExportQualifiedFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
     let exports' = importQualifiedFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error "export3") exports')
     return mempty
 execAction (ExportExceptFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
     let exports' = importExceptFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error "export4") exports')
     return mempty
 execAction (ExportAllFrom ns) = do
     (predmap, workspace, exports) <- getState
     let exports' = importAllFromNamespace ns predmap exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error "export5") exports')
     return mempty
 execAction (ExportFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
     let exports' = importFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error "export6") exports')
     return mempty
 execAction (Export prednames) = do
     (predmap, workspace, exports) <- getState
     let exports' = importFromNamespace mempty prednames workspace exports
-    setState (predmap, workspace, fromMaybe (error "export") exports')
+    setState (predmap, workspace, fromMaybe (error ("execAction: Export: cannot export " ++ show prednames)) exports')
     return mempty
 execAction (Rule r) = return r
 

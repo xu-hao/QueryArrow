@@ -6,7 +6,7 @@ author:         Hao Xu
 
 library
   hs-source-dirs:  src
-  exposed-modules: Client.Plugin Client.Template
+  exposed-modules: QueryArrow.C.Plugin QueryArrow.C.Template QueryArrow.C.PluginGen QueryArrow.C.GenQuery QueryArrow.C.GenQuery.Parser QueryArrow.C.GenQuery.Data
   build-depends:
                    base >= 4,
                    containers,
@@ -57,5 +57,5 @@ library
                    QueryArrow-sql,
                    QueryArrow,
                    template-haskell
-  ghc-options:     -Wall -fPIC
+  ghc-options:     -Wall -fPIC -shared -dynamic -g
   other-modules:

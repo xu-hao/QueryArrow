@@ -57,16 +57,19 @@ mmaxs = foldl1 (intersectionWith max) -- must have at least one
 type DomainSizeFunction a = Set Var -> a -> Set Var
 
 class DeterminedVars a where
+  {-|
+    This function must return all determined vars including those in the input set
+  -}
     determinedVars :: DomainSizeFunction Atom -> DomainSizeFunction a
 
 instance DeterminedVars Atom where
-    determinedVars dsp = dsp
+    determinedVars dsp vars a = dsp vars a \/ vars
 
 instance DeterminedVars Formula where
     determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
-    determinedVars dsp vars (FReturn vars2) = fromList vars2 /\ vars
-    determinedVars _  _ (FInsert _) = bottom
-    determinedVars dsp _ (FTransaction ) = bottom
+    determinedVars _ vars (FReturn vars2) = fromList vars2 /\ vars
+    determinedVars _ vars (FInsert _) = vars
+    determinedVars _ vars (FTransaction ) = vars
     determinedVars dsp vars (FSequencing form1 form2) =
         let map1 = determinedVars dsp vars form1 in
             determinedVars dsp map1 form2
@@ -78,10 +81,12 @@ instance DeterminedVars Formula where
         let map1 = determinedVars dsp vars form1
             map2 = determinedVars dsp vars form2 in
             (map1 /\ map2)
-    determinedVars _ _ (Aggregate Not _) = bottom
-    determinedVars _ _ (Aggregate Exists _) = bottom
-    determinedVars _ _ (Aggregate (Summarize funcs groupby) _) = (fromList (fst (unzip funcs)))
+    determinedVars _ vars (Aggregate Not _) = vars
+    determinedVars dsp vars (Aggregate Distinct form) = determinedVars dsp vars form
+    determinedVars _ vars (Aggregate Exists _) = vars
+    determinedVars _ vars (Aggregate (Summarize funcs groupby) _) = (fromList (fst (unzip funcs))) \/ vars
     determinedVars dsp vars (Aggregate (Limit _) form) = determinedVars dsp vars form
     determinedVars dsp vars (Aggregate (OrderByAsc _) form) = determinedVars dsp vars form
     determinedVars dsp vars (Aggregate (OrderByDesc _) form) = determinedVars dsp vars form
-    determinedVars _ _ _ = bottom
+    determinedVars _ vars FOne = vars
+    determinedVars _ vars FZero = vars

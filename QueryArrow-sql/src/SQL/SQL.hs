@@ -226,6 +226,7 @@ instance Subst SQLQualifiedCol where
 instance Subst a => Subst [a] where
     subst varmap = map (subst varmap)
 
+type SQLQuery0 = ([Var], SQLStmt) -- return vars, sql
 type SQLQuery = ([Var], SQLStmt, [Var]) -- return vars, sql, param vars
 
 instance Monoid SQL where
@@ -315,6 +316,17 @@ sqlExprFromArg arg = do
             return (Left (SQLStringConstExpr s))
         PatternExpr s ->
             return (Left (SQLPatternExpr s))
+        NullExpr ->
+            return (Left (SQLNullExpr))
+        CastExpr t v -> do
+            e2 <- sqlExprFromArg v
+            case e2 of
+              Left e ->
+                return (Left (SQLCastExpr e (case t of
+                                            TextType -> "text"
+                                            NumberType -> "integer")))
+              Right var ->
+                error ("unrepresented var in cast expr " ++ show var ++ " " ++ show (repmap ts))
 
 addVarRep :: Var -> SQLExpr -> TransMonad ()
 addVarRep var expr =
@@ -380,13 +392,14 @@ translateQueryToSQL :: [Var] -> Formula -> TransMonad SQLQuery
 translateQueryToSQL vars formula = do
     ts <- get
     let nextid1 = nextid ts
+    let repmap1 = repmap ts
     case formula of
-        FAtomic (Atom (Pred nextid2 _) [VarExpr v]) | UQPredName nextid1 == nextid2 ->
-            if v `elem` vars
+        FAtomic (Atom (Pred (PredName _ nextid2) _) [VarExpr v]) | nextid1 == nextid2 ->
+            if v `member` repmap1
                 then error (show "translateQueryToSQL: nextid " ++ show v ++ " is already bound")
-                else return ([v], SQLQueryStmt (SQLQuery {sqlSelect = [(v, SQLFuncExpr "nextval" [SQLStringConstExpr (T.pack "R_ObjectId")])], sqlFrom = [], sqlWhere = SQLTrueCond, sqlDistinct = False}), [])
+                else return ([v], SQLQueryStmt (SQLQuery {sqlSelect = [(v, SQLFuncExpr "nextval" [SQLStringConstExpr (T.pack "R_ObjectId")])], sqlFrom = [], sqlWhere = SQLTrueCond, sqlDistinct = False, sqlOrderBy = [], sqlLimit = top, sqlGroupBy = []}), [])
         _ -> do
-            (vars, sql, vars2) <- if pureF formula
+            (vars, sql) <- if pureF formula
                 then do
                     (SQLQuery sels tablelist cond1 orderby limit distinct groupby) <-  translateFormulaToSQL formula
                     ts <- get
@@ -396,9 +409,10 @@ translateQueryToSQL vars formula = do
                                             _ -> error ("translateQueryToSQL: " ++ show var ++ " doesn't correspond to a column while translating query " ++  show formula ++ " to SQL, available " ++ show (repmap ts))
                     let cols = map extractCol vars
                         sql = SQLQueryStmt (SQLQuery (zip vars cols) tablelist cond1 orderby limit distinct groupby)
-                    return (vars, sql, (params sql))
+                    return (vars, sql)
                 else translateInsertToSQL formula
-            return (vars, simplifySQLCond sql, vars2)
+            let sql2 = simplifySQLCond sql
+            return (vars, sql2, params sql2)
 
 simplifySQLCond :: SQLStmt -> SQLStmt
 simplifySQLCond (SQLQueryStmt (SQLQuery s f cond orderby limit distinct groupby)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond) orderby limit distinct groupby)
@@ -593,7 +607,7 @@ translateAtomToSQL thesign (Atom name args) = do
 
 
 -- formula must be pure
-translateInsertToSQL :: Formula -> TransMonad SQLQuery
+translateInsertToSQL :: Formula -> TransMonad SQLQuery0
 translateInsertToSQL form = do
     let conjs = getFsequencings form
     let f p [] = (p,[])
@@ -605,7 +619,7 @@ translateInsertToSQL form = do
     let form' = fsequencing p
     translateInsertToSQL' lits form'
 
-translateInsertToSQL' :: [Lit] -> Formula -> TransMonad SQLQuery
+translateInsertToSQL' :: [Lit] -> Formula -> TransMonad SQLQuery0
 translateInsertToSQL' lits conj = do
     (SQLQuery _ tablelist cond orderby limit distinct groupby) <- translateFormulaToSQL conj
     if distinct
@@ -620,8 +634,8 @@ translateInsertToSQL' lits conj = do
                         [insertpart] -> do
                             ts <- get
                             let sql = toInsert tablelist cond insertpart
-                            return ([], sql, params sql)
-                        _ -> error "translateInsertToSQL: more than one actions"
+                            return ([], sql)
+                        _ -> error ("translateInsertToSQL: more than one actions " ++ show insertparts ++ show lits)
 
 -- each SQLStmt must be an Insert statement
 sortParts :: [SQLStmt] -> [SQLStmt]
@@ -630,8 +644,14 @@ sortParts (p : ps) = b++[a] where
     (a, b) = foldl (\(active, done) part ->
         case (active, part) of
             (SQLInsertStmt tname colexprs tablelist cond, SQLInsertStmt tname2 colexprs2 tablelist2 cond2)
-                | tname == tname2 && compatible colexprs colexprs2 ->
-                    (SQLInsertStmt tname ( colexprs `union` colexprs2) (tablelist ++ tablelist2) (cond .&&. cond2), done)
+                | tname == tname2 && compatible colexprs colexprs2 && cond == cond2 ->
+                    (SQLInsertStmt tname ( colexprs `union` colexprs2) (tablelist ++ tablelist2) cond, done)
+            (SQLUpdateStmt tnamevar colexprs cond, SQLUpdateStmt tnamevar2 colexprs2 cond2)
+                | tnamevar == tnamevar2 && compatible colexprs colexprs2 && cond == cond2 ->
+                    (SQLUpdateStmt tnamevar ( colexprs `union` colexprs2) cond, done)
+            (SQLDeleteStmt tnamevar cond, SQLDeleteStmt tnamevar2 cond2)
+                | tnamevar == tnamevar2 && cond == cond2 ->
+                    (SQLDeleteStmt tnamevar cond, done)
             _ -> (part, active : done)) (p,[]) ps where
             compatible colexpr = all (\(col, expr) -> all (\(col2, expr2) ->col2 /= col || expr2 == expr) colexpr)
 
@@ -790,11 +810,15 @@ data KeyState = KeyState {
 }
 
 pureOrExecF :: SQLTrans -> Set Var -> Formula -> StateT KeyState Maybe ()
-pureOrExecF  (SQLTrans  builtin predtablemap _) _ (FAtomic (Atom n args)) = do
+pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid) _ (FAtomic (Atom n@(Pred (PredName _ pn) _) args)) = do
     ks <- get
-    if isJust (updateKey ks)
+    if Just pn == nextid
+      then lift Nothing
+      else if isJust (updateKey ks)
         then lift Nothing
-        else case lookup n predtablemap of
+        else if n `member` builtin
+          then return ()
+          else case lookup n predtablemap of
                 Nothing -> do
                     trace ("pureOrExecF': cannot find table for predicate " ++ show n ++ " ignored") $ return ()
                 Just (OneTable tablename _, _) -> do
@@ -896,7 +920,7 @@ pureOrExecF trans _ (FReturn _) = lift Nothing
 
 
 sequenceF :: SQLTrans -> Formula -> StateT KeyState Maybe ()
-sequenceF (SQLTrans _ _ (Just nextid1)) (FAtomic (Atom (Pred nextid2 _) [_])) | UQPredName nextid1 == nextid2 =
+sequenceF (SQLTrans _ _ (Just nextid1)) (FAtomic (Atom (Pred (PredName _ nextid2) _) [_])) | nextid1 == nextid2 =
                         return ()
 sequenceF _ _ = lift Nothing
 
@@ -927,27 +951,37 @@ instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], String, [Var])
     type GDBFormulaType SQLTrans = Formula
     gTranslateQuery trans ret query env =
-        let (SQLTrans  builtin predtablemap _) = trans
+        let (SQLTrans  builtin predtablemap nextid) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty})) in
+            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = fromMaybe "<no nextid predicate defined in this plugin>" nextid})) in
             return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, serialize sqlquery, params sql)
 
     gSupported trans form vars =
-        let initstate = KeyState [] Nothing [] False [] False (not (null vars)) in
+        let
+            initstate = KeyState [] Nothing [] False [] False (not (null vars))
+        in
             layeredF form && (isJust (evalStateT (limitF  trans vars form) initstate )
-                                                            || isJust (evalStateT (sequenceF trans form) initstate))
+                || isJust (evalStateT (sequenceF trans form) initstate))
 
-    gDeterminateVars trans varDomainSize (Atom name args) =
-        if isBuiltIn  -- assume that builtins only restrict domain size of properties
-            then Set.fromList (concatMap (\expr -> case expr of
-                                  VarExpr v -> [v]
-                                  _ -> []) (propComponents name args)) \/ varDomainSize
-            else (if name `member` predtablemap
-                    then Set.unions (map (\arg -> case arg of
-                            (VarExpr v) -> Set.singleton v
-                            _ -> bottom) args) \/ varDomainSize
-                    else varDomainSize) where
-                isBuiltIn = name `member` builtin
-                (SQLTrans (BuiltIn builtin) predtablemap _) = trans
+    gDeterminateVars trans@(SQLTrans _ _ nextid) varDomainSize a@(Atom name@(Pred (PredName _ pn) _) args) =
+        if (case nextid of
+              Nothing -> False
+              Just nextid -> pn == nextid)
+          then
+            case args of
+              [VarExpr v] -> Set.singleton v
+              _ -> error ("malformatted nextid atom " ++ serialize a)
+          else
+            if isBuiltIn  -- assume that builtins only restrict domain size of properties
+                then Set.fromList (concatMap (\expr -> case expr of
+                                      VarExpr v -> [v]
+                                      _ -> []) (propComponents name args)) \/ varDomainSize
+                else (if name `member` predtablemap
+                        then Set.unions (map (\arg -> case arg of
+                                (VarExpr v) -> Set.singleton v
+                                _ -> bottom) args) \/ varDomainSize
+                        else varDomainSize) where
+                    isBuiltIn = name `member` builtin
+                    (SQLTrans (BuiltIn builtin) predtablemap _) = trans

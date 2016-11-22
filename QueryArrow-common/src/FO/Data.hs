@@ -42,8 +42,11 @@ data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Or
 -- variables
 newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
+-- types
+data CastType = TextType | NumberType deriving (Eq, Ord, Show, Read)
+
 -- expression
-data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text deriving (Eq, Ord, Show, Read)
+data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text | NullExpr | CastExpr CastType Expr deriving (Eq, Ord, Show, Read)
 
 -- atoms
 data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } deriving (Eq, Ord, Show, Read)
@@ -238,7 +241,7 @@ pattern QPredName k ks n = ObjectPath (NamespacePath (k : ks)) n
 pattern UQPredName n = ObjectPath (NamespacePath []) n
 
 predNameToString :: PredName -> String
-predNameToString (PredName mns n)= intercalate "." mns ++ n
+predNameToString (PredName mns n)= intercalate "." (mns ++ [n])
 
 predNameToString2 :: PredName -> String
 predNameToString2 (PredName _ n) = n
@@ -299,6 +302,12 @@ instance Serialize Expr where
     serialize (IntExpr i) = show i
     serialize (StringExpr s) = show s
     serialize (PatternExpr p) = show p
+    serialize (NullExpr) = "null"
+    serialize (CastExpr t v) = serialize v ++ " " ++ serialize t
+
+instance Serialize CastType where
+    serialize (TextType) = "text"
+    serialize (NumberType) = "integer"
 
 instance Serialize Var where
     serialize (Var s) = s
@@ -312,6 +321,9 @@ instance Serialize Summary where
     serialize (Max v) = "max " ++ serialize v
     serialize (Min v) = "min " ++ serialize v
     serialize (Count) = "count"
+    serialize (Sum v) = "sum " ++ serialize v
+    serialize (Average v) = "average " ++ serialize v
+    serialize (CountDistinct v) = "count distinct(" ++ serialize v ++ ")"
 
 instance Serialize Formula where
     serialize (FReturn vars) = "(return " ++ unwords (map serialize vars) ++ ")"
@@ -325,6 +337,7 @@ instance Serialize Formula where
     serialize (FZero) = "𝟎"
     serialize (Aggregate Exists form) = "∃" ++ serialize form
     serialize (Aggregate Not form) = "¬" ++ serialize form
+    serialize (Aggregate Distinct form) = "(distinct " ++ serialize form ++ ")"
     serialize (Aggregate (Summarize funcs groupby) form) = "(let " ++ unwords (map (\(var1, func1) -> serialize var1 ++ " = " ++ serialize func1) funcs) ++ " " ++ (if null groupby then "" else "group by " ++ unwords (map serialize groupby) ++ " ") ++ serialize form ++ ")"
     serialize (Aggregate (Limit n) form) = "(limit " ++ show n ++ " " ++ serialize form ++ ")"
     serialize (Aggregate (OrderByAsc var1) form) = "(order by " ++ serialize var1 ++ " asc " ++ serialize form ++ ")"
@@ -408,6 +421,7 @@ class Subst a where
 
 instance Subst Expr where
     subst s ve@(VarExpr v) = fromMaybe ve (lookup v s)
+    subst s (CastExpr t e) = CastExpr t (subst s e)
     subst _ e = e
 
 instance Subst Substitution where
@@ -628,7 +642,7 @@ checkLit :: Lit -> Except String ()
 checkLit (Lit _ a) = checkAtom a
 
 checkAtom :: Atom -> Except String ()
-checkAtom (Atom (Pred _ (PredType _ ptypes)) args) =
+checkAtom a@(Atom (Pred _ (PredType _ ptypes)) args) =
     if length ptypes /= length args
-        then throwError "number of arguments doesn't match predicate"
+        then throwError ("number of arguments doesn't match predicate" ++ serialize a)
         else return ()

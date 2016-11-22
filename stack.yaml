@@ -44,10 +44,6 @@ packages:
     - QueryArrow-cypher/
     - QueryArrow-sql/
     - QueryArrow-common/
-    - location:
-        git: https://github.com/xu-hao/hdbc-postgresql.git
-        commit : 523759ee1742a54005888415e5ce5f4c729f9d52
-      extra-dep: true
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.
@@ -56,11 +52,12 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-    - pretty-tree-0.1.0.0
-    - semibounded-lattices-0.1.0.1
-    - namespace-0.1.2.2
-    - json-rpc-0.7.1.1
-    - HDBC-sqlite3-2.3.3.1
+  - HDBC-postgresql-2.3.2.4
+  - HDBC-sqlite3-2.3.3.1
+  - json-rpc-0.7.1.1
+  - namespace-0.1.2.2
+  - pretty-tree-0.1.0.0
+  - semibounded-lattices-0.1.0.1
 
 # Override default flag values for local packages and extra-deps
 flags: {}
@@ -85,3 +82,10 @@ extra-package-dbs: []
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
+
+ghc-options:
+  "*": -fPIC
+
+rebuild-ghc-options: true
+
+apply-ghc-options: everything

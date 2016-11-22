@@ -16,6 +16,7 @@ import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert, (!), lookup, Map)
 import qualified Data.Map.Strict as M
 import System.Log.Logger
+import Data.Text (pack)
 import Data.Convertible
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
@@ -33,6 +34,7 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         SqlInteger _ -> IntValue (fromSql sqlvalue)
                         SqlString _ -> StringValue (fromSql sqlvalue)
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
+                        SqlNull -> Null
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
 instance IPSDBStatement HDBCStatement where
@@ -59,7 +61,9 @@ instance IPSDBStatement HDBCStatement where
 
 
 prepareHDBCStatement :: (IConnection conn) => conn -> (Bool, [Var], String, [Var]) -> IO HDBCStatement
-prepareHDBCStatement conn (ret, retvars, query, params) = HDBCStatement ret retvars <$> prepare conn query <*> pure params
+prepareHDBCStatement conn (ret, retvars, query, params) = do
+  putStrLn ("prepareHDBCStatement: " ++ query)
+  HDBCStatement ret retvars <$> prepare conn query <*> pure params
 
 data HDBCDBConnection where
     HDBCDBConnection :: forall conn. (IConnection conn) => conn -> HDBCDBConnection

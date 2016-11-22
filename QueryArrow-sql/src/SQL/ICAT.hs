@@ -15,7 +15,11 @@ import Text.Read
 
 makeICATSQLDBAdapter :: String -> [String] -> Maybe String -> a -> IO (GenericDatabase  SQLTrans a)
 makeICATSQLDBAdapter ns [predsPath, mappingsPath] nextid conninfo = do
-    preds <- loadPreds predsPath
+    preds0 <- loadPreds predsPath
+    let preds =
+          case nextid of
+            Nothing -> preds0
+            Just nextid -> Pred (UQPredName nextid) (PredType ObjectPred [Key "Text"]) : preds0
     mappings <- loadMappings mappingsPath
     return (GenericDatabase (sqlStandardTrans ns preds mappings nextid) conninfo ns (qStandardPreds ns preds ++ qStandardBuiltInPreds ns))
 
@@ -80,19 +84,19 @@ sqlStandardTrans ns preds mappings nextid =
                         case thesign of
                             Pos -> return sql
                             Neg -> return (snot sql))),
-                (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "+" a b)]
+                (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "+" (SQLCastExpr a "integer") (SQLCastExpr b "integer"))]
                     )),
-                (lookupPred "concat", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLFuncExpr "concat" [a, b])]
+                (lookupPred "concat", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLFuncExpr "concat" [SQLCastExpr a "text", SQLCastExpr b "text"])]
                     )),
-                (lookupPred "substr", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "substr" [a, b, c])]
+                (lookupPred "substr", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "substr" [SQLCastExpr a "text", SQLCastExpr b "text", SQLCastExpr c "text"])]
                     )),
-                (lookupPred "replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "replace" [a, b, c])]
+                (lookupPred "replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "replace" [SQLCastExpr a "text", SQLCastExpr b "text", SQLCastExpr c "text"])]
                     )),
-                (lookupPred "regex_replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "regexp_replace" [a, b, c])]
+                (lookupPred "regex_replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "regexp_replace" [SQLCastExpr a "text", SQLCastExpr b "text", SQLCastExpr c "text"])]
                     )),
                 (lookupPred "cast_int", repBuildIn (\ [Left a, Right v] -> [(v, SQLCastExpr a "integer")]
                     )),
-                (lookupPred "strlen", repBuildIn (\ [Left a, Right v] -> [(v, SQLFuncExpr "length" [a])]
+                (lookupPred "strlen", repBuildIn (\ [Left a, Right v] -> [(v, SQLFuncExpr "length" [SQLCastExpr a "text"])]
                     ))
             ]))
             (sqlMapping ns preds mappings) nextid)
