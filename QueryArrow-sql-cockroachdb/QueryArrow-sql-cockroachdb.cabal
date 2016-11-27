@@ -1,0 +1,43 @@
+name:           QueryArrow-sql-cockroachdb
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   SQL.HDBC.CockroachDB
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   HDBC-postgresql,
+                   HDBC,
+                   aeson,
+                   bytestring,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   distributive,
+                   conduit-combinators,
+                   conduit,
+                   resourcet,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   monad-control,
+                   conduit-extra,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   QueryArrow-common,
+                   QueryArrow-sql-postgresql
+  ghc-options:     -Wall -fPIC
+  other-modules:

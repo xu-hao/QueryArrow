@@ -52,7 +52,7 @@ library
                    fast-logger,
                    constraints,
                    QueryArrow-common,
-                   QueryArrow-sql,
+                   QueryArrow-sql-common,
                    template-haskell
   ghc-options:     -Wall -fPIC
   other-modules:

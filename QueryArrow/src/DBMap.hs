@@ -14,7 +14,6 @@ import Cache
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (foldrWithKey, fromList, Map, lookup)
-import Data.Heterogeneous.List
 import Control.Monad.Except
 import Data.Namespace.Namespace
 import Data.Monoid
@@ -27,6 +26,7 @@ import qualified Cypher.Neo4j as Neo4j
 import qualified InMemory as InMemory
 import qualified ElasticSearch.ElasticSearch as ElasticSearch
 import qualified SQL.HDBC.Sqlite3 as Sqlite3
+import Data.Heterogeneous.List
 
 type DBMap = Map String (ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula))
 

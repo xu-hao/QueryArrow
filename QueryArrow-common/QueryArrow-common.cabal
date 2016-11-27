@@ -20,16 +20,12 @@ library
                    Sum
                    Translation
                    Cache
-                   InMemory
                    Rewriting
                    Logging
                    Parser
                    Config
                    ListUtils
                    Utils
-                   Data.Heterogeneous.List
-                   Serialization
-                   Control.Monad.Logger.HSLogger
   build-depends:
                    base >= 4,
                    containers,
@@ -38,12 +34,8 @@ library
                    semigroups,
                    parsec,
                    semigroupoids,
-                   HDBC-sqlite3,
-                   HDBC-postgresql,
-                   HDBC,
                    aeson,
                    bytestring,
-                   haskell-neo4j-client,
                    unordered-containers,
                    convertible,
                    text >= 1.2.1.1,
@@ -63,17 +55,16 @@ library
                    exceptions,
                    utf8-string,
                    regex-tdfa,
-                   monad-control,
                    lifted-async,
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
-                   network,
                    conduit-extra,
                    monad-logger,
                    fast-logger,
                    constraints,
                    lrucache,
-                   template-haskell
+                   heterogeneous-list,
+                   log-adapter
   ghc-options:     -Wall -fPIC
   other-modules:

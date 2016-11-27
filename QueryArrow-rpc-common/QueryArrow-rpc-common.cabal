@@ -1,0 +1,16 @@
+name:           QueryArrow-rpc-common
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   Serialization
+  build-depends:
+                   base >= 4,
+                   aeson,
+                   containers
+  ghc-options:     -Wall -fPIC
+  other-modules:

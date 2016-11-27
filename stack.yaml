@@ -37,13 +37,26 @@ resolver: lts-7.9
 # will not be run. This is useful for tweaking upstream packages.
 packages:
     - QueryArrow/
-    - QueryArrow-http/
-    - QueryArrow-tcp/
-    - QueryArrow-c/
+    - QueryArrow-rpc-common
+    - QueryArrow-rpc-http/
+    - QueryArrow-rpc-tcp/
+    - QueryArrow-ffi-c/
+    - QueryArrow-ffi-c-local
+    - QueryArrow-ffi-c-genquery
     - QueryArrow-elastic/
     - QueryArrow-cypher/
-    - QueryArrow-sql/
+    - QueryArrow-sql-common/
+    - QueryArrow-sql-cockroachdb/
+    - QueryArrow-sql-postgresql/
+    - QueryArrow-sql-sqlite3/
     - QueryArrow-common/
+    - QueryArrow-inmemory/
+    - QueryArrow-ffi-service
+    - QueryArrow-ffi-service-local
+    - QueryArrow-ffi-genquery
+    - QueryArrow-cli
+    - heterogeneous-list
+    - log-adapter
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.

@@ -396,7 +396,7 @@ main = hspec $ do
         it "test translate sql insert 12" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.substr(y, 0, 1, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = substr(data_name,0,1) WHERE resc_id = 'bar'"
         it "test translate sql insert 13" $ do
-            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.cast_int(y, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = cast(data_name as integer) WHERE resc_id = 'bar'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.eq(integer y, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = cast(data_name as integer) WHERE resc_id = 'bar'"
         it "test translate sql insert 14" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.strlen(y, l0) cat.add(l0,-1,l) cat.substr(y, l, l0, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = substr(data_name,(length(data_name)+-1),length(data_name)) WHERE resc_id = 'bar'"
         it "test translate sql insert 15" $ do

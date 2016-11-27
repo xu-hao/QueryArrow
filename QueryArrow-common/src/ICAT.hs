@@ -16,8 +16,7 @@ standardBuiltInPreds = [
         Pred (UQPredName "substr") (PredType ObjectPred [Key "String", Key "Int", Key "Int", Property "String"]),
         Pred (UQPredName "regex_replace") (PredType ObjectPred [Key "String", Key "String", Key "String", Property "String"]),
         Pred (UQPredName "replace") (PredType ObjectPred [Key "String", Key "String", Key "String", Property "String"]),
-        Pred (UQPredName "strlen") (PredType ObjectPred [Key "String", Property "Int"]),
-        Pred (UQPredName "cast_int") (PredType ObjectPred [Key "Any", Property "Int"])
+        Pred (UQPredName "strlen") (PredType ObjectPred [Key "String", Property "Int"])
         ]
 
 

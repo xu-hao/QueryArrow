@@ -1,0 +1,50 @@
+name:           QueryArrow-ffi-c-genquery
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules: QueryArrow.FFI.C.GenQuery
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   aeson,
+                   bytestring,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   array,
+                   temporary,
+                   process,
+                   distributive,
+                   pretty-tree,
+                   resourcet,
+                   async,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   regex-tdfa,
+                   monad-control,
+                   lifted-async,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   either,
+                   QueryArrow-common,
+                   QueryArrow-ffi-service,
+                   QueryArrow-ffi-genquery,
+                   template-haskell
+  ghc-options:     -Wall -fPIC -shared -dynamic
+  other-modules:

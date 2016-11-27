@@ -28,7 +28,7 @@ intResultStream i = return (insert (Var "i") (IntValue i) empty)
 -- map from predicate name to database names
 type PredDBMap = Map Pred [String]
 
-constructDBPredMap :: IDatabase db => db -> PredMap
+constructDBPredMap :: IDatabase0 db => db -> PredMap
 constructDBPredMap db = foldr addPredToMap mempty preds where
         addPredToMap thepred map1 =
             insertObject (predName thepred) thepred map1

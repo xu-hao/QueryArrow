@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module SchemaParserMain where
+module Main where
 
 import qualified Text.Parsec.Token as T
 import Data.List

@@ -1,0 +1,36 @@
+name:           QueryArrow-ffi-c-local
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules: QueryArrow.FFI.C.Local
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   semigroupoids,
+                   bytestring,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   process,
+                   distributive,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   monad-control,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   either,
+                   QueryArrow-ffi-service,
+                   QueryArrow-ffi-service-local
+  ghc-options:     -Wall -fPIC -shared -dynamic
+  other-modules:

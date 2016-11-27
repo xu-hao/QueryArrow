@@ -1,0 +1,21 @@
+name:           QueryArrow-cli
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+executable QueryArrow
+  hs-source-dirs:  src
+  main-is:         Main.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   parsec,
+                   text,
+                   resourcet,
+                   hslogger,
+                   QueryArrow-common,
+                   QueryArrow
+  ghc-options:     -Wall
+  other-modules:

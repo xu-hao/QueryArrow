@@ -1,0 +1,23 @@
+name:           heterogeneous-list
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   Data.Heterogeneous.List
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   constraints,
+                   semigroups,
+                   semigroupoids,
+                   bytestring,
+                   unordered-containers,
+                   distributive
+  ghc-options:     -Wall -fPIC
+  other-modules:
