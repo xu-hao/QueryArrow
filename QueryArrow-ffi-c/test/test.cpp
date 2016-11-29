@@ -5,7 +5,7 @@
 #include "GenQuery_stub.h"
 #include "Local_stub.h"
 
-// stack ghc -- --make -I.stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/Client/ test/test.cpp -package QueryArrow-c -no-hs-main
+// stack ghc -- --make -I../QueryArrow-ffi-c/.stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/QueryArrow/FFI/C/ -I../QueryArrow-ffi-c-local/.stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/QueryArrow/FFI/C/ -I../QueryArrow-ffi-c-genquery/.stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/QueryArrow/FFI/C/ test/test.cpp -package QueryArrow-ffi-c -package QueryArrow-ffi-c-local -package QueryArrow-ffi-c-genquery -no-hs-main
 
 void runGenQuery(void *svc, void *ptr, const char *qu) {
   char **out = NULL;
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
   hs_init(&argc, &argv);
   hs_setup();
   printf("connecting db\n");
-  char path[] = "../QueryArrow-service/test/tdb-plugin.json";
+  char path[] = "../QueryArrow-ffi-service/test/tdb-plugin.json";
   void *svc = NULL;
   hs_local(&svc);
   hs_connect(svc, (void *) path, &ptr);

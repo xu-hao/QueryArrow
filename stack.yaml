@@ -42,6 +42,8 @@ packages:
     - QueryArrow-rpc-tcp/
     - QueryArrow-ffi-c/
     - QueryArrow-ffi-c-local
+    - QueryArrow-ffi-c-tcp
+    - QueryArrow-ffi-c-unixdomainsocket
     - QueryArrow-ffi-c-genquery
     - QueryArrow-elastic/
     - QueryArrow-cypher/
@@ -53,6 +55,8 @@ packages:
     - QueryArrow-inmemory/
     - QueryArrow-ffi-service
     - QueryArrow-ffi-service-local
+    - QueryArrow-ffi-service-tcp
+    - QueryArrow-ffi-service-unixdomainsocket
     - QueryArrow-ffi-genquery
     - QueryArrow-cli
     - heterogeneous-list

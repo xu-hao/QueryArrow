@@ -31,57 +31,92 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import DB.ResultStream
 import DB.DB hiding (Null)
 import DBMap
-import Parser
--- import Plugins
-import FO.Data
 import Config
-import Utils
 
-import Prelude hiding (lookup)
-import Data.Map.Strict (fromList, singleton, keys, toList, Map)
-import Text.Parsec (runParser)
-import Control.Monad.IO.Class (liftIO)
+import Prelude hiding (lookup, length)
 import Control.Monad.Trans.Resource
 import System.Environment
 import Data.Time
-import Control.Exception
 import Control.Monad.Except
 import Serialization
-import Data.Aeson
-import Data.Aeson.Types
-import qualified Data.Text as T
 import System.Log.Logger
 import Logging
--- import Data.Serialize
-import qualified Data.Set as Set
-import Data.Conduit.Network
-import Network.JsonRpc
-import Data.String
+import Network
 import Control.Monad.Logger.HSLogger ()
+import Control.Concurrent
+import QueryArrow.RPC.Message
+import Control.Monad.Trans.Either
+import QueryArrow.RPC.DB
+import System.IO (Handle, IOMode(..))
+import FO.Data
+import qualified Network.Socket as NS
+import Control.Exception (bracket)
+import System.Directory (removeFile)
 
 main::IO()
 main = do
-    args2 <- getArgs
-    mainArgs args2
+    args <- getArgs
+    mainArgs args
 
 mainArgs :: [String] -> IO ()
-mainArgs args2 = do
+mainArgs args = do
     setup
-    if null args2
-        then
-            putStrLn "usage: \n server mode <command> <config file>\n cli mode <command> <config file> <query> <headers>"
+    case args of
+      [arg]-> do
+          ps <- getConfig arg
+          runtcpmulti ps
+      _ ->
+          putStrLn "usage: \n <command> <config file>"
 
-        else do
-            ps <- getConfig (head args2)
-            if length args2 == 1
-                then
-                    runtcpmulti ps
-                else
-                    run2 (words (args2 !! 2)) (args2 !! 1) ps
 
+
+worker :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
+worker handle tdb conn = do
+                t0 <- getCurrentTime
+                req <- receiveMsg handle
+                infoM "RPC_TCP_SERVER" ("received message " ++ show req)
+                (t2, t3, b) <- case req of
+                    Nothing -> do
+                        sendMsg handle (errorSet "cannot parser request")
+                        t2 <- getCurrentTime
+                        t3 <- getCurrentTime
+                        return (t2, t3, False)
+                    Just qs -> do
+                        let qu = qsquery qs
+                            hdr = qsheaders qs
+                            par = qsparams qs
+                        case qu of
+                            Quit -> do -- disconnect when qu field is null
+                                t2 <- getCurrentTime
+                                t3 <- getCurrentTime
+                                return (t2, t3, True)
+                            Static qu -> do
+                                t2 <- getCurrentTime
+                                ret <- runEitherT (run3 hdr qu par tdb conn)
+                                t3 <- getCurrentTime
+                                case ret of
+                                    Left e ->
+                                        sendMsg handle (errorSet e)
+                                    Right rep ->
+                                        sendMsg handle (resultSet rep)
+                                return (t2, t3, False)
+                            Dynamic qu -> do
+                                t2 <- getCurrentTime
+                                ret <- runEitherT (run hdr qu par tdb conn)
+                                t3 <- getCurrentTime
+                                case ret of
+                                    Left e ->
+                                        sendMsg handle (errorSet e)
+                                    Right rep ->
+                                        sendMsg handle (resultSet rep)
+                                return (t2, t3, False)
+                t1 <- getCurrentTime
+                infoM "RPC_TCP_SERVER" (show (diffUTCTime t1 t0) ++ "\npre: " ++ show (diffUTCTime t2 t0) ++ "\nquery: " ++ show (diffUTCTime t3 t2) ++ "\npost: " ++ show (diffUTCTime t1 t3))
+                if b
+                    then return ()
+                    else worker handle tdb conn
 
 runtcpmulti :: TranslationInfo -> IO ()
 runtcpmulti ps = do
@@ -91,121 +126,38 @@ runtcpmulti ps = do
     mapM_ (\protocol ->
         case protocol of
             "tcp" -> do
-                infoM "QA" ("listening at " ++ addr ++ ":" ++ show port)
-                jsonRpcTcpServer
-                    V2
-                    True
-                    (serverSettings port (fromString addr))
-                    (do
-                        liftIO $ infoM "QA" ("client connected")
-                        (AbstractDatabase tdb) <- liftIO $ transDB "tdb" ps
-                        let worker conn = do
-                                t0 <- liftIO $ getCurrentTime
-                                req <- receiveRequest
-                                case req of
-                                    Nothing -> return ()
-                                    Just req -> do
-                                        liftIO $ infoM "QA" ("received message " ++ show req)
-                                        let qus = getReqParams req
-                                        let qs = parse parseJSON qus
-                                        case qs of
-                                            Error errmsg ->
-                                                sendResponse (ResponseError
-                                                                  V2
-                                                                  (ErrorObj
-                                                                      errmsg
-                                                                      (-1)
-                                                                      Null)
-                                                                  (getReqId req))
-                                            Success qs -> do
-                                                let user = qsuser qs
-                                                    zone = qszone qs
-                                                    qu = qsquery qs
-                                                    hdr = qsheaders qs
-                                                ret <- liftIO $ try (liftIO $ run3 hdr qu tdb conn user zone)
-                                                case ret of
-                                                    Left e ->
-                                                        sendResponse (ResponseError
-                                                                          V2
-                                                                          (ErrorObj
-                                                                              (show (e :: SomeException))
-                                                                              (-1)
-                                                                              Null)
-                                                                          (getReqId req))
-                                                    Right (hdr, rep) ->
-                                                        sendResponse (Response
-                                                                          V2
-                                                                          (toJSON (resultSet hdr rep))
-                                                                          (getReqId req))
-                                        t1 <- liftIO $ getCurrentTime
-                                        liftIO $ infoM "QA" (show (diffUTCTime t1 t0))
-                                        worker conn
-                        runResourceT $ do
-                            (_, conn) <- allocate (dbOpen tdb) dbClose
-                            lift $ worker conn
-                        liftIO $ infoM "QA" ("client disconnected")
-                        )
+                infoM "RPC_TCP_SERVER" ("listening at " ++ addr ++ ":" ++ show port)
+                (AbstractDatabase tdb) <- transDB "tdb" ps
+                let sockHandler sock = forever $ do
+                        (handle, clientAddr, clientPort) <- accept sock
+                        infoM "RPC_TCP_SERVER" ("client connected from " ++ addr ++ " " ++ show port)
+                        forkIO $ runResourceT $ do
+                            (_, conn) <- allocate (dbOpen tdb) (\db -> do
+                                        dbClose db
+                                        infoM "RPC_TCP_SERVER" ("client disconnected"))
+                            lift $ worker handle tdb conn
+                sock <- listenOn (PortNumber (fromIntegral port))
+                sockHandler sock
+            "unix domain socket" -> do
+                infoM "RPC_TCP_SERVER" ("listening at " ++ addr)
+                (AbstractDatabase tdb) <- transDB "tdb" ps
+                let sockHandler sock = forever $ do
+                        (clientsock, addr) <- NS.accept sock
+                        infoM "RPC_TCP_SERVER" ("client connected from " ++ show addr)
+                        handle <- NS.socketToHandle clientsock ReadWriteMode
+                        forkIO $ runResourceT $ do
+                            (_, conn) <- allocate (dbOpen tdb) (\db -> do
+                                        dbClose db
+                                        infoM "RPC_TCP_SERVER" ("client disconnected"))
+                            lift $ worker handle tdb conn
+                bracket (do
+                  sock <- NS.socket NS.AF_UNIX NS.Stream NS.defaultProtocol
+                  NS.bind sock (NS.SockAddrUnix addr)
+                  NS.listen sock NS.maxListenQueue
+                  return sock) (\sock -> do
+                      NS.shutdown sock NS.ShutdownBoth
+                      NS.close sock
+                      removeFile addr
+                      infoM "RPC_TCP_SERVER" "sockect shutdown and closed") sockHandler
             _ ->
-                errorM "QA" ("unsupported protocol " ++ protocol)) protocols
-
-
-
-run2 :: [String] -> String -> TranslationInfo -> IO ()
-run2 hdr query ps = do
-    AbstractDatabase tdb <- transDB "tdb" ps
-    conn <- dbOpen tdb
-    (hdr, pp) <- run3 hdr query tdb conn "rods" "tempZone"
-    putStr (pprint hdr pp)
-    dbClose conn
-
-
-run3 :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => [String] -> String -> db -> ConnectionType db -> String -> String -> IO ([String], [Map String String])
-run3 hdr query tdb conn user zone = do
-    let predmap = constructDBPredMap tdb
-    let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
-
-
-    r <- runResourceT $ dbCatch $ case runParser progp (mempty, predmap, mempty) "" query of
-                            Left err -> error (show err)
-                            Right (commands, _) ->
-                                concat <$> mapM (\command -> case command of
-                                    Begin -> do
-                                        liftIO $ dbBegin conn
-                                        return []
-                                    Prepare -> do
-                                        b <- liftIO $ dbPrepare conn
-                                        if b
-                                            then return []
-                                            else do
-                                                liftIO $ errorM "QA" "prepare failed, cannot commit"
-                                                error "prepare failed, cannot commit"
-                                    Commit -> do
-                                        b <- liftIO $ dbCommit conn
-                                        if b
-                                            then return []
-                                            else do
-                                                liftIO $ errorM "QA" "commit failed"
-                                                error "commit failed"
-                                    Rollback -> do
-                                        liftIO $ dbRollback conn
-                                        return []
-                                    Execute qu ->
-                                        case runExcept (checkQuery qu) of
-                                              Right _ -> getAllResultsInStream ( doQueryWithConn tdb conn (Set.fromList (map Var hdr)) qu (Set.fromList (keys params)) (pure params))
-                                              Left e -> error e) commands
-                            -- Right (Right Commit) -> do
-                            --     b <- liftIO $ dbPrepare tdb
-                            --     if b
-                            --         then do
-                            --             b <- liftIO $ dbCommit tdb
-                            --             if b
-                            --                 then return [mempty]
-                            --                 else do
-                            --                     liftIO $ dbRollback tdb
-                            --                     liftIO $ errorM "QA" "prepare succeeded but cannot commit"
-                            --         else do
-                            --             liftIO $ dbRollback tdb
-                            --             )
-    return (case r of
-        Right rows ->  (hdr, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
-        Left e ->  (["error"], [singleton "error" (show e)]))
+                errorM "RPC_TCP_SERVER" ("unsupported protocol " ++ protocol)) protocols

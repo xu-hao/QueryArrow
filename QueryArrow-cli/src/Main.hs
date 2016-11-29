@@ -41,7 +41,8 @@ import Config
 import Utils
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (fromList, singleton, keys, toList, Map)
+import Data.Set (fromList)
+import Data.Map.Strict (singleton, keys, toList, Map)
 import Text.Parsec (runParser)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
@@ -50,8 +51,10 @@ import Control.Monad.Except
 import qualified Data.Text as T
 import System.Log.Logger
 import Logging
+import Control.Monad.Trans.Either
 -- import Data.Serialize
 import qualified Data.Set as Set
+import QueryArrow.RPC.DB
 
 main::IO()
 main = do
@@ -72,60 +75,11 @@ mainArgs args2 = do
 
 run2 :: [String] -> String -> TranslationInfo -> IO ()
 run2 hdr query ps = do
+    let vars = map Var hdr
     AbstractDatabase tdb <- transDB "tdb" ps
     conn <- dbOpen tdb
-    (hdr, pp) <- run3 hdr query tdb conn "rods" "tempZone"
-    putStr (pprint hdr pp)
+    ret <- runEitherT $ run (fromList vars) query mempty tdb conn
+    case ret of
+      Left e -> putStrLn ("error: " ++ e)
+      Right pp -> putStr (pprint vars pp)
     dbClose conn
-
-
-run3 :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => [String] -> String -> db -> ConnectionType db -> String -> String -> IO ([String], [Map String String])
-run3 hdr query tdb conn user zone = do
-    let predmap = constructDBPredMap tdb
-    let params = fromList [(Var "client_user_name",StringValue (T.pack user)), (Var "client_zone", StringValue (T.pack zone))]
-
-
-    r <- runResourceT $ dbCatch $ case runParser progp (mempty, predmap, mempty) "" query of
-                            Left err -> error (show err)
-                            Right (commands, _) ->
-                                concat <$> mapM (\command -> case command of
-                                    Begin -> do
-                                        liftIO $ dbBegin conn
-                                        return []
-                                    Prepare -> do
-                                        b <- liftIO $ dbPrepare conn
-                                        if b
-                                            then return []
-                                            else do
-                                                liftIO $ errorM "QA" "prepare failed, cannot commit"
-                                                error "prepare failed, cannot commit"
-                                    Commit -> do
-                                        b <- liftIO $ dbCommit conn
-                                        if b
-                                            then return []
-                                            else do
-                                                liftIO $ errorM "QA" "commit failed"
-                                                error "commit failed"
-                                    Rollback -> do
-                                        liftIO $ dbRollback conn
-                                        return []
-                                    Execute qu ->
-                                        case runExcept (checkQuery qu) of
-                                              Right _ -> getAllResultsInStream ( doQueryWithConn tdb conn (Set.fromList (map Var hdr)) qu (Set.fromList (keys params)) (pure params))
-                                              Left e -> error e) commands
-                            -- Right (Right Commit) -> do
-                            --     b <- liftIO $ dbPrepare tdb
-                            --     if b
-                            --         then do
-                            --             b <- liftIO $ dbCommit tdb
-                            --             if b
-                            --                 then return [mempty]
-                            --                 else do
-                            --                     liftIO $ dbRollback tdb
-                            --                     liftIO $ errorM "QA" "prepare succeeded but cannot commit"
-                            --         else do
-                            --             liftIO $ dbRollback tdb
-                            --             )
-    return (case r of
-        Right rows ->  (hdr, map (\row -> fromList (map (\(Var v,r) -> (v, show r)) (toList row))) rows)
-        Left e ->  (["error"], [singleton "error" (show e)]))

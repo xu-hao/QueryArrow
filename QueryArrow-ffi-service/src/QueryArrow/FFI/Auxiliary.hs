@@ -23,9 +23,13 @@ eCAT_NO_ROWS_FOUND = -808000
 eNULL :: Int
 eNULL = -1095000
 
+execAbstract :: QueryArrowService b -> b -> AbstractFormula Predicates -> MapResultRow -> EitherT Error IO ()
+execAbstract svc session form params =
+  execQuery svc session  (formula (getPredicates svc session) form) params
+
 getResultValues :: QueryArrowService b -> b -> [Var] -> AbstractFormula Predicates -> MapResultRow -> EitherT Error IO [ResultValue]
 getResultValues svc session vars form params = do
-  count <- getSomeResults svc session vars form params 1
+  count <- getSomeResults svc session vars (formula (getPredicates svc session) form) params 1
   case count of
       row : _ -> case mapM (\var -> lookup var row) vars of
                   Just r -> return r
@@ -36,7 +40,7 @@ getResultValues svc session vars form params = do
 
 getAllResultValues :: QueryArrowService b -> b -> [Var] -> AbstractFormula Predicates -> MapResultRow -> EitherT Error IO [[ResultValue]]
 getAllResultValues svc session vars form params = do
-  count <- getAllResult svc session vars form params
+  count <- getAllResult svc session vars (formula (getPredicates svc session) form) params
   case count of
       [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
       rows ->
@@ -48,7 +52,7 @@ getAllResultValues svc session vars form params = do
 
 getSomeResultValues :: QueryArrowService b -> b -> Int -> [Var] -> AbstractFormula Predicates -> MapResultRow -> EitherT Error IO [[ResultValue]]
 getSomeResultValues svc session n vars form params = do
-  count <- getSomeResults svc session vars form params (n `div` length vars)
+  count <- getSomeResults svc session vars (formula (getPredicates svc session) form) params (n `div` length vars)
   case count of
       [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
       rows ->

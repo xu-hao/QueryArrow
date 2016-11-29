@@ -15,7 +15,9 @@ executable QueryArrow
                    text,
                    resourcet,
                    hslogger,
+                   either,
                    QueryArrow-common,
+                   QueryArrow-rpc-common,
                    QueryArrow
   ghc-options:     -Wall
   other-modules:

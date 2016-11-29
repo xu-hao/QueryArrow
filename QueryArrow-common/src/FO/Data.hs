@@ -214,6 +214,9 @@ isObjectPred (Pred _ (PredType predKind _)) = case predKind of
 constructPredMap :: [Pred] -> PredMap
 constructPredMap = foldl (\map1 pred1@(Pred name _) -> insertObject name pred1 map1) mempty
 
+constructPredicateMap :: [Pred] -> Map String Pred
+constructPredicateMap = foldl (\map1 pred1@(Pred (ObjectPath _ name) _) -> insert name pred1 map1) mempty
+
 sortByKey :: [Lit] -> Map [Expr] [Lit]
 sortByKey = foldl insertByKey empty where
     insertByKey map1 lit@(Lit _ (Atom pred1 args)) =

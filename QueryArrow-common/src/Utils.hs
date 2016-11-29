@@ -8,7 +8,7 @@ import ListUtils
 import DB.DB
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup)
+import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys)
 import qualified Data.Map.Strict as M
 import Data.List ((\\), intercalate, transpose)
 import Data.Convertible
@@ -66,26 +66,15 @@ combineLits lits generateUpdate generateInsert generateDelete = do
 
 dbCatch :: (MonadCatch m) => m a -> m (Either SomeException a)
 dbCatch action =
-        catch (do
-            r <- action
-            return (Right r)) (\e ->
-                return (Left e))
+        try action
 
-pprint :: [String] -> [Map String String] -> String
-pprint vars rows = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
-    join = intercalate " " . map (uncurry pad) . zip collen
-    rowstrs = map join m2
-    m2 = transpose m
-    collen = map (maximumd 0 . map length) m
-    m = map f vars
-    f var = map (g var) rows
-    g::String-> Map String String -> String
-    g var row = case lookup var row of
+pprint2 :: [String] -> [Map String String] -> String
+pprint2 vars rows =
+  pprint3 (vars, map (\row -> map (g row) vars) rows) where
+    g::Map String String ->String->  String
+    g row var  = case lookup var row of
         Nothing -> "null"
         Just e -> e
-    pad n s
-        | length s < n  = s ++ replicate (n - length s) ' '
-        | otherwise     = s
 
 pprint3 :: ([String], [[String]]) -> String
 pprint3 (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
@@ -101,18 +90,6 @@ pprint3 (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" whe
                 | length s < n  = s ++ replicate (n - length s) ' '
                 | otherwise     = s
 
-pprint2 :: [Var] -> [MapResultRow] -> String
-pprint2 vars rows = join  (map unVar vars) ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
-    join = intercalate " " . map (uncurry pad) . zip collen
-    rowstrs = map join m2
-    m2 = transpose m
-    collen = map (maximumd 0 . map length) m
-    m = map f vars
-    f var = map (g var) rows
-    g::Var->MapResultRow->String
-    g var row = case lookup var row of
-        Nothing -> "null"
-        Just e -> show e
-    pad n s
-        | length s < n  = s ++ replicate (n - length s) ' '
-        | otherwise     = s
+pprint :: [Var] -> [MapResultRow] -> String
+pprint vars rows =
+    pprint2 (map unVar vars) (map (mapKeys unVar . M.map show) rows)

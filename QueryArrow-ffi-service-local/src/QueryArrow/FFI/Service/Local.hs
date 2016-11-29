@@ -24,17 +24,18 @@ import Config
 import Utils
 import DBMap
 
-data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula db) => Session db (ConnectionType db) Predicates
+data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula db) => Session db (ConnectionType db)
 
 localService :: QueryArrowService Session
 localService = QueryArrowService {
-  execQuery =  \(Session db conn predicates) form params -> do
-    liftIO $ putStrLn ("execQuery: " ++ serialize (formula predicates form) ++ show params)
-    liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn empty (formula predicates form) (fromList (Map.keys params)) (listResultStream [params]))),
-  getAllResult = \(Session db conn predicates) vars form params ->
-    liftIO $ runResourceT (getAllResultsInStream (doQueryWithConn db conn (fromList vars) (formula predicates form) (fromList (Map.keys params)) (listResultStream [params]))),
+  getPredicates = \(Session db conn ) -> predicates (constructPredicateMap (getPreds db)),
+  execQuery =  \(Session db conn ) form params -> do
+    liftIO $ putStrLn ("execQuery: " ++ serialize (  form) ++ show params)
+    liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn empty (  form) (fromList (Map.keys params)) (listResultStream [params]))),
+  getAllResult = \(Session db conn ) vars form params ->
+    liftIO $ runResourceT (getAllResultsInStream (doQueryWithConn db conn (fromList vars) (  form) (fromList (Map.keys params)) (listResultStream [params]))),
   getSomeResults = \ session vars form params n ->
-    getAllResult localService session vars (aggregate (Limit n) form) params,
+    getAllResult localService session vars (Aggregate (Limit n) form) params,
   qasConnect = \ path -> do
     liftIO $ infoM "Plugin" ("loading configuration from " ++ path)
     ps <- liftIO $ getConfig path
@@ -44,18 +45,17 @@ localService = QueryArrowService {
         AbstractDatabase db -> do
             res <- liftIO $ try (do
                 conn <- dbOpen db
-                let pm = constructDBPredMap db
-                return (Session db conn (predicates pm)))
+                return (Session db conn))
             case res of
                 Right a -> return a
                 Left e ->
                     left (0-1, pack (show (e :: SomeException))),
-  qasDisconnect = \ session@(Session _ conn _) -> do
+  qasDisconnect = \ session@(Session _ conn) -> do
       res <- liftIO $ try (dbClose conn)
       case res of
         Right a -> return a
         Left e -> left (0-1, pack (show (e :: SomeException))),
-  qasCommit = \ session@(Session _ conn _) -> do
+  qasCommit = \ session@(Session _ conn) -> do
       res <- liftIO $ try (do
           b <- dbCommit conn
           if b
@@ -66,7 +66,7 @@ localService = QueryArrowService {
         Right a -> return a
         Left e -> throwError (0-1, pack (show (e :: SomeException))),
 
-  qasRollback = \ session@(Session _ conn _) -> do
+  qasRollback = \ session@(Session _ conn) -> do
       res <- liftIO $ try (dbRollback conn)
       case res of
         Right a -> return a

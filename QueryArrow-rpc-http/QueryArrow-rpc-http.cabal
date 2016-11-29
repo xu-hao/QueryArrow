@@ -51,6 +51,7 @@ executable QueryArrowHttp
                    fast-logger,
                    constraints,
                    yesod,
+                   either,
                    QueryArrow-rpc-common,
                    QueryArrow-common,
                    QueryArrow,

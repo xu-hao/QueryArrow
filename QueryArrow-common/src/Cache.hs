@@ -28,8 +28,11 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) 
         infoM "TransCache" ("looking up " ++ show qu)
         qu' <- lookup (vars2, qu, vars) cache
         case qu' of
-            Just qu2 -> return qu2
+            Just qu2 -> do
+                infoM "TransCache" ("found translated query")
+                return qu2
             Nothing -> do
+                infoM "TransCache" ("did not find translated query")
                 qu' <- translateQuery db vars2 qu vars
                 insert (vars2, qu, vars) qu' cache
                 return qu'

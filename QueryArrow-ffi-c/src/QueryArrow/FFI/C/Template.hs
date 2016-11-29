@@ -419,7 +419,7 @@ createFunction n a = do
     let ps = s : p : map VarP argnames
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
-    let func = [|execQuery|]
+    let func = [|execAbstract|]
     b <- [|$(func) svcptr session ($(pn) @@+ $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
@@ -462,7 +462,7 @@ createFunctionArray n a = do
     let ps = [s, p , p2]
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
-    let func = [|execQuery|]
+    let func = [|execAbstract|]
     b <- [|$(func) svcptr session ($(pn) @@+ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
@@ -499,7 +499,7 @@ deleteFunction n a = do
     let ps = s : p : map VarP argnames
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
-    let func = [|execQuery|]
+    let func = [|execAbstract|]
     b <- [|$(func) svcptr session ($(pn) @@- $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 

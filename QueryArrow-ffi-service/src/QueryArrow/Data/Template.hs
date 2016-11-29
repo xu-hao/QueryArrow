@@ -28,11 +28,11 @@ pathE (ObjectPath (NamespacePath as) a) = do
     let l = listE (map stringE as)
     [|ObjectPath (NamespacePath $(l)) $(stringE a)|]
 
-structval :: [(String, ObjectPath String)] -> DecsQ
+structval :: [(String,  String)] -> DecsQ
 structval xs = do
       let pm = mkName "pm"
       let exprs = map (\(n, pn) -> do
-          pval <- [|fromMaybe (error ("cannot find " ++ $(stringE n) ++ " from path " ++ $(stringE (show pn)) ++ " available predicates " ++ show $(varE pm))) (lookupObject $(pathE pn) $(varE pm)) |]
+          pval <- [|fromMaybe (error ("cannot find " ++ $(stringE n) ++ " from path " ++ $(stringE pn) ++ " available predicates " ++ show $(varE pm))) (lookup $(stringE pn) $(varE pm)) |]
           return (mkName n, pval)) xs
       let expr = recConE (mkName "Predicates") exprs
       [d| predicates pm = $(expr)|]
@@ -62,7 +62,7 @@ structs path = do
     preds <- runIO (getPredicates path)
     runIO $ mapM_ (\(Pred (ObjectPath _ n0) _) -> putStrLn ("generating struct field: _" ++ map toLower n0)) preds
     let n = (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
-    let pn = (nub (map (\(InsertRewritingRule (Atom (Pred n0 _) _) _) -> n0) (qr ++ ir ++ dr)) ++ map (\(Pred n0 _) -> n0) preds)
+    let pn = (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> n0) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> n0) preds)
     st <- struct n
     stv <- structval (zip n pn)
     return (st : stv)

@@ -7,10 +7,21 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   Serialization
+                   Serialization QueryArrow.RPC.Message QueryArrow.RPC.DB
   build-depends:
                    base >= 4,
                    aeson,
-                   containers
+                   containers,
+                   bytestring,
+                   binary,
+                   mtl,
+                   resourcet,
+                   either,
+                   namespace,
+                   hslogger,
+                   parsec,
+                   text,
+                   log-adapter,
+                   QueryArrow-common
   ghc-options:     -Wall -fPIC
   other-modules:
