@@ -1,0 +1,6 @@
+import qualified all from ICAT
+import all from ICAT
+export qualified all from ICAT
+export all from ICAT
+
+#include "rewriting-plugin-common.rules"

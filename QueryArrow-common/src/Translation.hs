@@ -22,6 +22,7 @@ import Algebra.SemiBoundedLattice
 import Algebra.Lattice
 import Data.Set (toAscList, Set)
 import Data.Monoid
+import Language.Preprocessor.Cpphs (runCpphs, defaultCpphsOptions, CpphsOptions(..), defaultBoolOptions, BoolOptions(..))
 -- exec query from dbname
 
 -- getAllResults2 :: (MonadIO m, MonadBaseControl IO m, IResultRow row, Num (ElemType row), Ord (ElemType row)) => [AbstractDatabase row Formula] -> MSet Var -> Formula -> m [row]
@@ -101,7 +102,8 @@ instance (IDatabase db) => IDBConnection (ConnectionType (TransDB db)) where
 getRewriting :: PredMap -> TranslationInfo -> IO (RewritingRuleSets, PredMap, PredMap)
 getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
-    case runParser rulesp (predmap, mempty, mempty) "" d0 of
+    d1 <- runCpphs defaultCpphsOptions{includes = include_file_path ps, boolopts = defaultBoolOptions {locations = False}}  (rewriting_file_path ps) d0
+    case runParser rulesp (predmap, mempty, mempty) "" d1 of
         Left err -> error (show err)
         Right ((qr, ir, dr), predmap, exports) -> do
             mapM_ print qr

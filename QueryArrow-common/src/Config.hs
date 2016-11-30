@@ -31,7 +31,8 @@ data TranslationInfo = TranslationInfo {
     server_port :: Int,
     server_protocols :: [String],
     max_cc :: Integer,
-    rewriting_file_path :: String
+    rewriting_file_path :: String,
+    include_file_path :: [String]
 } deriving (Show, Generic)
 
 instance FromJSON ICATDBConnInfo

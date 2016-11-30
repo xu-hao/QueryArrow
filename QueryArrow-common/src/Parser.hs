@@ -8,11 +8,14 @@ import Rewriting
 import Prelude hiding (lookup)
 import Text.ParserCombinators.Parsec hiding (State)
 import Data.Maybe
+import Data.Either (either)
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import qualified Text.Parsec.Token as T
 import qualified Data.Text as TE
 import Data.Namespace.Path
 import Data.Namespace.Namespace
+import Data.Tree
+import Debug.Trace
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
@@ -70,7 +73,7 @@ atomp = do
     predname <- prednamep
     arglist <- arglistp
     (_, workspace, _) <- getState
-    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show workspace)) (lookupObject predname workspace)
+    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show2 workspace)) (lookupObject predname workspace)
     return (Atom thepred arglist)
 
 negp :: FOParser ()
@@ -222,6 +225,16 @@ namespacepathp = do
   ids <- many identifier
   return (foldl extendNamespacePath mempty ids)
 
+show2 :: PredMap -> String
+show2 workspace =
+  let show3 (k,a) = (case k of
+                          Nothing -> ""
+                          Just k -> k) ++ (case a of
+                                    Nothing -> ""
+                                    Just a -> ":" ++ show a)
+  in
+      drawTree (fmap show3 (toTree workspace))
+
 importp :: FOParser [Action]
 importp = do
     (predmap, workspace, exports) <- getState
@@ -235,15 +248,20 @@ importp = do
             (do
                 reserved "except"
                 preds <- many1 identifier
-                return (importQualifiedExceptFromNamespace ns preds predmap workspace)
+                return (importQualifiedExceptFromNamespaceE ns preds predmap workspace)
                 ) <|> (
-                return (importAllFromNamespace ns predmap exports)
+                return (importAllFromNamespaceE ns predmap exports)
                 )
             ) <|> (do
             prednames <- many1 identifier
             reserved "from"
             ns <- namespacepathp
-            return (importQualifiedFromNamespace ns prednames predmap workspace)
+            trace ("***********\n" ++ show2 workspace) $ return ()
+            let workspace' = (importQualifiedFromNamespaceE ns prednames predmap workspace)
+            case workspace' of
+                Left e -> error (e ++ "\nthe import of " ++ show prednames ++ " at namespace " ++ show ns ++ " from \n" ++ show2 predmap ++ "\n into \n" ++ show2 workspace ++ "\n failed")
+                Right ws -> trace ("***********\n" ++ show2 ws ++ "\n@@@@@@@@@@@@@") $ return ()
+            return workspace'
             )
         ) <|> (do
             reserved "all"
@@ -252,17 +270,17 @@ importp = do
             (do
                 reserved "except"
                 preds <- many1 identifier
-                return (importExceptFromNamespace ns preds predmap workspace)
+                return (importExceptFromNamespaceE ns preds predmap workspace)
                 ) <|> (
-                return (importAllFromNamespace ns predmap workspace)
+                return (importAllFromNamespaceE ns predmap workspace)
                 )
             ) <|> (do
             prednames <- many1 identifier
             reserved "from"
             ns <- namespacepathp
-            return (importFromNamespace ns prednames predmap workspace)
+            return (importFromNamespaceE ns prednames predmap workspace)
             )
-    setState (predmap, fromMaybe (error "import") predmap2', exports)
+    setState (predmap, either (\e->error ("import: " ++ e)) id predmap2', exports)
     return []
 
 
@@ -279,38 +297,38 @@ data Action =
 execAction :: Action -> FOParser ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
 execAction (ExportQualifiedExceptFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importQualifiedExceptFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export1") exports')
+    let exports' = importQualifiedExceptFromNamespaceE ns prednames predmap exports
+    setState (predmap, workspace, either (\e->error ("export1: " ++ e)) id exports')
     return mempty
 execAction (ExportQualifiedAllFrom ns) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importQualifiedAllFromNamespace ns predmap exports
-    setState (predmap, workspace, fromMaybe (error "export2") exports')
+    let exports' = importQualifiedAllFromNamespaceE ns predmap exports
+    setState (predmap, workspace, either (\e->error ("export2: " ++ e)) id exports')
     return mempty
 execAction (ExportQualifiedFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importQualifiedFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export3") exports')
+    let exports' = importQualifiedFromNamespaceE ns prednames predmap exports
+    setState (predmap, workspace, either (\e->error ("export3: " ++ e)) id exports')
     return mempty
 execAction (ExportExceptFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importExceptFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export4") exports')
+    let exports' = importExceptFromNamespaceE ns prednames predmap exports
+    setState (predmap, workspace, either (\e->error ("export4: " ++ e)) id exports')
     return mempty
 execAction (ExportAllFrom ns) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importAllFromNamespace ns predmap exports
-    setState (predmap, workspace, fromMaybe (error "export5") exports')
+    let exports' = importAllFromNamespaceE ns predmap exports
+    setState (predmap, workspace, either (\e->error ("export5: " ++ e)) id exports')
     return mempty
 execAction (ExportFrom ns prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importFromNamespace ns prednames predmap exports
-    setState (predmap, workspace, fromMaybe (error "export6") exports')
+    let exports' = importFromNamespaceE ns prednames predmap exports
+    setState (predmap, workspace, either (\e->error ("export6: " ++ e)) id exports')
     return mempty
 execAction (Export prednames) = do
     (predmap, workspace, exports) <- getState
-    let exports' = importFromNamespace mempty prednames workspace exports
-    setState (predmap, workspace, fromMaybe (error ("execAction: Export: cannot export " ++ show prednames)) exports')
+    let exports' = importFromNamespaceE mempty prednames workspace exports
+    setState (predmap, workspace, either (\e->error ("execAction: Export: cannot export " ++ show prednames ++ ": " ++ e)) id exports')
     return mempty
 execAction (Rule r) = return r
 

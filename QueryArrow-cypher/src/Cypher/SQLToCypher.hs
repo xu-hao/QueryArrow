@@ -3,12 +3,21 @@ module Cypher.SQLToCypher where
 import Prelude hiding (lookup)
 import Cypher.Cypher
 import SQL.SQL
-import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map, (!))
+import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map)
 import Data.List (partition)
 import FO.Data
 import ListUtils
 import Debug.Trace
 
+type ColI = (String, Int)
+-- | there are three type of graph patterns used
+-- 1. a node with an id property
+-- 2. an edge connecting two nodes
+-- 3. a node with edges connecting three or more nodes
+-- they are used to model tables with a primary key consisting of, respectively,
+-- 1. one id and zero or more primitive values
+-- 2. two foreign keys and zero or more primitive values
+-- 3. three or more foregin keys and zero or more primitive values
 sqlToCypher :: Map String String -> Map String String -> PredTableMap -> CypherPredTableMap
 sqlToCypher tabletype colprop  mappings =
     foldrWithKey (\predtype (OneTable tablename _, qcols) mappings' ->
@@ -16,140 +25,96 @@ sqlToCypher tabletype colprop  mappings =
                 case lookup tablename0 table  of
                     Nothing -> tablename0
                     Just t -> t
-            cols = map snd qcols
-            key = predName predtype
-            keyCols = keyComponents predtype cols
-            propCols = propComponents predtype cols
-            (edgeKeyCols, propKeyCols) = partition (/= "access_type_id") keyCols
-            (edgePropCols, propPropCols) = partition (endswith "_id") propCols
-            edges = map (\key0 -> lookup2 key0 colprop) edgeKeyCols
-            propEdges = map (\pc -> lookup2 pc colprop) edgePropCols
-            keyprops = map (\pc -> lookup2 pc colprop) propKeyCols
-            propprops = map (\pc -> lookup2 pc colprop) propPropCols
+            cols = map ((\key0 -> lookup2 key0 colprop) . snd) qcols
+            colsi = zip cols [1..length cols]
+            keycols = keyComponents predtype colsi
+            propcols = propComponents predtype colsi
+            (keyedges, keyprops) = partition (\(col, _) -> col /= "access_type_id") keycols
+            (propedges, propprops) = partition (\(col, _) -> endswith "_id" col) propcols
             ty = lookup2 tablename tabletype
-            mapping' = case propprops of
-                    [] -> case edges of
-                        [keyCol] -> mappingPattern0 keyCol ty keyprops
-                        [keyCol1, keyCol2] -> mappingPattern2m keyCol1 keyCol2 (predNameToString2 key) keyprops
-                        _ -> mappingPattern3 edges edges propEdges propEdges (predNameToString2 key) keyprops
-                    _ -> case (edges, propEdges) of
-                        ([keyCol], []) ->   mappingPattern1 keyCol ty keyprops propprops
-                        ([keyCol1, keyCol2], []) -> mappingPattern4m keyCol1  keyCol2   (predNameToString2 key) keyprops propprops
-                        ([keyCol1], [keyCol2]) -> mappingPattern4prop keyCol1  keyCol2   (predNameToString2 key) keyprops propprops
-                        _ -> mappingPattern5 edges edges propEdges propEdges (predNameToString2 key) keyprops propprops
+            mapping' = case propcols of
+                    [] -> case keyedges of
+                        [keyedge] -> mappingPattern0 keyedge ty keyprops
+                        [keyedge1, keyedge2] -> mappingPattern2m keyedge1 keyedge2 ty keyprops
+                        _ -> mappingPattern3 keyedges keyedges ty keyprops
+                    _ -> case (keyedges, propedges) of
+                        ([keyedge], _) -> mappingPattern1 keyedge propedges propedges ty keyprops propprops
+                        ([keyedge1, keyedge2], []) -> mappingPattern4m keyedge1 keyedge2 ty keyprops propprops
+                        _ -> mappingPattern5 keyedges keyedges propedges propedges ty keyprops propprops
         in
             insert predtype mapping' mappings') empty mappings
 
-mappingPattern0 :: String -> String -> [String] -> CypherMapping
+
+nodePattern :: [ColI] -> [OneGraphPattern]
+nodePattern = map (\(prop, v) -> nodevp ("d" ++ show v) [(PropertyKey prop, var (show v))])
+propPatternNode :: String -> [ColI] -> OneGraphPattern
+propPatternNode nodetype props = nodevlp "d0" nodetype (map (\(prop, v) -> (PropertyKey prop, var (show v))) props)
+edgePattern :: [ColI] -> [OneGraphPattern]
+edgePattern = map (\(prop, v) -> edgevl (nodev "d0") ("e" ++ show v) prop (nodev ("d" ++ show v)))
+propPatternEdge :: String -> ColI -> ColI -> [ColI] -> OneGraphPattern
+propPatternEdge nodetype (_, v1) (_, v2) props = edgevlp (nodev (show v1)) "e0" nodetype (map (\(prop, v) -> (PropertyKey prop, var (show v))) props) (nodev (show v2))
+vars :: [ColI] -> [CypherVar]
+vars = map (CypherVar . show . snd)
+
+-- | a node of type `nodetype` with one key edge and zero or more key properties
+-- a key edge is part of the primary key
+-- a key property is part of the primary key and also a primitive value
+mappingPattern0 :: ColI -> String -> [ColI] -> CypherMapping
 mappingPattern0 id nodetype keyprops =
-    let keypropvars = map show [2..length (keyprops) + 1] in
-        (
-                [CypherVar "1"] ++ map CypherVar keypropvars,
-                GraphPattern [],
-                GraphPattern [nodevlp "0" nodetype ([(PropertyKey id, var "1")]  ++ zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars )],
-                [(CypherVar "0", [CypherVar "1"] ++ map CypherVar keypropvars)]
-        )
-
-mappingPattern1 :: String -> String -> [String] -> [String] -> CypherMapping
-mappingPattern1 id nodetype keyprops props =
-    let keypropvars = map show [2..length (keyprops) + 1]
-        proppropvars = map show [length keyprops + 2..length (keyprops ++ props) + 1]
-        propvars = keypropvars ++ proppropvars in
-        (
-            [CypherVar "1"] ++ map CypherVar propvars,
-            GraphPattern [nodevlp "0" nodetype [(PropertyKey id, var "1")]],
-            GraphPattern [nodevlp "0" nodetype (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
-            [(CypherVar "0", [CypherVar "1"] ++ map CypherVar keypropvars)]
-        )
-mappingPattern2 :: String -> String -> String -> String -> String -> [String] -> CypherMapping
-mappingPattern2 id1 nodetype1 id2 nodetype2 edge keyprops =
-    let keypropvars = map show [3..length (keyprops) + 2] in
     (
-        [CypherVar "1", CypherVar "2"] ++ map CypherVar keypropvars,
-        GraphPattern [nodevlp "d" nodetype1 [(PropertyKey id1, var "1")], nodevlp "c" nodetype2 [(PropertyKey id2, var "2")]],
-        GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
-        [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1", CypherVar "2"]), (CypherVar "c", [CypherVar "2"])]
+        map (CypherVar . show) [1..length keyprops + 1],
+        GraphPattern [],
+        GraphPattern [propPatternNode nodetype (id : keyprops)],
+        [(CypherVar "d0", vars (id : keyprops))]
     )
 
-mappingPattern2m::String -> String -> String -> [String] -> CypherMapping
-mappingPattern2m id1 id2 edge keyprops =
-    let keypropvars = map show [3..length (keyprops) + 2] in
+-- | an edge of type `edge` connecting two nodes with two key edges and zero or more key properties
+mappingPattern2m::ColI -> ColI -> String -> [ColI] -> CypherMapping
+mappingPattern2m id1 id2 nodetype keyprops =
     (
-        [CypherVar "1", CypherVar "2"] ++ map CypherVar keypropvars,
-        GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]],
-        GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
-        [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1", CypherVar "2"]), (CypherVar "c", [CypherVar "2"])]
+        map (CypherVar . show) [1..length keyprops + 2],
+        GraphPattern (nodePattern [id1, id2]),
+        GraphPattern (propPatternEdge nodetype id1 id2 keyprops : edgePattern [id1, id2]),
+        [(CypherVar "e0", vars (id1 : id2 : keyprops))]
     )
 
-mappingPattern2prop::String -> String -> String -> [String] -> CypherMapping
-mappingPattern2prop id1 id2 edge keyprops =
-    let keypropvars = map show [3..length (keyprops) + 2] in
+-- | a node of type `nodetype` with two or more key edges and zero or more key properties
+-- when there are more than one key edges, they are also foreign keys
+mappingPattern3 :: [ColI] -> [ColI] -> String  -> [ColI] -> CypherMapping
+mappingPattern3 keyedges keyids nodetype keyprops =
     (
-        [CypherVar "1", CypherVar "2"] ++ map CypherVar keypropvars,
-        GraphPattern [nodevp "d" [(PropertyKey id1, var "1")], nodevp "c" [(PropertyKey id2, var "2")]],
-        GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars) (nodev "c")],
-        [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1"]), (CypherVar "c", [CypherVar "2"])]
+        map (CypherVar . show) [1..length keyprops + length keyedges],
+        GraphPattern (nodePattern keyids),
+        GraphPattern (propPatternNode nodetype keyprops : edgePattern keyedges),
+        [(CypherVar "e0", vars (keyids ++ keyprops))]
     )
 
-mappingPattern3 :: [String] -> [String] -> [String] -> [String] -> String  -> [String] -> CypherMapping
-mappingPattern3 keyedges keyedgeids propedges propedgeids nodetype keyprops =
-    let edges = keyedges ++ propedges
-        edgeids = keyedgeids ++ propedgeids
-        keyvars = map show [1..length keyedges]
-        propedgevars = map show [length keyedges + 1.. length keyedges + length propedges]
-        keypropvars = map show [length keyedges + length propedges + 1..length keyedges + length propedges + length (keyprops)]
-        vars = keyvars ++ propedgevars
-        nodevars = map ("d" ++) vars
-        edgevars = map ("e" ++) vars
-        keycyphervars = map CypherVar (keyvars ++ keypropvars)
-        cyphervars = map CypherVar (vars ++ keypropvars) in
-            (
-                cyphervars,
-                GraphPattern (zipWith3 (\edgeid nv v -> nodevp nv [(PropertyKey edgeid, var v)]) edgeids nodevars vars),
-                GraphPattern ([nodevlp "d0" nodetype (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars)] ++ zipWith3 (\edge ev nv -> edgevl (nodev "d0") ev edge (nodev nv)) edges edgevars nodevars),
-                [(CypherVar "d0", keycyphervars)] ++ map (\(nv , v) -> (CypherVar nv, [v])) (zip nodevars (map CypherVar vars))
-            )
+-- | a node of type `nodetype` with one key edge, zero or more key properties, and one or more properties
+mappingPattern1 :: ColI -> [ColI] -> [ColI] -> String -> [ColI] -> [ColI] -> CypherMapping
+mappingPattern1 id propedges propids nodetype keyprops propprops =
+    (
+        map (CypherVar . show) [1..length keyprops + length propprops + length propedges + 1],
+        GraphPattern (propPatternNode nodetype (id : keyprops) : nodePattern propids),
+        GraphPattern (propPatternNode nodetype propprops : edgePattern propedges),
+        [(CypherVar "d0", vars (id : keyprops))]
+    )
 
-mappingPattern4m :: String -> String -> String -> [String] -> [String] -> CypherMapping
-mappingPattern4m  nodeid1 nodeid2 edge keyprops props =
-    let keypropvars = map show [3..length (keyprops) + 2]
-        proppropvars = map show [length keyprops + 3..length (keyprops ++ props) + 2]
-        propvars = keypropvars ++ proppropvars in
-            (
-                [CypherVar "1", CypherVar "2"] ++ (map CypherVar propvars),
-                GraphPattern [nodevp "d"  [(PropertyKey nodeid1, var "1")], nodevp "c" [(PropertyKey nodeid2, var "2")], edgevl (nodev "d") "e" edge  (nodev "c")],
-                GraphPattern [nodevp "e" (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
-                [(CypherVar "d", [CypherVar "1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1", CypherVar "2"]++ map CypherVar keypropvars), (CypherVar "c", [CypherVar "2"])]
-            )
+-- | a edge of type `edge` connecting two nodes with two key edges, zero or more key properties, and one or more properties
+mappingPattern4m :: ColI -> ColI -> String -> [ColI] -> [ColI] -> CypherMapping
+mappingPattern4m id1 id2 nodetype keyprops propprops =
+    (
+        map (CypherVar . show) [1..length keyprops + length propprops + 2],
+        GraphPattern (propPatternEdge nodetype id1 id2 keyprops : nodePattern [id1, id2] ++ edgePattern [id1, id2]),
+        GraphPattern [propPatternEdge nodetype id1 id2 propprops],
+        [(CypherVar "e0", vars (id1 : id2 : keyprops))]
+    )
 
-mappingPattern4prop :: String -> String -> String -> [String] -> [String] -> CypherMapping
-mappingPattern4prop  nodeid1 nodeid2 edge keyprops props =
-    let keypropvars = map show [3..length (keyprops) + 2]
-        proppropvars = map show [length keyprops + 3..length (keyprops ++ props) + 2]
-        propvars = keypropvars ++ proppropvars in
-            (
-                [CypherVar "1", CypherVar "2"] ++ (map CypherVar propvars),
-                GraphPattern [nodevp "d"  [(PropertyKey nodeid1, var "1")], nodevp "c" [(PropertyKey nodeid2, var "2")]],
-                GraphPattern [edgevlp (nodev "d") "e" edge (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props propvars) (nodev "c")],
-                [(CypherVar "d", [CypherVar"1"] ++ map CypherVar keypropvars), (CypherVar "e", [CypherVar "1"]++ map CypherVar keypropvars), (CypherVar "c", [CypherVar "2"])]
-            )
-
-mappingPattern5 :: [String] -> [String] -> [String] -> [String] -> String -> [String] -> [String] -> CypherMapping
-mappingPattern5 keyedges keyedgeids propedges propedgeids nodetype keyprops props =
-    let edges = keyedges ++ propedges
-        edgeids = keyedgeids ++ propedgeids
-        keyedgevars = map show [1..length keyedges]
-        propedgevars = map show [length keyedges + 1 .. length propedges]
-        keypropvars = map show [length edges + 1..length edges + length keyprops]
-        proppropvars = map show [length edges + length keypropvars + 1..length edges + length keypropvars + length props]
-        vars = keyedgevars ++ propedgevars
-        edgevars = map ("e" ++) vars
-        nodevars = map ("d" ++) vars
-        keycyphervars = map CypherVar (keyedgevars ++ keypropvars)
-        cyphervars = map CypherVar vars in
-            (
-                cyphervars ++ map CypherVar (keypropvars ++ proppropvars),
-                GraphPattern ([nodevl "d0" nodetype] ++ zipWith3 (\edgeid nv v -> nodevp nv [(PropertyKey edgeid, var v)]) edgeids nodevars vars ++ zipWith3 (\edge ev nv -> edgevl (nodev "d0") ev edge (nodev nv)) edges edgevars nodevars),
-                GraphPattern [nodevp "d0" (zipWith (\prop v -> (PropertyKey prop, var v)) keyprops keypropvars ++ zipWith (\prop v -> (PropertyKey prop, var v)) props proppropvars)],
-                [(CypherVar "d0", keycyphervars)] ++ zipWith (\nv v -> (CypherVar nv, [v])) nodevars cyphervars
-            )
+-- | a node of type `nodetype` with two or more key edges, zero or more key properties, and one or more properties
+mappingPattern5 :: [ColI] -> [ColI] -> [ColI] -> [ColI] -> String -> [ColI] -> [ColI] -> CypherMapping
+mappingPattern5 keyedges keyids propedges propids nodetype keyprops propprops =
+    (
+        map (CypherVar . show) [1..length keyprops + length keyedges + length propedges + length propprops],
+        GraphPattern (propPatternNode nodetype keyprops : nodePattern (propids ++ keyids) ++ edgePattern keyedges),
+        GraphPattern (propPatternNode nodetype propprops : edgePattern propedges),
+        [(CypherVar "d0", vars (keyids ++ keyprops))]
+    )
