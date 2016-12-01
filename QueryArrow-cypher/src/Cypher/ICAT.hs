@@ -4,11 +4,13 @@ module Cypher.ICAT where
 import FO.Data
 import Cypher.Neo4jConnection
 import Cypher.Cypher
+import Cypher.BuiltIn
 import Cypher.SQLToCypher
 import DB.GenericDatabase
 import DB.NoConnection
 import ICAT
-import SQL.ICAT
+import BuiltIn
+import SQL.ICAT hiding (lookupPred)
 import SQL.SQL
 
 import Prelude hiding (lookup)
@@ -16,40 +18,19 @@ import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, fold
 
 import Data.Namespace.Namespace
 
-cypherBuiltIn :: String -> CypherBuiltIn
-cypherBuiltIn ns =
-    let cypherStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
-        lookupPred n = case lookupObject (QPredName ns [] n) cypherStandardBuiltInPredsMap of
-                Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ n)
-                Just pred1 -> pred1 in
-        CypherBuiltIn ( fromList [
-            (lookupPred "le", \thesign args ->
-                return (cwhere (CypherCompCond (case thesign of
-                    Pos -> "<="
-                    Neg -> ">") (head args) (args !! 1) Pos))),
-            (lookupPred "lt", \thesign args ->
-                return (cwhere (CypherCompCond (case thesign of
-                    Pos -> "<"
-                    Neg -> ">=") (head args) (args !! 1) Pos))),
-            (lookupPred "eq", \thesign args ->
-                return (cwhere (CypherCompCond (case thesign of
-                    Pos -> "="
-                    Neg -> "<>") (head args) (args !! 1) Pos))),
-            (lookupPred "like_regex", \thesign args ->
-                return (cwhere (CypherCompCond "=~" (head args) (args !! 1) thesign)))
-        ])
+lookupPred :: String -> String -> Pred
+lookupPred ns n =
+  let cypherStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
+  in
+      case lookupObject (QPredName ns [] n) cypherStandardBuiltInPredsMap of
+            Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ n)
+            Just pred1 -> pred1
 
 cypherMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherPredTableMap
-cypherMapping ns preds mappings = (sqlToCypher (fromList [
-    ("r_data_main", "DataObject"),
-    ("r_coll_main", "Collection")
-    ]) (fromList [
-    ("data_id", "object_id"),
-    ("coll_id", "object_id")
-    ]) (sqlMapping ns preds mappings))
+cypherMapping ns preds mappings = (sqlToCypher  (sqlMapping ns preds mappings))
 
 cypherTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherTrans
-cypherTrans ns preds mappings = CypherTrans (cypherBuiltIn ns)  ["DATA_OBJ", "COLL_OBJ", "META_OBJ", "OBJT_METAMAP_OBJ"] ((cypherMapping ns preds mappings))
+cypherTrans ns preds mappings = CypherTrans (cypherBuiltIn (lookupPred ns))  ((cypherMapping ns preds mappings))
 {- fromList [
         ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
         ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
@@ -76,6 +57,6 @@ makeICATCypherDBAdapter :: String -> [String] -> Neo4jDatabase -> IO (NoConnecti
 makeICATCypherDBAdapter ns [predsPath, mappingsPath] conn = do
     preds <- loadPreds predsPath
     mappings <- loadMappings mappingsPath
-    let (CypherBuiltIn cypherbuiltin) = cypherBuiltIn ns
+    let (CypherBuiltIn cypherbuiltin) = cypherBuiltIn (lookupPred ns)
     let cypherbuiltinpreds = keys cypherbuiltin
     return (NoConnectionDatabase (GenericDatabase  (cypherTrans ns preds mappings) conn ns (qStandardPreds ns preds ++ cypherbuiltinpreds)))

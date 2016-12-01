@@ -16,6 +16,7 @@ library
                    DB.ParametrizedStatement
                    DB.ResultStream
                    ICAT
+                   BuiltIn
                    QueryPlan
                    Sum
                    Translation

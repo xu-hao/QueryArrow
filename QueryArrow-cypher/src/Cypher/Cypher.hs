@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, TypeFamilies #-}
-module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label,
+module Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Label, FV(..),
     CypherMapping, translateQueryToCypher,
     CypherCond(..), CypherQuery(..), GraphPattern(..), NodePattern(..), PropertyKey(..), Cypher(..), cypherVarExprMap, CypherVarExprMap(..),
     CypherBuiltIn(..), CypherPredTableMap, OneGraphPattern(..),CypherTrans(..), (.=.), (.<>.), (.&&.),
@@ -12,11 +12,11 @@ import DB.DB
 import ListUtils
 
 import Prelude hiding (lookup)
-import Data.List (intercalate, (\\), union , partition, intersect, nub)
-import Control.Monad.Trans.State.Strict (State, StateT, get, put, evalState, runState, evalStateT, runStateT)
-import Control.Monad (foldM, guard)
+import Data.List (intercalate, (\\), union, intersect)
+import Control.Monad.Trans.State.Strict (State, StateT, get, put, runState, evalStateT)
+import Control.Monad (foldM)
 import Control.Arrow ((***))
-import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, fromList, toList, elems, update, keys)
+import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, elems)
 import qualified Data.Map.Strict as Map
 import Data.Convertible.Base
 import Data.Monoid
@@ -42,10 +42,13 @@ data CypherExpr = CypherVarExpr CypherVar
 
 extractVarFromExpr :: CypherExpr -> CypherVar
 extractVarFromExpr (CypherVarExpr var) = var
-extractVarFromExpr _ = error "this is not a var expr"
+extractVarFromExpr e = error ("this is not a var expr" ++ serialize e)
 
 isCypherConstExpr :: CypherExpr -> Bool
-isCypherConstExpr e = case e of CypherIntConstExpr _ -> True; CypherStringConstExpr _ -> True ; _ -> False
+isCypherConstExpr e = case e of
+  CypherIntConstExpr _ -> True
+  CypherStringConstExpr _ -> True
+  _ -> False
 
 type CypherOper = String
 
@@ -54,6 +57,7 @@ data CypherValue = CypherIntValue Int
                  | CypherNullValue deriving (Show, Read)
 
 data CypherCond = CypherCompCond CypherOper CypherExpr CypherExpr Sign
+                | CypherHasPropertyCond CypherExpr PropertyKey
                 | CypherAndCond CypherCond CypherCond
                 -- | CypherOrCond CypherCond CypherCond
                 | CypherTrueCond
@@ -114,38 +118,32 @@ instance Monoid GraphPattern where
     mempty = GraphPattern []
     GraphPattern as `mappend` GraphPattern bs = GraphPattern (mergeOneGraphPatterns (as ++ bs))
 
-data CypherVarType = CypherNodeVar | CypherPropertyVar deriving (Eq, Show)
+data CypherPathType = CypherNodePathType CypherVar (Maybe Label) | CypherEdgePathType CypherVar CypherVar (Maybe Label) CypherVar | CypherPropertyPathType CypherVar PropertyKey CypherExpr deriving (Show)
 
-data Context = Root | Node (Maybe Label) | Edge CypherVar CypherVar (Maybe Label) | Dot CypherVar PropertyKey deriving (Eq, Show)
+instance Eq CypherPathType where
+   (CypherNodePathType v1 _) == (CypherNodePathType v2 _) = v1 == v2
+   (CypherEdgePathType s1 v1 _ t1) == (CypherEdgePathType s2 v2 _ t2) = s1 == s2 && v1 == v2 && t1 == t2
+   _ == _ = False
 
-class FVType a where
-    fvType :: Context -> a -> [(CypherVar, Context, Properties, CypherVarType)]
+data Context = Root | Node | Edge CypherVar CypherVar deriving (Show, Eq)
 
-instance FVType OneGraphPattern where
-    fvType _ (GraphEdgePattern nodepatternsrc label nodepatterntgt) =
-        fvType (Node Nothing) nodepatternsrc `union` fvType (Edge (nodeVar nodepatternsrc) (nodeVar nodepatterntgt) Nothing) label `union` fvType (Node Nothing) nodepatterntgt
-    fvType _ (GraphNodePattern nodepattern) = fvType (Node Nothing) nodepattern
+class PathType a where
+    pathType :: Context -> a -> [CypherPathType]
 
-instance FVType GraphPattern where
-    fvType _ (GraphPattern list)= unions (map (fvType Root) (list))
+instance PathType OneGraphPattern where
+    pathType _ (GraphEdgePattern nodepatternsrc label nodepatterntgt) =
+        pathType Node nodepatternsrc `union` pathType (Edge (nodeVar nodepatternsrc) (nodeVar nodepatterntgt)) label `union` pathType Node nodepatterntgt
+    pathType _ (GraphNodePattern nodepattern) = pathType Node nodepattern
 
-instance FVType NodePattern where
-    fvType path nodepattern@(NodePattern var label props) =
-        let v = fromMaybe (error "fvtype without var") var
-            nonvarprops = filter (\(_, expr) -> case expr of
-                CypherVarExpr _ -> False
-                _ -> True) props in
-            [(v, case label of
-                    Just l -> addLabel l path
-                    Nothing -> path, nonvarprops, CypherNodeVar)] `union` unions (map (\(prop, expr)-> fvType (Dot v prop ) expr) props)
+instance PathType GraphPattern where
+    pathType _ (GraphPattern list)= unions (map (pathType Root) list)
 
-instance FVType CypherExpr where
-    fvType path (CypherVarExpr var) = [(var, path, [], CypherPropertyVar)]
-    fvType _ _ = [] -- cannot be deleted
-
-addLabel :: Label -> Context -> Context
-addLabel l (Edge v v2 _) = Edge v v2 (Just l)
-addLabel l (Node _) = Node (Just l)
+instance PathType NodePattern where
+    pathType ctx nodepattern@(NodePattern var label props) =
+        let v = fromMaybe (error "fvtype without var") var in
+            [case ctx of
+                Node -> CypherNodePathType v label
+                Edge s t -> CypherEdgePathType s v label t] `union` map (\(prop, expr)-> CypherPropertyPathType v prop expr) props
 
 nodeVar :: NodePattern -> CypherVar
 nodeVar (NodePattern var label props) =
@@ -161,7 +159,8 @@ sameNode (NodePattern v l1 p1) (NodePattern v2 l2 p2) = v == v2 && l1 `compatibl
     and [k1 /= k2 || e1 == e2 | (k1, e1) <- p1, (k2, e2) <- p2]
 
 mergeNodes :: NodePattern -> NodePattern -> NodePattern
-mergeNodes (NodePattern v l props) (NodePattern _ _ props2) = NodePattern v l (props `union` props2)
+mergeNodes (NodePattern v l@(Just _) props) (NodePattern _ _ props2) = NodePattern v l (props `union` props2)
+mergeNodes (NodePattern v Nothing props) (NodePattern _ l props2) = NodePattern v l (props `union` props2)
 
 mergeTwoOneGraphPatterns :: OneGraphPattern -> OneGraphPattern -> Maybe OneGraphPattern
 mergeTwoOneGraphPatterns (GraphNodePattern n) (GraphNodePattern n2)
@@ -169,6 +168,8 @@ mergeTwoOneGraphPatterns (GraphNodePattern n) (GraphNodePattern n2)
 mergeTwoOneGraphPatterns (GraphEdgePattern ( ns) ne ( nt)) (GraphNodePattern n2)
     | sameNode ns n2 = return (GraphEdgePattern ( (mergeNodes ns n2)) ne ( nt))
     | sameNode nt n2 = return (GraphEdgePattern ( ns) ne ( (mergeNodes nt n2)))
+mergeTwoOneGraphPatterns (GraphEdgePattern ( ns) ne ( nt)) (GraphEdgePattern ns2 ne2 nt2)
+    | sameNode ns ns2 && sameNode ne ne2 && sameNode nt nt2 = return (GraphEdgePattern ( (mergeNodes ns ns2)) (mergeNodes ne ne2) (mergeNodes nt nt2))
 mergeTwoOneGraphPatterns _ _ = Nothing
 
 findMerge :: OneGraphPattern -> [OneGraphPattern] -> Maybe (OneGraphPattern, [OneGraphPattern])
@@ -212,12 +213,15 @@ instance Serialize NodePattern where
             else "") ++ ")" where
         f = map (\(PropertyKey key, value) -> key ++ ":" ++ serialize value)
 
+instance Serialize PropertyKey where
+    serialize (PropertyKey prop) = prop
+
 instance Serialize CypherExpr where
     serialize (CypherVarExpr var) = serialize var
     serialize (CypherIntConstExpr i) = show i
     serialize (CypherStringConstExpr s) = "'" ++ cypherStringEscape (T.unpack s) ++ "'"
     serialize (CypherParamExpr m) = "{" ++ m ++ "}"
-    serialize (CypherDotExpr expr (PropertyKey prop)) = serialize expr ++ "." ++ prop
+    serialize (CypherDotExpr expr prop) = serialize expr ++ "." ++ serialize prop
     serialize (CypherAppExpr f args) = f ++ "(" ++ intercalate "," (map serialize args) ++ ")"
     serialize (CypherNullExpr) = "NULL"
 
@@ -249,9 +253,13 @@ instance Serialize CypherCond where
         Pos -> serialize lhs ++ " " ++ op ++ " " ++ serialize rhs
         Neg -> "NOT (" ++ serialize lhs ++ " " ++ op ++ " " ++ serialize rhs ++ ")"
     serialize (CypherTrueCond) = "@True"
+    serialize (CypherHasPropertyCond expr prop) = "HAS(" ++ serialize expr ++ "." ++ serialize prop ++ ")"
     serialize (CypherAndCond a b) = "(" ++ serialize a ++ " AND " ++ serialize b ++ ")"
-    serialize (CypherPatternCond (GraphPattern [])) = "@Graph"
-    serialize (CypherPatternCond (GraphPattern as)) = "(" ++ intercalate " AND " (map serialize (as)) ++ ")"
+    serialize (CypherPatternCond (p)) = serialize p
+
+instance Serialize GraphPattern where
+    serialize ( (GraphPattern [])) = "@Graph"
+    serialize ( (GraphPattern as)) = "(" ++ intercalate " AND " (map serialize (as)) ++ ")"
 
 instance Serialize CypherValue where
     serialize (CypherIntValue i) = show i
@@ -344,6 +352,7 @@ instance FV NodePattern where
 
 instance FV CypherCond where
     fv (CypherCompCond op a b _) = fv a `union` fv b
+    fv (CypherHasPropertyCond a b) = fv a
     fv (CypherAndCond a b) = (fv a) `union` (fv b)
     fv (CypherTrueCond) = []
     fv (CypherPatternCond a) = fv a
@@ -404,6 +413,7 @@ instance Subst GraphPattern where
 
 instance Subst CypherCond where
     subst varmap (CypherCompCond op a b sign) = CypherCompCond op (subst varmap a) (subst varmap b) sign
+    subst varmap (CypherHasPropertyCond a b) = CypherHasPropertyCond (subst varmap a) b
     subst varmap (CypherAndCond a b) = CypherAndCond (subst varmap a) (subst varmap b)
     subst _ CypherTrueCond = CypherTrueCond
     subst varmap (CypherPatternCond a) = CypherPatternCond (subst varmap a)
@@ -447,6 +457,8 @@ data CypherQuery = CypherQuery [Var] [Cypher] [Var] deriving (Show, Read)
 -- mapping from predicate to a cypher query
 type CypherMapping = ([CypherVar], GraphPattern, GraphPattern, Dependencies)
 
+instance Serialize CypherMapping where
+    serialize (a, b, c, d) = show a ++ "," ++ serialize b ++ "," ++ serialize c
 type Dependencies = [(CypherVar, [CypherVar])]
 
 -- translate relational calculus to cypher
@@ -463,8 +475,8 @@ type CypherVarMap = Map Var CypherExpr
 -- predicate -> pattern (query, insert, update, delete)
 type CypherPredTableMap = Map Pred CypherMapping
 -- builtin predicate -> op, neg op
-newtype CypherBuiltIn = CypherBuiltIn (Map Pred (Sign -> [CypherExpr] -> TransMonad Cypher))
-type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap) NewEnv a
+newtype CypherBuiltIn = CypherBuiltIn (Map Pred ([CypherExpr] -> TransMonad Cypher))
+type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap, CypherVarExprMap, [Var], [Var]) NewEnv a
 
 extractPropertyVarInMatch :: [CypherVar] -> Cypher -> Cypher
 extractPropertyVarInMatch env (Cypher r as w s c d) =
@@ -497,17 +509,19 @@ extractPropertyVarInNodePattern env n@(NodePattern v l p) (CypherVarExprMap vmap
                         CypherVarExpr v -> case lookup v vmap' of
                             Nothing -> if v `elem` env
                                 then (cond' .&&. (CypherDotExpr (CypherVarExpr var) prop .=. expr), props, vmap')
-                                else (cond', props, insert v (CypherDotExpr (CypherVarExpr var) prop) vmap')
+                                else (cond' {- .&&. (CypherHasPropertyCond (CypherVarExpr var) prop) -}, props, insert v (CypherDotExpr (CypherVarExpr var) prop) vmap')
                             Just expr2 -> (cond' .&&. (CypherDotExpr (CypherVarExpr var) prop .=. expr2), props, vmap')
                         _ -> (cond' .&&. (CypherDotExpr (CypherVarExpr var) prop .=. expr), props, vmap')
                         ) (CypherTrueCond, [], vmap) p in
                 (cond', NodePattern v l props', CypherVarExprMap vmap')
 
-translateQueryToCypher :: [Var] -> Formula -> [Var] -> TransMonad CypherQuery
-translateQueryToCypher vars conj env = do
+translateQueryToCypher :: Formula -> TransMonad CypherQuery
+translateQueryToCypher form  = do
+    (_ , _, _, vars, env) <- get
     lift $ registerVars env
-    cypher <- translateFormulaToCypher vars conj env
-    return (CypherQuery vars cypher env)
+    cypher <- translateFormulaToCypher form
+    cypher' <- mapM addDummyIfNull cypher
+    return (CypherQuery vars cypher' env)
 
 cypherDeterminedVars :: CypherBuiltIn -> Formula -> [Var]
 cypherDeterminedVars (CypherBuiltIn builtin) (FAtomic a@(Atom name _)) =
@@ -522,34 +536,36 @@ cypherDeterminedVars builtin FTransaction = []
 cypherDeterminedVars builtin FOne = []
 cypherDeterminedVars builtin FZero = []
 cypherDeterminedVars builtin (FInsert _) = []
+cypherDeterminedVars builtin (FReturn vars) = []
 cypherDeterminedVars builtin _ = error "unsupported"
 
-translateFormulaToCypher :: [Var] -> Formula -> [Var] -> TransMonad [Cypher]
-translateFormulaToCypher rvars (FSequencing form1 form2) env = do
-    (builtin , _) <- get
+translateFormulaToCypher :: Formula -> TransMonad [Cypher]
+translateFormulaToCypher (FSequencing form1 form2) = do
+    (builtin , predmap, s, rvars, env) <- get
     let determinedvars = cypherDeterminedVars builtin form1
     let rvars1 = (determinedvars `union` env) `intersect` (toAscList (freeVars form2) `union` rvars)
-    cypher1 <- translateFormulaToCypher rvars1 form1 env
-    cypher2 <- translateFormulaToCypher rvars form2 rvars1
+    put (builtin, predmap, s, rvars1, env)
+    cypher1 <- translateFormulaToCypher form1
+    put (builtin, predmap, s, rvars, rvars1)
+    cypher2 <- translateFormulaToCypher form2
     return (cypher1 ++ cypher2)
-translateFormulaToCypher rvars (FChoice disj1 disj2) env =
+translateFormulaToCypher  (FChoice disj1 disj2)  =
     error "translateFormulaToCypher: unsupported"
-translateFormulaToCypher rvars FOne env = return []
-translateFormulaToCypher rvars FZero env =
+translateFormulaToCypher  FOne  = return []
+translateFormulaToCypher  FZero  =
     error "translateFormulaToCypher: unsupported"
-translateFormulaToCypher rvars (FAtomic a) env = do
-    cypher <- translateQueryAtomToCypher rvars Pos a env
+translateFormulaToCypher  (FAtomic a)  = do
+    cypher <- translateQueryAtomToCypher  a
     return [cypher]
-translateFormulaToCypher rvars (FInsert lits@(Lit sign0 a)) env = do
+translateFormulaToCypher  (FInsert lits@(Lit sign0 a))  = do
     cypher <- case sign0 of
-        Pos -> translateInsertAtomToCypher rvars a env
-        Neg -> translateDeleteAtomToCypher rvars a env
+        Pos -> translateInsertAtomToCypher  a
+        Neg -> translateDeleteAtomToCypher  a
     return [cypher]
-translateFormulaToCypher rvars (Aggregate Not (FAtomic a)) env = do
-    cypher <- translateQueryAtomToCypher rvars Neg a env
-    return [cypher]
+translateFormulaToCypher  (FReturn vars)  =
+    return []
 
-translateFormulaToCypher _ _ _ = do
+translateFormulaToCypher _ = do
     error "translateFormulaToCypher: unsupported"
 
 -- instantiate a cypher mapping
@@ -561,62 +577,69 @@ instantiate vars matchpattern pattern args = do
     let varmap = mconcat (zipWith cypherVarExprMap internalvars (map CypherVarExpr newvars)) <> mconcat (zipWith cypherVarExprMap vars args)
     return (subst varmap matchpattern, subst varmap pattern)
 -- translate atom to cypher in a query
-translateQueryAtomToCypher :: [Var] -> Sign -> Atom -> [Var] -> TransMonad Cypher
-translateQueryAtomToCypher rvars thesign atom env = do
-    (CypherBuiltIn builtin, predtablemap) <- get
+translateQueryAtomToCypher :: Atom -> TransMonad Cypher
+translateQueryAtomToCypher atom  = do
+    (CypherBuiltIn builtin, predtablemap, s, rvars, env) <- get
     let (Atom pred1 args) = atom
-    let exprs = convert args
+    let exprs = subst s (convert args)
     --try builtin first
     case lookup pred1 builtin of
         Just builtinpred -> do
-            builtinpred thesign exprs
-        Nothing -> case thesign of
-            Pos -> case lookup pred1 predtablemap of
+            cypher <- builtinpred exprs
+            (_, _, s, _, _) <- get
+            return (cypher <> creturn (map (\(Var var) -> (subst s (CypherVarExpr (CypherVar var)), CypherVar var)) rvars))
+        Nothing -> case lookup pred1 predtablemap of
                 Just (vars, matchpattern, pattern, _) -> do
                     (matchpattern, pattern) <- instantiate vars matchpattern pattern exprs
                     return (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch (matchpattern <> pattern) <> creturn (map (\(Var var) -> (CypherVarExpr (CypherVar var), CypherVar var)) rvars)))
                 Nothing -> error (show pred1 ++ " is not defined")
-            Neg -> error ("negative literal is not supported")
 
-translateDeleteAtomToCypher :: [Var] -> Atom -> [Var] -> TransMonad Cypher
-translateDeleteAtomToCypher rvars atom env = do
-    (CypherBuiltIn builtin, predtablemap) <- get
+translateDeleteAtomToCypher :: Atom -> TransMonad Cypher
+translateDeleteAtomToCypher atom = do
+    (CypherBuiltIn builtin, predtablemap, s, rvars, env) <- get
     let (Atom pred1 args) = atom
     case lookup pred1 predtablemap of
         Just (vars, matchpattern, pattern, _) -> do
-            (matchpattern, pattern) <- instantiate vars matchpattern pattern (convert args)
+            (matchpattern, pattern) <- instantiate vars matchpattern pattern (subst s (convert args))
             -- generate a list of vars of match pattern and pattern, the vars that are in pattern but not match pattern needs to be deleted
             -- if the var is prop var then it is set to NULL, if it is a node var then it is deleted
-            let mfvt = fvType Root matchpattern
-            let fvt = fvType Root pattern
-            let mfvt1 = map (\(x,_,_,_) -> x) mfvt
-            let (del, setnull) = partition (\(v, c, p, t) -> t == CypherNodeVar) (filter (\(x,_,_,_) -> not (elem x mfvt1)) fvt)
-            return (mergeDeleteAndSetNull (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch (matchpattern <> pattern) <> delete (nub (map (\(a,_,_,_)->a) del))
-                 <> set (map (\(_, Dot v prop, _, var) -> (CypherDotExpr (CypherVarExpr v) prop, CypherNullExpr)) setnull)
+            let mfvt = pathType Root matchpattern
+            let fvt = pathType Root pattern \\ mfvt
+            return (mergeDeleteAndSetNull (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch (matchpattern <> pattern)
+                 <> mconcat (map (\t ->case t of
+                         CypherNodePathType v _ -> delete [v]
+                         CypherEdgePathType _ v _ _ -> delete [v]
+                         CypherPropertyPathType v prop e -> set [(CypherDotExpr (CypherVarExpr v) prop, CypherNullExpr)]) fvt)
                  <> creturn (map (\(Var var )-> (CypherVarExpr (CypherVar var), CypherVar var)) rvars))))
         Nothing -> error (show pred1 ++ " is not defined")
 
-translateInsertAtomToCypher :: [Var] -> Atom -> [Var] -> TransMonad Cypher
-translateInsertAtomToCypher rvars x@(Atom pred1 args) env = do
-    (CypherBuiltIn builtin, predtablemap) <- get
+translateInsertAtomToCypher :: Atom -> TransMonad Cypher
+translateInsertAtomToCypher (Atom pred1 args) = do
+    (CypherBuiltIn builtin, predtablemap, s, rvars, env) <- get
     case lookup pred1 predtablemap of
         Just (vars, matchpattern, pattern, _) -> do
-            (matchpattern, pattern) <- instantiate vars matchpattern pattern (convert args)
+            (matchpattern, pattern) <- instantiate vars matchpattern pattern (subst s (convert args))
             -- generate a list of vars of match pattern and pattern, the vars that are in pattern but not match pattern needs to be inserted
             -- if the var is prop var then it is set to a new value, if it is a node var then it is created
-            let mfvt = fvType Root matchpattern
-            let fvt = fvType Root pattern
-            let (cre, setexpr) = partition (\(v, c, p, t) ->  t == CypherNodeVar) (fvt \\ mfvt)
-            return (mergeCreateAndSet (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch matchpattern <> create (map (\(var, p, nonvarprops, t) -> case p of
-                      Edge srcv tgtv l -> edgevlp' (nodev' srcv) var l nonvarprops (nodev' tgtv)
-                      Node l -> nodevlp' var l nonvarprops
-                      ) cre)
-                 <> set (map (\(var, Dot v prop, _, _) -> (CypherDotExpr (CypherVarExpr v) prop, CypherVarExpr var)) setexpr)
+            let mfvt = pathType Root matchpattern
+            let fvt = pathType Root pattern \\ mfvt
+            return (mergeCreateAndSet (extractPropertyVarInMatch (map (\(Var var)->CypherVar var) env) (cmatch matchpattern
+                 <> mconcat (map (\t ->case t of
+                        CypherNodePathType var l -> create [nodevl' var l]
+                        CypherEdgePathType srcv var l tgtv-> create [edgevl' (nodev' srcv) var l (nodev' tgtv)]
+                        CypherPropertyPathType v prop e -> set [(CypherDotExpr (CypherVarExpr v) prop, e)]) fvt)
                  <> creturn (map (\(Var var) -> (CypherVarExpr (CypherVar var), CypherVar var)) rvars))))
         Nothing -> error (show pred1 ++ " is not defined")
 
-data CypherTrans = CypherTrans CypherBuiltIn [String] CypherPredTableMap
+addDummyIfNull :: Cypher -> TransMonad Cypher
+addDummyIfNull (Cypher [] m w s c d) = do
+    dummy <- lift $ new (CypherVar "dummy")
+    return (Cypher [(CypherIntConstExpr 1, dummy)] m w s c d)
+addDummyIfNull cypher = return cypher
 
+data CypherTrans = CypherTrans CypherBuiltIn CypherPredTableMap
+
+nodevl' v l = GraphNodePattern (NodePattern (Just ( v)) ( l) [])
 nodevl v l = GraphNodePattern (NodePattern (Just (CypherVar v)) (Just l) [])
 nodelp l ps = GraphNodePattern (NodePattern Nothing (Just l) ps)
 nodep ps = GraphNodePattern (NodePattern Nothing Nothing ps)
@@ -631,6 +654,7 @@ nodevlp v l ps = GraphNodePattern (NodePattern (Just (CypherVar v)) (Just l) ps)
 
 
 edgel n1 l n2 = GraphEdgePattern n1 (NodePattern Nothing (Just l) []) n2
+edgevl' n1 v l n2 = GraphEdgePattern n1 (NodePattern (Just ( v)) ( l) []) n2
 edgevl n1 v l n2 = GraphEdgePattern n1 (NodePattern (Just (CypherVar v)) (Just l) []) n2
 edgevlp' n1 v l ps n2 = GraphEdgePattern n1 (NodePattern (Just v) l ps) n2
 edgevlp n1 v l ps n2 = GraphEdgePattern n1 (NodePattern (Just (CypherVar v)) (Just l) ps) n2
@@ -651,11 +675,16 @@ instance Convertible MapResultRow CypherEnv where
 instance Convertible ResultValue CypherExpr where
     safeConvert (IntValue i) = Right (CypherIntConstExpr i)
     safeConvert (StringValue i) = Right (CypherStringConstExpr i)
+    safeConvert (Null) = Right (CypherNullExpr)
 
 instance Convertible Expr CypherExpr where
     safeConvert (IntExpr i) = Right (CypherIntConstExpr i)
     safeConvert (StringExpr i) = Right (CypherStringConstExpr i)
     safeConvert (VarExpr (Var i)) = Right (CypherVarExpr (CypherVar i))
+    safeConvert (NullExpr) = Right (CypherNullExpr)
+    safeConvert (PatternExpr p) = Right (CypherStringConstExpr p)
+    safeConvert (CastExpr TextType e) = Right (CypherAppExpr "toString" [convert e])
+    safeConvert (CastExpr NumberType e) = Right (CypherAppExpr "toInt" [convert e])
 
 instance Convertible [Expr] [CypherExpr] where
         safeConvert  = mapM safeConvert
@@ -671,6 +700,7 @@ translateableCypher trans (FSequencing form1 form2) = do
     translateableCypher trans form1
     translateableCypher trans form2
 translateableCypher trans (FChoice _ _) = lift $ Nothing
+translateableCypher trans (FPar _ _) = lift $ Nothing
 translateableCypher _ (FAtomic _) = do
     cs <- get
     if csUpdate cs
@@ -689,6 +719,7 @@ translateableCypher trans (FTransaction) = lift $ Nothing
 translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
 translateableCypher trans (Aggregate _ _)  = lift $ Nothing
+translateableCypher trans (FReturn _)  = lift $ Nothing
 
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
@@ -704,15 +735,18 @@ instance IGenericDatabase01 CypherTrans where
                     _ -> bottom) args) \/ varDomainSize
                 else varDomainSize) where
                     isBuiltIn = name `member` builtin
-                    (CypherTrans (CypherBuiltIn builtin) _ predtablemap) = trans
+                    (CypherTrans (CypherBuiltIn builtin) predtablemap) = trans
 
     gTranslateQuery trans vars query env =
-        let (CypherTrans builtin _ predtablemap) = trans in
-            return (runNew (evalStateT (translateQueryToCypher (toAscList vars) query (toAscList env)) (builtin, predtablemap)))
+        let (CypherTrans builtin predtablemap) = trans in
+            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, toAscList vars, toAscList env)))
     gSupported trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")
+
+instance New CypherVar CypherVar where
+    new (CypherVar v) = CypherVar <$> new (StringWrapper v)
 
 insertMaybe :: Ord a => Maybe a -> b -> Map a b -> Map a b
 insertMaybe l0 v m =

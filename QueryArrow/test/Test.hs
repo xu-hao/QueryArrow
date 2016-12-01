@@ -9,6 +9,7 @@ import FO.Data
 import Parser
 import SQL.SQL
 import qualified ICAT as ICAT
+import qualified BuiltIn as BuiltIn
 import qualified SQL.ICAT as SQL.ICAT
 import Cypher.ICAT
 import Cypher.Cypher
@@ -116,7 +117,7 @@ runQuery dbs query2 =
             Right (qu2, _) -> unsafePerformIO (getAllResults2 dbs  qu2)
 -}
 
-standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen") <*> pure ICAT.standardBuiltInPreds
+standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen") <*> pure BuiltIn.standardBuiltInPreds
 standardMappings =  (SQL.ICAT.loadMappings "../QueryArrow-gen/gen/SQL/ICATGen")
 
 sqlStandardTrans ns = SQL.ICAT.sqlStandardTrans ns <$> standardPreds <*> standardMappings <*> pure (Just "nextid")
@@ -221,6 +222,15 @@ translateQuery1 trans vars qu env =
   let (SQLTrans  builtin predtablemap _) = trans
       env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
       fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid="nextid"})))
+
+translateCypherQuery2 :: CypherTrans -> Set.Set Var -> Formula -> CypherQuery
+translateCypherQuery2 trans vars qu = translateCypherQuery1 trans vars qu Set.empty
+
+translateCypherQuery1 :: CypherTrans -> Set.Set Var -> Formula -> Set.Set Var -> CypherQuery
+translateCypherQuery1 trans vars qu env =
+  let (CypherTrans  builtin predtablemap) = trans
+      env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
+      fst (runNew (runStateT (translateQueryToCypher qu) (builtin, predtablemap, mempty, Set.toAscList vars, Set.toAscList env)))
 
 testTranslateSQLInsert :: String -> String -> String -> IO ()
 testTranslateSQLInsert ns qus sqls = do
@@ -426,20 +436,57 @@ main = hspec $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, n) cat.DATA_SIZE(x, y, s)"
                 sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure qu <*> pure Set.empty
                 sql `shouldBe` True
-        {- it "test translate cypher query 0" $ do
-            let qu = parseStandardQuery "DATA_NAME(x, y, z) return x y"
-            let (_, sql) = translateQuery2 (cypherTrans "") qu
-            print sql
-            show sql `shouldBe` "MATCH (var:DataObject) RETURN var.object_id,var.data_name"
+        it "test translate cypher query 0" $ do
+            qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z) return x y"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery2 cyphertrans (Set.fromList [Var "x", Var "y"]) qu
+            serialize cypher `shouldBe` "MATCH (var:DataObject)-[var1:resc_id]->(var0) WITH var.data_id AS x,var0.resc_id AS y RETURN x,y"
+        it "test translate cypher query 1" $ do
+            qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z) return x y z"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery2 cyphertrans (Set.fromList [Var "x", Var "y", Var "z"]) qu
+            serialize cypher `shouldBe` "MATCH (var:DataObject)-[var1:resc_id]->(var0) WITH var.data_id AS x,var0.resc_id AS y,var.data_name AS z RETURN x,y,z"
+        it "test translate cypher query 2" $ do
+            qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z) return z"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1  cyphertrans (Set.fromList [Var "z"]) qu (Set.fromList [Var "x", Var "y"])
+            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y MATCH (var:DataObject)-[var1:resc_id]->(var0) WHERE (var0.resc_id = y AND var.data_id = x) WITH var.data_name AS z RETURN z"
+        it "test translate cypher query 3" $ do
+            qu <- qParseStandardQuery "cat" "cat.COLL_NAME(x, y) return x y"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery2 cyphertrans (Set.fromList [Var "x", Var "y"]) qu
+            serialize cypher `shouldBe` "MATCH (var:Collection) WITH var.coll_id AS x,var.coll_name AS y RETURN x,y"
+        it "test translate cypher query 4" $ do
+            qu <- qParseStandardQuery "cat" "cat.COLL_NAME(x, y) return y"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1  cyphertrans (Set.fromList [Var "y"]) qu (Set.fromList [Var "x"])
+            serialize cypher `shouldBe` "WITH {x} AS x MATCH (var:Collection) WHERE var.coll_id = x WITH var.coll_name AS y RETURN y"
+        it "test translate cypher query 5" $ do
+            qu <- qParseStandardQuery "cat" "cat.DATA_OBJ(x, y) return x y"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1  cyphertrans (Set.fromList []) qu (Set.fromList [Var "x", Var "y"])
+            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y MATCH (var0:DataObject)-[var1:resc_id]->(var) WHERE (var0.data_id = x AND var.resc_id = y) RETURN 1"
+        it "test translate cypher query 6" $ do
+            qu <- qParseStandardQuery "cat" "cat.DATA_OBJ(x, y) return y"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1  cyphertrans (Set.fromList [Var "y"]) qu (Set.fromList [Var "x"])
+            serialize cypher `shouldBe` "WITH {x} AS x MATCH (var0:DataObject)-[var1:resc_id]->(var) WHERE var0.data_id = x WITH var.resc_id AS y RETURN y"
+        it "test translate cypher query 7" $ do
+            qu <- qParseStandardQuery "cat" "cat.DATA_OBJ(x, y) return x y"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1  cyphertrans (Set.fromList [Var "x", Var "y"]) qu (Set.fromList [])
+            serialize cypher `shouldBe` "MATCH (var0:DataObject)-[var1:resc_id]->(var) WITH var0.data_id AS x,var.resc_id AS y RETURN x,y"
         it "test translate cypher insert 0" $ do
-            let qu = parseStandardInsert "DATA_NAME(x, \"foo\") insert DATA_SIZE(x, 1000)"
-            let sql = translateInsert (cypherTrans "") qu
-            show (snd sql) `shouldBe` "MATCH (var:DataObject{data_name:'foo'}) SET var.data_size = 1000"
+            qu <- qParseStandardQuery "cat" "insert cat.DATA_NAME(x, y, z)"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1 cyphertrans (Set.fromList []) qu (Set.fromList [Var "x", Var "y",Var "z"])
+            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y,{z} AS z MATCH (var:DataObject)-[var1:resc_id]->(var0) WHERE (var0.resc_id = y AND var.data_id = x) SET var.data_name = z RETURN 1"
         it "test translate cypher insert 1" $ do
-            let qu = parseStandardInsert "insert DATA_OBJ(1) DATA_NAME(1, \"foo\") DATA_SIZE(1, 1000)"
-            let sql = translateInsert (cypherTrans "") qu
-            show (snd sql) `shouldBe` "CREATE (var:DataObject{object_id:1,data_name:'foo',data_size:1000})"
-        it "test translate cypher insert 2" $ do
+            qu <- qParseStandardQuery "cat" "insert cat.DATA_OBJ(1, 2) cat.DATA_NAME(1, 2, \"foo\") cat.DATA_SIZE(1, 2, 1000)"
+            cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
+            let cypher = translateCypherQuery1 cyphertrans (Set.fromList []) qu (Set.fromList [Var "x", Var "y",Var "z"])
+            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y,{z} AS z MATCH (var{resc_id:2}) CREATE (var0:DataObject{data_id:1}),(var0)-[var1:resc_id]->(var) WITH 1 AS dummy MATCH (var2:DataObject{data_id:1})-[var4:resc_id]->(var3{resc_id:2}) SET var2.data_name = 'foo' WITH 1 AS dummy0 MATCH (var5:DataObject{data_id:1})-[var7:resc_id]->(var6{resc_id:2}) SET var5.data_size = 1000 WITH 1 AS dummy1 RETURN 1"
+        {- it "test translate cypher insert 2" $ do
             let qu = parseStandardInsert "COLL_NAME(a,c) insert DATA_OBJ(1) DATA_NAME(1, c) DATA_SIZE(1, 1000)"
             let sql = translateInsert (cypherTrans "") qu
             show (snd sql) `shouldBe` "MATCH (var:Collection) CREATE (var2:DataObject{object_id:1,data_name:var.coll_name,data_size:1000})"
