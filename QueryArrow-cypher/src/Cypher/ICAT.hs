@@ -26,19 +26,17 @@ cypherBuiltIn ns =
             (lookupPred "le", \thesign args ->
                 return (cwhere (CypherCompCond (case thesign of
                     Pos -> "<="
-                    Neg -> ">") ( (head args)) ( (args !! 1)) Pos))),
+                    Neg -> ">") (head args) (args !! 1) Pos))),
             (lookupPred "lt", \thesign args ->
                 return (cwhere (CypherCompCond (case thesign of
                     Pos -> "<"
-                    Neg -> ">=") ( (head args)) ( (args !! 1)) Pos))),
+                    Neg -> ">=") (head args) (args !! 1) Pos))),
             (lookupPred "eq", \thesign args ->
                 return (cwhere (CypherCompCond (case thesign of
                     Pos -> "="
-                    Neg -> "<>") ( (head args)) ( (args !! 1)) Pos))),
-            (lookupPred "like", \thesign args ->
-                error "cypherBuiltIn: unsupported like operator, use like_regex"),
+                    Neg -> "<>") (head args) (args !! 1) Pos))),
             (lookupPred "like_regex", \thesign args ->
-                return (cwhere (CypherCompCond "=~" ( (head args)) ( (args !! 1)) thesign)))
+                return (cwhere (CypherCompCond "=~" (head args) (args !! 1) thesign)))
         ])
 
 cypherMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherPredTableMap
@@ -78,4 +76,6 @@ makeICATCypherDBAdapter :: String -> [String] -> Neo4jDatabase -> IO (NoConnecti
 makeICATCypherDBAdapter ns [predsPath, mappingsPath] conn = do
     preds <- loadPreds predsPath
     mappings <- loadMappings mappingsPath
-    return (NoConnectionDatabase (GenericDatabase  (cypherTrans ns preds mappings) conn ns (qStandardPreds ns preds ++ qStandardBuiltInPreds ns)))
+    let (CypherBuiltIn cypherbuiltin) = cypherBuiltIn ns
+    let cypherbuiltinpreds = keys cypherbuiltin
+    return (NoConnectionDatabase (GenericDatabase  (cypherTrans ns preds mappings) conn ns (qStandardPreds ns preds ++ cypherbuiltinpreds)))

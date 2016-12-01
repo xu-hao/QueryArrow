@@ -15,6 +15,6 @@
     "server_port" : 12345,
     "server_protocols" : ["tcp"],
     "max_cc" : 1024,
-    "rewriting_file_path" : "rewriting-plugin-gen.rules",
-    "include_file_path": ["."]
+    "rewriting_file_path" : "../QueryArrow-gen/rewriting-plugin-gen.rules",
+    "include_file_path": ["../QueryArrow-gen"]
 }

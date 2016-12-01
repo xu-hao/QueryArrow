@@ -19,4 +19,4 @@ import Data.Map.Strict (lookup)
 
 import QueryArrow.Data.Template
 
-$(structs "test/tdb-plugin.json")
+$(structs "../QueryArrow-gen/tdb-plugin-gen.json")

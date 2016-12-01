@@ -267,27 +267,24 @@ type PredTableMap = Map Pred (Table, [SQLQualifiedCol])
 -- table -> cols, primary key
 type Schema = Map TableName ([Col], [Col])
 -- builtin predicate -> op, neg op
-newtype BuiltIn = BuiltIn (Map Pred (Sign -> [Expr] -> TransMonad SQL))
+newtype BuiltIn = BuiltIn (Map Pred ([Expr] -> TransMonad SQL))
 
-simpleBuildIn :: String -> (Sign -> [SQLExpr] -> TransMonad SQL) -> Sign -> [Expr] -> TransMonad SQL
-simpleBuildIn n builtin sign args = do
+simpleBuildIn :: String -> ([SQLExpr] -> TransMonad SQL) -> [Expr] -> TransMonad SQL
+simpleBuildIn n builtin  args = do
     let err m = do
                 a <- m
                 case a of
                     Left expr -> return expr
                     Right _ -> error ("unconstrained argument to built-in predicate " ++ n)
     sqlExprs <- mapM (err . sqlExprFromArg) args
-    builtin sign sqlExprs
+    builtin sqlExprs
 
-repBuildIn :: ([Either SQLExpr Var] -> [(Var, SQLExpr)]) -> Sign -> [Expr] -> TransMonad SQL
-repBuildIn builtin Pos args = do
+repBuildIn :: ([Either SQLExpr Var] -> [(Var, SQLExpr)]) -> [Expr] -> TransMonad SQL
+repBuildIn builtin args = do
     sqlExprs <- mapM sqlExprFromArg args
     let varexprs = builtin sqlExprs
     mapM_ (uncurry addVarRep) varexprs
     return mempty
-
-repBuildIn builtin Neg args =
-    return sqlfalse
 
 
 data TransState = TransState {
@@ -492,7 +489,7 @@ findRep v =  do
         Just expr -> return expr
 
 translateFormulaToSQL :: Formula -> TransMonad SQL
-translateFormulaToSQL (FAtomic a) = translateAtomToSQL Pos a
+translateFormulaToSQL (FAtomic a) = translateAtomToSQL a
 translateFormulaToSQL (FSequencing form1 form2) =
     mappend <$> translateFormulaToSQL form1 <*> translateFormulaToSQL form2
 translateFormulaToSQL (FOne) =
@@ -508,9 +505,6 @@ translateFormulaToSQL (FZero) =
 translateFormulaToSQL (Aggregate Exists conj) = do
     sql <- translateFormulaToSQL conj
     return (sqlexists sql)
-
-translateFormulaToSQL (Aggregate Not (FAtomic a)) =
-    translateAtomToSQL Neg a
 
 translateFormulaToSQL (Aggregate Not form) =
     snot <$> translateFormulaToSQL form
@@ -571,14 +565,14 @@ lookupTableVar tablename prikeyargs = do
             addTable tablename prikeyargs sqlvar2
             return (True, sqlvar2)
 
-translateAtomToSQL :: Sign -> Atom -> TransMonad SQL
-translateAtomToSQL thesign (Atom name args) = do
+translateAtomToSQL :: Atom -> TransMonad SQL
+translateAtomToSQL (Atom name args) = do
     ts <- get
     let (BuiltIn builtints) = builtin ts
     --try builtin first
     case lookup name builtints of
         Just builtinpred ->
-            builtinpred thesign args
+            builtinpred args
         Nothing -> case lookup name (predtablemap ts) of
             Just (table, cols) -> do
                 (tables, varmap, cols2, args2) <- case table of
@@ -599,9 +593,8 @@ translateAtomToSQL thesign (Atom name args) = do
                 let cols3 = map (subst varmap) cols2
                 condsFromArgs <- mapM condFromArg (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
-                return (case thesign of
-                            Pos -> SQLQuery [] tables2 cond3 [] top False []
-                            Neg -> SQLQuery [] [] (SQLNotCond (SQLExistsCond (SQLQuery [] tables2 cond3 [] top False []))) [] top False [])
+                return (SQLQuery [] tables2 cond3 [] top False []
+                            )
             Nothing -> error (show name ++ " is not defined")
 
 

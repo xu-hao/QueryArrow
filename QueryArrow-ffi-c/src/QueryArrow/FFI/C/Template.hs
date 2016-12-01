@@ -540,7 +540,7 @@ functions path = do
                             getInputOutputTypes t = error ("getInputOutputTypes: error unsupported type " ++ show t)
                             getTypes [] = []
                             getTypes (Property "Int" : t) = IntType : getTypes t
-                            getTypes (Property "Text" : t) = IntType : getTypes t
+                            getTypes (Property "Text" : t) = StringType : getTypes t
                             getTypes t = error ("getTypes: error unsupported type " ++ show t)
                             (inputtypes, outputtypes) = getInputOutputTypes ts in
                             concat <$> sequence [

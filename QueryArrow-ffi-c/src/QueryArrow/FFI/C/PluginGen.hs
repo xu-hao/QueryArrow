@@ -34,4 +34,4 @@ import System.Log.Logger (errorM, infoM)
 import Logging
 import QueryArrow.Data.PredicatesGen
 
-$(functions "../QueryArrow-ffi-service/test/tdb-plugin.json")
+$(functions "../QueryArrow-gen/tdb-plugin-gen.json")
