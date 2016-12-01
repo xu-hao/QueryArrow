@@ -4,7 +4,7 @@ module Cypher.BuiltIn where
 import FO.Data
 import Cypher.Cypher
 
-import Data.Map.Strict (fromList, insert)
+import Data.Map.Strict (fromList)
 import ListUtils (subset)
 import Control.Monad.Trans.State.Strict (get, put)
 import Data.Convertible (convert)
