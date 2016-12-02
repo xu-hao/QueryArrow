@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   Serialization QueryArrow.RPC.Message QueryArrow.RPC.DB
+                   QueryArrow.Serialization QueryArrow.RPC.Message QueryArrow.RPC.DB
   build-depends:
                    base >= 4,
                    aeson,

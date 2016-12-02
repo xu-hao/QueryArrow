@@ -7,15 +7,15 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   ElasticSearch.ElasticSearch
-                   ElasticSearch.ElasticSearchConnection
-                   ElasticSearch.ESQL
-                   ElasticSearch.Query
-                   ElasticSearch.QueryResult
-                   ElasticSearch.QueryResultHits
-                   ElasticSearch.ICAT
-                   ElasticSearch.Record
-                   HTTP.ElasticSearchUtils
+                   QueryArrow.ElasticSearch.ElasticSearch
+                   QueryArrow.ElasticSearch.ElasticSearchConnection
+                   QueryArrow.ElasticSearch.ESQL
+                   QueryArrow.ElasticSearch.Query
+                   QueryArrow.ElasticSearch.QueryResult
+                   QueryArrow.ElasticSearch.QueryResultHits
+                   QueryArrow.ElasticSearch.ICAT
+                   QueryArrow.ElasticSearch.Record
+                   QueryArrow.HTTP.ElasticSearchUtils
   build-depends:
                    base >= 4,
                    containers,

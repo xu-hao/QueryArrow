@@ -2,14 +2,14 @@
 
 module QueryArrow.Data.Template where
 
-import FO.Data
-import DB.DB
-import Translation
-import Rewriting
-import Config
-import Utils
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
+import QueryArrow.Translation
+import QueryArrow.Rewriting
+import QueryArrow.Config
+import QueryArrow.Utils
 import Data.Namespace.Path
-import SQL.ICAT
+import QueryArrow.SQL.ICAT
 
 import Prelude hiding (lookup)
 import Language.Haskell.TH hiding (Pred)

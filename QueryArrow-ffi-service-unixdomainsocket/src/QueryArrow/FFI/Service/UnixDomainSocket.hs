@@ -2,11 +2,11 @@
 
 module QueryArrow.FFI.Service.UnixDomainSocket where
 
-import FO.Data
-import DB.DB
-import DBMap
-import Serialization
-import Config
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
+import QueryArrow.DBMap
+import QueryArrow.Serialization
+import QueryArrow.Config
 import QueryArrow.FFI.Service
 import QueryArrow.Data.PredicatesGen
 import QueryArrow.RPC.Message

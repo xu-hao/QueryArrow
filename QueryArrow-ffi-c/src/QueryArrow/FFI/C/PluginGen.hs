@@ -2,13 +2,13 @@
 
 module QueryArrow.FFI.C.PluginGen where
 
-import FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
-import DB.DB
-import QueryPlan
-import DB.ResultStream
+import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
+import QueryArrow.DB.DB
+import QueryArrow.QueryPlan
+import QueryArrow.DB.ResultStream
 import QueryArrow.FFI.C.Template
-import Config
-import Utils(constructDBPredMap)
+import QueryArrow.Config
+import QueryArrow.Utils(constructDBPredMap)
 
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList, empty)
@@ -31,7 +31,8 @@ import Foreign.C.String
 import Foreign.Storable
 import Foreign.Marshal.Array
 import System.Log.Logger (errorM, infoM)
-import Logging
+import QueryArrow.Logging
 import QueryArrow.Data.PredicatesGen
+import QueryArrow.Gen
 
-$(functions "../QueryArrow-gen/tdb-plugin-gen.json")
+$(functions configFilePath)

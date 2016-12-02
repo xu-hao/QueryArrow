@@ -7,12 +7,12 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   Cypher.Neo4j
-                   Cypher.Neo4jConnection
-                   Cypher.BuiltIn
-                   Cypher.Cypher
-                   Cypher.ICAT
-                   Cypher.SQLToCypher
+                   QueryArrow.Cypher.Neo4j
+                   QueryArrow.Cypher.Neo4jConnection
+                   QueryArrow.Cypher.BuiltIn
+                   QueryArrow.Cypher.Cypher
+                   QueryArrow.Cypher.ICAT
+                   QueryArrow.Cypher.SQLToCypher
   build-depends:
                    base >= 4,
                    containers,

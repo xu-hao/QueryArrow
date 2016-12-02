@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   DBMap
+                   QueryArrow.DBMap
   build-depends:
                    base >= 4,
                    containers,

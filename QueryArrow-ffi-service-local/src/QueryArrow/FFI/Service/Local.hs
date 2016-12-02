@@ -2,10 +2,10 @@
 
 module QueryArrow.FFI.Service.Local where
 
-import FO.Data
-import DB.DB
-import QueryPlan
-import DB.ResultStream
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
+import QueryArrow.QueryPlan
+import QueryArrow.DB.ResultStream
 
 import Prelude hiding (lookup)
 import Data.Set (fromList, empty)
@@ -17,12 +17,10 @@ import Control.Monad.Error.Class (throwError)
 import qualified Data.Map.Strict as Map
 import Control.Monad.IO.Class (liftIO)
 import System.Log.Logger (infoM)
-import QueryArrow.Data.Abstract
 import QueryArrow.FFI.Service
 import QueryArrow.Data.PredicatesGen
-import Config
-import Utils
-import DBMap
+import QueryArrow.Config
+import QueryArrow.DBMap
 
 data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula db) => Session db (ConnectionType db)
 

@@ -1,7 +1,7 @@
 module QueryArrow.FFI.Service where
 
-import FO.Data
-import DB.DB
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
 
 import Data.Text (Text)
 import Control.Monad.Trans.Either (EitherT)

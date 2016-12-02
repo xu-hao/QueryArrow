@@ -2,7 +2,7 @@
 
 module QueryArrow.Data.Abstract where
 
-import FO.Data
+import QueryArrow.FO.Data
 
 import Prelude hiding (lookup)
 import Control.Monad.Reader

@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.GenQuery where
 
-import FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
+import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
 
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList, empty)
@@ -29,8 +29,7 @@ import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
 import QueryArrow.Data.Abstract
 import QueryArrow.Data.PredicatesGen
-import FO.Data
-import ICAT
+import QueryArrow.ICAT
 
 foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
 hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int

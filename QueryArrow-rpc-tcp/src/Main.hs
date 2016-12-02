@@ -31,26 +31,26 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import DB.DB hiding (Null)
-import DBMap
-import Config
+import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.DBMap
+import QueryArrow.Config
 
 import Prelude hiding (lookup, length)
 import Control.Monad.Trans.Resource
 import System.Environment
 import Data.Time
 import Control.Monad.Except
-import Serialization
+import QueryArrow.Serialization
 import System.Log.Logger
-import Logging
+import QueryArrow.Logging
 import Network
-import Control.Monad.Logger.HSLogger ()
+import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Concurrent
 import QueryArrow.RPC.Message
 import Control.Monad.Trans.Either
 import QueryArrow.RPC.DB
 import System.IO (Handle, IOMode(..))
-import FO.Data
+import QueryArrow.FO.Data
 import qualified Network.Socket as NS
 import Control.Exception (bracket)
 import System.Directory (removeFile)

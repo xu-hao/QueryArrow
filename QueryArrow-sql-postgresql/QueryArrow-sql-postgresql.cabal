@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   SQL.HDBC.PostgreSQL
+                   QueryArrow.SQL.HDBC.PostgreSQL
   build-depends:
                    base >= 4,
                    containers,

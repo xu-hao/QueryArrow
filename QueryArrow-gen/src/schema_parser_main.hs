@@ -6,8 +6,8 @@ import Data.List
 import Control.Applicative ((*>), (<*), (<$>), (<*>))
 import System.Environment
 import Language.Haskell.TH
-import SQL.SQL hiding (schema)
-import FO.Data
+import QueryArrow.SQL.SQL hiding (schema)
+import QueryArrow.FO.Data
 
 import SchemaParser
 

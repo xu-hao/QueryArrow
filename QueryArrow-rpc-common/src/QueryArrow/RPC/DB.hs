@@ -2,19 +2,19 @@
 
 module QueryArrow.RPC.DB where
 
-import DB.ResultStream
-import DB.DB hiding (Null)
-import FO.Data
-import Utils
-import Parser
+import QueryArrow.DB.ResultStream
+import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.FO.Data
+import QueryArrow.Utils
+import QueryArrow.Parser
 
 import Prelude hiding (lookup, length)
-import Data.Map.Strict (fromList, keysSet)
+import Data.Map.Strict (keysSet)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
 import Control.Monad.Except
 import System.Log.Logger
-import Control.Monad.Logger.HSLogger ()
+import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Monad.Trans.Either
 import Data.Set (Set)
 import Text.Parsec

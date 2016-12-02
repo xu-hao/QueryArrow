@@ -2,13 +2,13 @@
 
 module QueryArrow.FFI.C.Plugin where
 
-import FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
-import DB.DB
-import QueryPlan
-import DB.ResultStream
+import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
+import QueryArrow.DB.DB
+import QueryArrow.QueryPlan
+import QueryArrow.DB.ResultStream
 import QueryArrow.FFI.C.Template
-import Config
-import Utils(constructDBPredMap)
+import QueryArrow.Config
+import QueryArrow.Utils(constructDBPredMap)
 
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList, empty)
@@ -33,7 +33,7 @@ import Foreign.Marshal.Array
 import System.Log.Logger (errorM, infoM)
 import Data.Maybe (fromMaybe)
 import Control.Monad (foldM)
-import Logging
+import QueryArrow.Logging
 import QueryArrow.FFI.Service
 import QueryArrow.Data.PredicatesGen
 import QueryArrow.Data.Abstract

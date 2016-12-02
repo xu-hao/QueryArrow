@@ -2,8 +2,8 @@
 
 module QueryArrow.FFI.Auxiliary where
 
-import FO.Data
-import DB.DB
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)
 import Data.Text (Text)

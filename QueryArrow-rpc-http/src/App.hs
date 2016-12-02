@@ -5,13 +5,13 @@
 
 module Main where
 
-import FO.Data
-import DB.DB hiding (Null)
-import DBMap
-import Config
-import Utils
-import Parser
-import DB.ResultStream
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.DBMap
+import QueryArrow.Config
+import QueryArrow.Utils
+import QueryArrow.Parser
+import QueryArrow.DB.ResultStream
 
 import Text.Parsec (runParser)
 import Data.Set (fromList)
@@ -24,11 +24,11 @@ import Control.Monad.Trans.Resource
 import System.Environment
 import Data.Time
 import Control.Monad.Except
-import Serialization
+import QueryArrow.Serialization
 import Data.Aeson
 import qualified Data.Text as T
 import System.Log.Logger
-import Logging
+import QueryArrow.Logging
 import           Yesod
 import QueryArrow.RPC.DB
 import Control.Monad.Trans.Either

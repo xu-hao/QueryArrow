@@ -2,35 +2,27 @@
 
 module QueryArrow.FFI.Service.TCP where
 
-import FO.Data
-import DB.DB
-import QueryPlan
-import DB.ResultStream
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)
-import Data.Set (fromList, empty)
+import Data.Set (fromList)
 import Data.Text (pack)
 import Control.Exception (SomeException, try)
-import Control.Monad.Trans.Resource (runResourceT)
 import Control.Monad.Error.Class (throwError)
-import qualified Data.Map.Strict as Map
 import Control.Monad.IO.Class (liftIO)
 import System.Log.Logger (infoM, errorM)
 import Data.Aeson
-import QueryArrow.Data.Abstract
 import QueryArrow.FFI.Service
 import QueryArrow.Data.PredicatesGen
 import QueryArrow.RPC.Message
-import Config
-import Utils
-import DBMap
-import Serialization
+import QueryArrow.Config
+import QueryArrow.DBMap
+import QueryArrow.Serialization
 import GHC.Generics
 import System.IO (Handle)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Network
-import ICAT
-import Config
 
 data TcpServiceSession = TcpServiceSession Handle Predicates
 

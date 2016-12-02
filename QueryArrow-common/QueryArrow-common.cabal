@@ -7,26 +7,26 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   FO.Data
-                   FO.Domain
-                   DB.DB
-                   DB.GenericDatabase
-                   DB.NoConnection
-                   DB.NoPreparedStatement
-                   DB.ParametrizedStatement
-                   DB.ResultStream
-                   ICAT
-                   BuiltIn
-                   QueryPlan
-                   Sum
-                   Translation
-                   Cache
-                   Rewriting
-                   Logging
-                   Parser
-                   Config
-                   ListUtils
-                   Utils
+                   QueryArrow.FO.Data
+                   QueryArrow.FO.Domain
+                   QueryArrow.DB.DB
+                   QueryArrow.DB.GenericDatabase
+                   QueryArrow.DB.NoConnection
+                   QueryArrow.DB.NoPreparedStatement
+                   QueryArrow.DB.ParametrizedStatement
+                   QueryArrow.DB.ResultStream
+                   QueryArrow.ICAT
+                   QueryArrow.BuiltIn
+                   QueryArrow.QueryPlan
+                   QueryArrow.Sum
+                   QueryArrow.Translation
+                   QueryArrow.Cache
+                   QueryArrow.Rewriting
+                   QueryArrow.Logging
+                   QueryArrow.Parser
+                   QueryArrow.Config
+                   QueryArrow.ListUtils
+                   QueryArrow.Utils
   build-depends:
                    base >= 4,
                    containers,

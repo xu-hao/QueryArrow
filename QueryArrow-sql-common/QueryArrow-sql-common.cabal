@@ -7,10 +7,10 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   SQL.ICAT
-                   SQL.SQL
-                   SQL.BuiltIn
-                   SQL.HDBC
+                   QueryArrow.SQL.ICAT
+                   QueryArrow.SQL.SQL
+                   QueryArrow.SQL.BuiltIn
+                   QueryArrow.SQL.HDBC
   build-depends:
                    base >= 4,
                    containers,

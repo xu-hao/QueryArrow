@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   SQL.HDBC.Sqlite3
+                   QueryArrow.SQL.HDBC.Sqlite3
   build-depends:
                    base >= 4,
                    containers,

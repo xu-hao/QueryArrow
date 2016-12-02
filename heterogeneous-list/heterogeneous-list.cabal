@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   Data.Heterogeneous.List
+                   QueryArrow.Data.Heterogeneous.List
   build-depends:
                    base >= 4,
                    containers,

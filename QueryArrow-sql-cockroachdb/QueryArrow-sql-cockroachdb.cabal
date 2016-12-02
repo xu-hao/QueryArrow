@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   SQL.HDBC.CockroachDB
+                   QueryArrow.SQL.HDBC.CockroachDB
   build-depends:
                    base >= 4,
                    containers,

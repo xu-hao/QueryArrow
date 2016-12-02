@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   Control.Monad.Logger.HSLogger
+                   QueryArrow.Control.Monad.Logger.HSLogger
   build-depends:
                    base >= 4,
                    containers,

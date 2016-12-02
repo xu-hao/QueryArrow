@@ -59,6 +59,7 @@ packages:
     - QueryArrow-ffi-service-unixdomainsocket
     - QueryArrow-ffi-genquery
     - QueryArrow-cli
+    - QueryArrow-gen
     - heterogeneous-list
     - log-adapter
 # The following packages have been ignored due to incompatibility with the

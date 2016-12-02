@@ -2,12 +2,12 @@
 
 module QueryArrow.Data.PredicatesGen where
 
-import FO.Data
-import DB.DB
-import Translation
-import Rewriting
-import Config
-import Utils
+import QueryArrow.FO.Data
+import QueryArrow.DB.DB
+import QueryArrow.Translation
+import QueryArrow.Rewriting
+import QueryArrow.Config
+import QueryArrow.Utils
 import Data.Maybe (fromMaybe)
 
 import Prelude hiding (lookup)
@@ -18,5 +18,6 @@ import Data.List (nub)
 import Data.Map.Strict (lookup)
 
 import QueryArrow.Data.Template
+import QueryArrow.Gen
 
-$(structs "../QueryArrow-gen/tdb-plugin-gen.json")
+$(structs configFilePath)

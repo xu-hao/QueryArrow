@@ -31,14 +31,14 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import DB.ResultStream
-import DB.DB hiding (Null)
-import DBMap
-import Parser
+import QueryArrow.DB.ResultStream
+import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.DBMap
+import QueryArrow.Parser
 -- import Plugins
-import FO.Data
-import Config
-import Utils
+import QueryArrow.FO.Data
+import QueryArrow.Config
+import QueryArrow.Utils
 
 import Prelude hiding (lookup)
 import Data.Set (fromList)
@@ -50,7 +50,7 @@ import System.Environment
 import Control.Monad.Except
 import qualified Data.Text as T
 import System.Log.Logger
-import Logging
+import QueryArrow.Logging
 import Control.Monad.Trans.Either
 -- import Data.Serialize
 import qualified Data.Set as Set

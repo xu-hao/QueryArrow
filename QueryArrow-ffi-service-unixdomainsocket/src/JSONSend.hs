@@ -5,13 +5,13 @@ import Data.String
 import System.IO
 import System.Exit
 import System.Environment
-import Serialization
+import QueryArrow.Serialization
 import Network.Socket
 import QueryArrow.RPC.Message
-import FO.Data
+import QueryArrow.FO.Data
 import Data.Set (fromList)
 
-import Utils
+import QueryArrow.Utils
 
 main :: IO ()
 main = do

@@ -2,34 +2,19 @@
 
 module QueryArrow.FFI.C.Template where
 
-import FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..))
-import DB.DB
-import Translation
-import QueryPlan
-import DB.ResultStream
-import Rewriting
-import Config
-import Utils
+import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..))
+import QueryArrow.DB.DB
+import QueryArrow.Rewriting
 import Data.Namespace.Path
-import Data.Namespace.Namespace (lookupObject)
 
 import Prelude hiding (lookup)
-import Data.Set (Set, singleton, fromList, empty)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Control.Monad.Reader
-import Control.Applicative (liftA2, pure)
-import Control.Monad.Trans.Resource (runResourceT)
-import Data.Map.Strict (lookup)
 import qualified Data.Map.Strict as Map
-import Control.Monad.Trans.Either (EitherT, runEitherT)
-import Control.Monad.Error.Class (throwError)
 import Control.Monad.IO.Class (liftIO)
 import Language.Haskell.TH hiding (Pred)
-import Language.Haskell.TH.Syntax (VarBangType)
 import Data.Char (toLower)
-import Data.List (nub)
-import Data.Maybe (fromMaybe)
 import Foreign.C.String
 import Foreign.Ptr
 import Foreign.Storable

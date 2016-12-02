@@ -1,25 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 import Prelude hiding (lookup)
 import Control.Monad
-import Control.Monad.IO.Class
-import Data.Monoid
 import Data.String
 import System.IO
 import System.Exit
 import System.Environment
-import Data.List (intercalate, transpose)
-import Data.Aeson
-import Data.ByteString.Lazy (fromStrict)
-import qualified Data.ByteString.Char8 as B8
-import Serialization
+import QueryArrow.Serialization
 import Network
-import Data.Text (Text)
 import QueryArrow.RPC.Message
-import FO.Data
+import QueryArrow.FO.Data
 import Data.Set (fromList)
 -- import Data.Serialize
 
-import Utils
+import QueryArrow.Utils
 
 main :: IO ()
 main = do

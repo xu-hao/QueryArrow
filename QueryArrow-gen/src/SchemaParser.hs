@@ -6,13 +6,13 @@ import qualified Text.Parsec.Token as T
 import Text.ParserCombinators.Parsec
 import Control.Applicative ((*>), (<*), (<$>), (<*>))
 import Language.Haskell.TH
-import FO.Data
-import SQL.SQL
-import Utils
+import QueryArrow.FO.Data
+import QueryArrow.SQL.SQL
+import QueryArrow.Utils
 import System.IO.Unsafe
 import Data.List (partition)
 import Data.Char
-import ListUtils
+import QueryArrow.ListUtils
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
