@@ -13,7 +13,7 @@ replace s@(h : t) find repl =
         else h : replace t find repl
 
 main = defaultMainWithHooks simpleUserHooks {
-            preConf = \_ _ -> do
+            preBuild = \_ _ -> do
                 createDirectoryIfMissing True "gen"
                 createDirectoryIfMissing True "gen/SQL"
                 copyFile "schema.sql" "gen/schema.sql"
@@ -33,8 +33,4 @@ main = defaultMainWithHooks simpleUserHooks {
                 copyFile "rewriting-plugin.rules" "etc/QueryArrow/rewriting-plugin.rules"
                 conf <- readFile "tdb-plugin-gen.json"
                 writeFile "etc/QueryArrow/tdb-plugin-gen-abs.json" (replace conf "../QueryArrow-gen" "/etc/irods/QueryArrow")
-                ,
-            postClean = \_ _ _ _ -> do
-                removeDirectoryRecursive "gen"
-                removeDirectoryRecursive "etc"
       }
