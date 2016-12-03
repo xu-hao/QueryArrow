@@ -17,7 +17,7 @@ import QueryArrow.Data.PredicatesGen
 import QueryArrow.FFI.GenQuery.Data
 
 prefixes :: [String]
-prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER"]
+prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC"]
 
 extractPrefix :: String -> String
 extractPrefix "COLUMN_NAME_NOT_FOUND_510" = "COLL"
@@ -134,6 +134,19 @@ translateGenQueryColumnToPredicate  col =
           "meta_user_attr_name" -> _meta_attr_name @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "meta_user_attr_value" -> _meta_attr_value @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "meta_user_attr_units" -> _meta_attr_unit @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          -- rule
+          "rule_exec_id" -> _rule_exec_obj @@ [VarExpr (toVariable col)]
+          "rule_exec_name" -> _rule_exec_rule_name @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_rei_file_path" -> _rule_exec_rei_file_path @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_user_name" -> _rule_exec_user_name @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_address" -> _rule_exec_exe_address @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_time" -> _rule_exec_exe_time @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_frequency" -> _rule_exec_exe_frequency @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_priority" -> _rule_exec_priority @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_estimated_exe_time" -> _rule_exec_estimated_exe_time @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_notification_addr" -> _rule_exec_notification_addr @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_last_exe_time" -> _rule_exec_last_exe_time @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "rule_exec_status" -> _rule_exec_exe_status @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           _ -> error ("unsupported column " ++ col)
 
 toCondPredicate2 :: [String] -> Cond ->  AbstractFormula Predicates
