@@ -10,14 +10,6 @@ library
                    QueryArrow.Data.Heterogeneous.List
   build-depends:
                    base >= 4,
-                   containers,
-                   mtl,
-                   transformers,
-                   constraints,
-                   semigroups,
-                   semigroupoids,
-                   bytestring,
-                   unordered-containers,
-                   distributive
+                   constraints
   ghc-options:     -Wall -fPIC
   other-modules:

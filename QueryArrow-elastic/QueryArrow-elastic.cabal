@@ -37,8 +37,8 @@ library
                    array,
                    temporary,
                    process,
-                   distributive,
-                   pretty-tree,
+
+
                    conduit-combinators,
                    conduit,
                    http-conduit,

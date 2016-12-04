@@ -13,8 +13,6 @@ library
                    containers,
                    mtl,
                    transformers,
-                   semigroups,
-                   semigroupoids,
                    bytestring,
                    unordered-containers,
                    convertible,

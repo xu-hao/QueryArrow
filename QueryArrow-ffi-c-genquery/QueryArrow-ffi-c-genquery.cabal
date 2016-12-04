@@ -24,8 +24,6 @@ library
                    array,
                    temporary,
                    process,
-                   distributive,
-                   pretty-tree,
                    resourcet,
                    async,
                    time,

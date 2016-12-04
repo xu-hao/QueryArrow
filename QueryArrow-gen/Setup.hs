@@ -22,7 +22,7 @@ main = defaultMainWithHooks simpleUserHooks {
                     hPutStrLn handle add
                 return emptyHookedBuildInfo,
             postBuild = \_ _ _ _ -> do
-                callCommand ".stack-work/dist/x86_64-linux/Cabal-1.24.0.0/build/schema_parser_main/schema_parser_main"
+                callCommand ".stack-work/dist/x86_64-linux/Cabal-1.24.1.0/build/schema_parser_main/schema_parser_main"
                 createDirectoryIfMissing True "etc"
                 createDirectoryIfMissing True "etc/QueryArrow"
                 createDirectoryIfMissing True "etc/QueryArrow/gen"
@@ -30,7 +30,7 @@ main = defaultMainWithHooks simpleUserHooks {
                 copyFile "gen/ICATGen" "etc/QueryArrow/gen/ICATGen"
                 copyFile "gen/SQL/ICATGen" "etc/QueryArrow/gen/SQL/ICATGen"
                 copyFile "rewriting-plugin-common.rules" "etc/QueryArrow/rewriting-plugin-common.rules"
-                copyFile "rewriting-plugin.rules" "etc/QueryArrow/rewriting-plugin.rules"
+                copyFile "rewriting-plugin-gen.rules" "etc/QueryArrow/rewriting-plugin-gen.rules"
                 conf <- readFile "tdb-plugin-gen.json"
                 writeFile "etc/QueryArrow/tdb-plugin-gen-abs.json" (replace conf "../QueryArrow-gen" "/etc/irods/QueryArrow")
       }

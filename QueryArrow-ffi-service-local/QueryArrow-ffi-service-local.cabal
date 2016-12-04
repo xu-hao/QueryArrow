@@ -21,7 +21,7 @@ library
                    scientific,
                    array,
                    process,
-                   distributive,
+                   
                    resourcet,
                    time,
                    hslogger,
