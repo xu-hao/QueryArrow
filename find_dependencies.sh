@@ -19,7 +19,7 @@ for i in $ROOTS; do
     i5=${i4%-*}
     i6=$i5-$i3
     cp $i lib
-    ln -s lib/$i2 lib/$i6
+    ln -s $i2 lib/$i6
 done
 for i in $LIBS1; do
     i2=$(basename $i)
@@ -28,7 +28,7 @@ for i in $LIBS1; do
     i5=${i4%-*}
     i6=$i5-$i3
     cp $i lib
-    ln -s lib/$i2 lib/$i6
+    ln -s $i2 lib/$i6
 done
 for i in $LIBS3; do
     i2=$(basename $i)
@@ -37,7 +37,7 @@ for i in $LIBS3; do
     i5=${i4%-*}
     i6=$i5-$i3
     cp $i lib
-    ln -s lib/$i2 lib/$i6
+    ln -s $i2 lib/$i6
 done
 
 INCLUDES=$(find $ROOT -name "*_stub.h")
