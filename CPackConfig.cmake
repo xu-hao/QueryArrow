@@ -1,5 +1,5 @@
 SET(CPACK_GENERATOR "DEB")
-SET(CPACK_INSTALLED_DIRECTORIES "/home/xuh/git/cpacktest/lib" "/usr/lib" "/home/xuh/git/cpacktest/include" "/usr/include")
+SET(CPACK_INSTALLED_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/lib" "/usr/lib" "${CMAKE_CURRENT_LIST_DIR}/include" "/usr/include")
 SET(CPACK_PACKAGE_DESCRIPTION_FILE "LICENSE.txt")
 SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QueryArrow is a semantically unified SQL and NoSQL query system")
 # SET(CPACK_PACKAGE_EXECUTABLES "QueryArrow")
