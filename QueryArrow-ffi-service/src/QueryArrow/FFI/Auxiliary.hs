@@ -23,6 +23,10 @@ eCAT_NO_ROWS_FOUND = -808000
 eNULL :: Int
 eNULL = -1095000
 
+getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> Int -> EitherT Error IO [MapResultRow]
+getSomeResults svc session vars form params n =
+  getAllResult svc session vars (Aggregate (Limit n) form) params
+
 execAbstract :: QueryArrowService b -> b -> AbstractFormula Predicates -> MapResultRow -> EitherT Error IO ()
 execAbstract svc session form params =
   execQuery svc session  (formula (getPredicates svc session) form) params

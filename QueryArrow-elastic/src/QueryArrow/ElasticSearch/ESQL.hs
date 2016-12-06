@@ -102,7 +102,4 @@ instance IGenericDatabase01 ESTrans where
     gSupported _ (FAtomic _) _ = True
     gSupported _ (FInsert _) _ = True
     gSupported _ _ _ = False
-    gDeterminateVars _ vars (Atom _ args) =
-        (unions (map (\arg -> case arg of
-                (VarExpr v) -> singleton v
-                _ -> bottom) args)) \/ vars
+    gDeterminateVars _  = mempty

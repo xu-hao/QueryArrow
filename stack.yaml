@@ -53,6 +53,7 @@ packages:
     - QueryArrow-sql-sqlite3/
     - QueryArrow-common/
     - QueryArrow-inmemory/
+    - QueryArrow-remote
     - QueryArrow-ffi-service
     - QueryArrow-ffi-service-local
     - QueryArrow-ffi-service-tcp

@@ -13,6 +13,8 @@ import Data.Text (unpack)
 import Data.Map.Strict (fromList, keys)
 import Text.Read
 
+nextidPred :: String -> Pred
+nextidPred nextid = Pred (UQPredName nextid) (PredType ObjectPred [Key "Text"])
 
 makeICATSQLDBAdapter :: String -> [String] -> Maybe String -> a -> IO (GenericDatabase  SQLTrans a)
 makeICATSQLDBAdapter ns [predsPath, mappingsPath] nextid conninfo = do
@@ -20,7 +22,7 @@ makeICATSQLDBAdapter ns [predsPath, mappingsPath] nextid conninfo = do
     let preds =
           case nextid of
             Nothing -> preds0
-            Just nextid -> Pred (UQPredName nextid) (PredType ObjectPred [Key "Text"]) : preds0
+            Just nextid -> nextidPred nextid : preds0
     mappings <- loadMappings mappingsPath
     let (BuiltIn builtin) = sqlBuiltIn (lookupPred ns)
     let builtinpreds = keys builtin
@@ -52,4 +54,4 @@ sqlStandardTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -
 sqlStandardTrans ns preds mappings nextid =
         (SQLTrans
             (sqlBuiltIn (lookupPred ns))
-            (sqlMapping ns preds mappings) nextid)
+            (sqlMapping ns preds mappings) (nextidPred <$> nextid))

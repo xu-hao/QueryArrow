@@ -293,7 +293,7 @@ optimizeQueryPlan _ qp@(_, QPReturn2 _) = qp
 
 domainSizeFormula :: IDatabase db => Set Var -> Formula -> db -> (Set Var)
 domainSizeFormula vars form db =
-        determinedVars (determinateVars db ) vars form
+        determinedVars (toDSP (determinateVars db) ) vars form
 
 checkQueryPlan :: (HMapConstraint IDatabase l ) => HList l -> QueryPlan2 -> Except String ()
 checkQueryPlan dbs qp@(qpd, Exec2 form x) = do

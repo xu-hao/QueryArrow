@@ -76,13 +76,9 @@ instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need
     type DBFormulaType (SumDB row l) = Formula
     getName (SumDB name _ ) = name
     getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
-    determinateVars (SumDB _ dbs ) vars  atom@(Atom pred args) =
-        let mps = hMapCUL @IDatabase @([Set Var]) (\ db ->
-                if pred `elem` getPreds db then
-                    [determinateVars db vars atom]
-                else
-                    []) dbs in
-            foldl1 intersection (concat mps)
+    determinateVars (SumDB _ dbs )  =
+        let mps = hMapCUL @IDatabase @(Map Pred [Int]) determinateVars dbs in
+            mconcat mps
     supported _ _ _ = True
 instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula Formula) l) => IDatabase1 (SumDB row l) where
     type DBQueryType (SumDB row l) = QueryPlanT l

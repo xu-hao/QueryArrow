@@ -5,6 +5,7 @@ import QueryArrow.FO.Data
 import Data.Map.Strict (Map, lookup, empty, intersectionWith, unionWith, unionsWith, insert, delete)
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList)
+import Data.Maybe (fromMaybe)
 import Algebra.Lattice
 import Algebra.SemiBoundedLattice
 
@@ -55,6 +56,16 @@ mmaxs :: [DomainSizeMap] -> DomainSizeMap
 mmaxs = foldl1 (intersectionWith max) -- must have at least one
 
 type DomainSizeFunction a = Set Var -> a -> Set Var
+
+isVar :: Expr -> Bool
+isVar (VarExpr _) = True
+isVar _ = False
+
+toDSP :: Map Pred [Int] -> DomainSizeFunction Atom
+toDSP pm vars a@(Atom p args) =
+  (case lookup p pm of
+    Nothing -> freeVars a
+    Just indexes -> fromList (map extractVar (filter isVar (map (args !!) indexes)))) \/ vars
 
 class DeterminedVars a where
   {-|

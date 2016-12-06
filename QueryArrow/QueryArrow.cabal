@@ -22,6 +22,7 @@ library
                    QueryArrow-sql-sqlite3,
                    QueryArrow-cypher,
                    QueryArrow-elastic,
+                   QueryArrow-remote,
                    heterogeneous-list
   ghc-options:     -Wall -fPIC
   other-modules:

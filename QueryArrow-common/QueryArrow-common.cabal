@@ -10,6 +10,7 @@ library
                    QueryArrow.FO.Data
                    QueryArrow.FO.Domain
                    QueryArrow.DB.DB
+                   QueryArrow.DB.NoTranslation
                    QueryArrow.DB.GenericDatabase
                    QueryArrow.DB.NoConnection
                    QueryArrow.DB.NoPreparedStatement

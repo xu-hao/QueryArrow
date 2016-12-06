@@ -62,8 +62,6 @@ unixDomainSocketService path0 =
                   Nothing ->
                       throwError (-1, "cannot parse response"),
             getAllResult = getAllResult0,
-            getSomeResults = \ session vars form params n ->
-              getAllResult0 session vars (Aggregate (Limit n) form) params,
             qasConnect = \ path -> do
               ps2 <- liftIO $ getConfig path0
               (AbstractDatabase db) <- liftIO $ transDB "preds" ps2

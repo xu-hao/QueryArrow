@@ -59,3 +59,31 @@ executable QueryArrowTcp
                    template-haskell
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
+
+executable TCPRPCServer
+  hs-source-dirs:  src
+  main-is: TCPMain.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   aeson,
+                   scientific,
+                   transformers,
+                   semigroups,
+                   semigroupoids,
+                   unordered-containers,
+                   resourcet,
+                   network,
+                   hslogger,
+                   constraints,
+                   time,
+                   log-adapter,
+                   either,
+                   directory,
+                   QueryArrow-common,
+                   QueryArrow-rpc-common,
+                   QueryArrow-remote,
+                   template-haskell
+  ghc-options:     -Wall
+  other-modules:

@@ -16,7 +16,7 @@ import Data.List (intercalate, (\\), union, intersect)
 import Control.Monad.Trans.State.Strict (State, StateT, get, put, runState, evalStateT)
 import Control.Monad (foldM)
 import Control.Arrow ((***))
-import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, elems)
+import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, elems, keys, fromList)
 import qualified Data.Map.Strict as Map
 import Data.Convertible.Base
 import Data.Monoid
@@ -724,18 +724,11 @@ translateableCypher trans (FReturn _)  = lift $ Nothing
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
     type GDBFormulaType CypherTrans = Formula
-    gDeterminateVars trans varDomainSize (Atom name args) =
-        (if isBuiltIn  -- assume that builtins only restrict domain size of properties
-            then Set.fromList (concatMap (\expr -> case expr of
-                              VarExpr v -> [v]
-                              _ -> []) (propComponents name args)) \/ varDomainSize
-            else if name `member` predtablemap
-                then Set.unions (map (\arg -> case arg of
-                    (VarExpr v) -> Set.singleton v
-                    _ -> bottom) args) \/ varDomainSize
-                else varDomainSize) where
-                    isBuiltIn = name `member` builtin
-                    (CypherTrans (CypherBuiltIn builtin) predtablemap) = trans
+    gDeterminateVars trans =
+      fromList (map (\name @(Pred _ (PredType _ pt)) -> (name, propComponents name [0..length pt - 1])) builtins)
+      where
+          builtins = keys builtin
+          (CypherTrans (CypherBuiltIn builtin) predtablemap) = trans
 
     gTranslateQuery trans vars query env =
         let (CypherTrans builtin predtablemap) = trans in

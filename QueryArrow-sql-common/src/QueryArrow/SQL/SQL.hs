@@ -292,7 +292,7 @@ data TransState = TransState {
     predtablemap :: PredTableMap,
     repmap :: RepMap,
     tablemap :: TableMap, -- this is a list of free vars that appear in atoms to be deleted they must be linear
-    nextid :: String
+    nextid :: Maybe Pred
 }
 type TransMonad a = StateT TransState NewEnv a
 
@@ -391,7 +391,7 @@ translateQueryToSQL vars formula = do
     let nextid1 = nextid ts
     let repmap1 = repmap ts
     case formula of
-        FAtomic (Atom (Pred (PredName _ nextid2) _) [VarExpr v]) | nextid1 == nextid2 ->
+        FAtomic (Atom p [VarExpr v]) | nextid1 == Just p ->
             if v `member` repmap1
                 then error (show "translateQueryToSQL: nextid " ++ show v ++ " is already bound")
                 else return ([v], SQLQueryStmt (SQLQuery {sqlSelect = [(v, SQLFuncExpr "nextval" [SQLStringConstExpr (T.pack "R_ObjectId")])], sqlFrom = [], sqlWhere = SQLTrueCond, sqlDistinct = False, sqlOrderBy = [], sqlLimit = top, sqlGroupBy = []}), [])
@@ -790,7 +790,7 @@ qcolArgToSetNull (qcol@(var, col), arg) = do
             return ((col, SQLNullExpr), SQLTrueCond)
 
 
-data SQLTrans = SQLTrans  BuiltIn PredTableMap (Maybe String)
+data SQLTrans = SQLTrans  BuiltIn PredTableMap (Maybe Pred)
 
 data SQLState = SQLState {
     queryKeys:: [(String, [Expr])],
@@ -813,7 +813,7 @@ pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid) dvars (FAtomic (A
             then error ("pureOrExecF': the first argument of eq " ++ show v ++ " is a parameter and the second argument is unbounded")
             else return ()
         _ -> return ()
-      else if Just pn == nextid
+      else if Just n == nextid
         then lift Nothing
         else if isJust (updateKey ks)
           then lift Nothing
@@ -829,7 +829,7 @@ pureOrExecF  trans _ (FTransaction ) =  lift Nothing
 
 pureOrExecF  trans dvars (FSequencing form1 form2) = do
     pureOrExecF  trans dvars form1
-    let dvars2 = determinedVars (gDeterminateVars trans) dvars form1
+    let dvars2 = determinedVars (toDSP (gDeterminateVars trans)) dvars form1
     pureOrExecF  trans dvars2 form2
 
 pureOrExecF  trans dvars (FPar form1 form2) =
@@ -921,7 +921,7 @@ pureOrExecF trans _ (FReturn _) = lift Nothing
 
 
 sequenceF :: SQLTrans -> Formula -> StateT SQLState Maybe ()
-sequenceF (SQLTrans _ _ (Just nextid1)) (FAtomic (Atom (Pred (PredName _ nextid2) _) [_])) | nextid1 == nextid2 =
+sequenceF (SQLTrans _ _ (Just nextid1)) (FAtomic (Atom p [_])) | nextid1 == p =
                         return ()
 sequenceF _ _ = lift Nothing
 
@@ -954,7 +954,7 @@ instance IGenericDatabase01 SQLTrans where
     gTranslateQuery trans ret query env =
         let (SQLTrans  builtin predtablemap nextid) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = fromMaybe "<no nextid predicate defined in this plugin>" nextid})) in
+            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid})) in
             return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, serialize sqlquery, params sql)
@@ -966,23 +966,8 @@ instance IGenericDatabase01 SQLTrans where
             layeredF form && (isJust (evalStateT (limitF  trans vars form) initstate )
                 || isJust (evalStateT (sequenceF trans form) initstate))
 
-    gDeterminateVars trans@(SQLTrans _ _ nextid) varDomainSize a@(Atom name@(Pred (PredName _ pn) _) args) =
-        if (case nextid of
-              Nothing -> False
-              Just nextid -> pn == nextid)
-          then
-            case args of
-              [VarExpr v] -> Set.singleton v
-              _ -> error ("malformatted nextid atom " ++ serialize a)
-          else
-            if isBuiltIn  -- assume that builtins only restrict domain size of properties
-                then Set.fromList (concatMap (\expr -> case expr of
-                                      VarExpr v -> [v]
-                                      _ -> []) (propComponents name args)) \/ varDomainSize
-                else (if name `member` predtablemap
-                        then Set.unions (map (\arg -> case arg of
-                                (VarExpr v) -> Set.singleton v
-                                _ -> bottom) args) \/ varDomainSize
-                        else varDomainSize) where
-                    isBuiltIn = name `member` builtin
+    gDeterminateVars trans@(SQLTrans _ _ _) =
+                fromList (map (\name @(Pred _ (PredType _ pt)) -> (name, propComponents name [0..length pt - 1])) builtins)
+                where
+                    builtins = keys builtin
                     (SQLTrans (BuiltIn builtin) predtablemap _) = trans

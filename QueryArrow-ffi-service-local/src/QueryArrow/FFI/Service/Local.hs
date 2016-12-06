@@ -32,8 +32,6 @@ localService = QueryArrowService {
     liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn empty (  form) (fromList (Map.keys params)) (listResultStream [params]))),
   getAllResult = \(Session db conn ) vars form params ->
     liftIO $ runResourceT (getAllResultsInStream (doQueryWithConn db conn (fromList vars) (  form) (fromList (Map.keys params)) (listResultStream [params]))),
-  getSomeResults = \ session vars form params n ->
-    getAllResult localService session vars (Aggregate (Limit n) form) params,
   qasConnect = \ path -> do
     liftIO $ infoM "Plugin" ("loading configuration from " ++ path)
     ps <- liftIO $ getConfig path

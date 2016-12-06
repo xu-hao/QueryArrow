@@ -6,13 +6,14 @@ import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 
 import Data.Set
+import Data.Map.Strict
 
 data GenericDatabase db a = GenericDatabase db a String [Pred]
 
 class IGenericDatabase01 db where
   type GDBQueryType db
   type GDBFormulaType db
-  gDeterminateVars :: db -> Set Var -> Atom -> Set Var
+  gDeterminateVars :: db -> Map Pred [Int]
   gSupported :: db -> GDBFormulaType db -> Set Var -> Bool
   gTranslateQuery :: db -> Set Var -> GDBFormulaType db -> Set Var -> IO (GDBQueryType db)
 

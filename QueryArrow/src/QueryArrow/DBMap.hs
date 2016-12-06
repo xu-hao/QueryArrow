@@ -26,6 +26,7 @@ import qualified QueryArrow.Cypher.Neo4j as Neo4j
 import qualified QueryArrow.InMemory as InMemory
 import qualified QueryArrow.ElasticSearch.ElasticSearch as ElasticSearch
 import qualified QueryArrow.SQL.HDBC.Sqlite3 as Sqlite3
+import qualified QueryArrow.Remote.NoTranslation.TCP.TCP as Remote.TCP
 import QueryArrow.Data.Heterogeneous.List
 
 type DBMap = Map String (ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula))
@@ -54,7 +55,8 @@ dbMap = fromList [
     ("InMemory/EqDB", \ps ->  return (AbstractDatabase (NoConnectionDatabase (InMemory.EqDB (db_name ps))))),
     ("InMemory/RegexDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.RegexDB (db_name ps))))),
     ("InMemory/UtilsDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.UtilsDB (db_name ps))))),
-    ("ElasticSearch/ElasticSearch", ElasticSearch.getDB)
+    ("ElasticSearch/ElasticSearch", ElasticSearch.getDB),
+    ("Remote/TCP", Remote.TCP.getDB)
     ];
 
 

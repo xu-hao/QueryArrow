@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+
 module QueryArrow.FFI.Service where
 
 import QueryArrow.FO.Data
@@ -13,7 +15,6 @@ data QueryArrowService a = QueryArrowService {
   getPredicates :: a -> Predicates,
   execQuery :: a -> Formula -> MapResultRow -> EitherT Error IO (),
   getAllResult :: a -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow],
-  getSomeResults :: a -> [Var] -> Formula -> MapResultRow -> Int -> EitherT Error IO [MapResultRow],
   qasConnect :: String -> EitherT Error IO a,
   qasDisconnect :: a -> EitherT Error IO (),
   qasCommit :: a -> EitherT Error IO (),

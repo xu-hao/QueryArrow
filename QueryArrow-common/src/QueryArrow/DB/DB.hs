@@ -118,7 +118,7 @@ class IDatabase0 db where
     getName :: db -> String
     getPreds :: db -> [Pred]
     -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
-    determinateVars :: db -> Set Var -> Atom -> Set Var
+    determinateVars :: db -> Map Pred [Int] 
     supported :: db -> DBFormulaType db -> Set Var -> Bool
 
 class IDatabase0 db => IDatabase1 db where

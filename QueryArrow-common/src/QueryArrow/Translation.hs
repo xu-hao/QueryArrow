@@ -65,7 +65,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
     type DBFormulaType (TransDB db) = Formula
     getName (TransDB name _ _ _ ) = name
     getPreds (TransDB _ _ predmap _ ) = predmap
-    determinateVars (TransDB _ db _ _ ) vars  atom = determinateVars db vars atom
+    determinateVars (TransDB _ db _ _ )  = determinateVars db 
     supported _ _ _ = True
 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
