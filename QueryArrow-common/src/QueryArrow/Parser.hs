@@ -16,6 +16,7 @@ import Data.Namespace.Path
 import Data.Namespace.Namespace
 import Data.Tree
 import Debug.Trace
+import Data.Map.Strict (lookup)
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
@@ -73,8 +74,8 @@ atomp = do
     predname <- prednamep
     arglist <- arglistp
     (_, workspace, _) <- getState
-    let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show2 workspace)) (lookupObject predname workspace)
-    return (Atom thepred arglist)
+    -- let thepred = fromMaybe (error ("atomp: undefined predicate " ++ show predname ++ ", available " ++ show2 workspace)) (lookupObject predname workspace)
+    return (Atom predname arglist)
 
 negp :: FOParser ()
 negp = reservedOp "~" <|> reservedOp "¬"
@@ -387,12 +388,13 @@ rulesp = do
     (_, workspace, exports) <- getState
     return (mconcat rules, workspace, exports)
 
-samePredAndKey :: Atom -> Atom -> Bool
-samePredAndKey (Atom p1 args1) (Atom p2 args2) | p1 == p2 =
-    keyComponents p1 args1 == keyComponents p2 args2
-samePredAndKey _ _ = False
+samePredAndKey :: PredTypeMap -> Atom -> Atom -> Bool
+samePredAndKey ptm (Atom p1 args1) (Atom p2 args2) | p1 == p2 =
+    let predtype = fromMaybe (error ("samePredAndKey: cannot find predicate " ++ show p1)) (lookup p1 ptm) in
+        keyComponents predtype args1 == keyComponents predtype args2
+samePredAndKey _ _ _ = False
 
-unionPred :: [Atom] -> [Atom] -> [Atom]
-unionPred as1 as2 =
-    as1 ++ filter (not . samePredAndKeys as1) as2 where
-        samePredAndKeys as1 atom = any (samePredAndKey atom) as1
+unionPred :: PredTypeMap -> [Atom] -> [Atom] -> [Atom]
+unionPred ptm as1 as2 =
+    as1 ++ filter (not . samePredAndKeys ptm as1) as2 where
+        samePredAndKeys ptm as1 atom = any (samePredAndKey ptm atom) as1

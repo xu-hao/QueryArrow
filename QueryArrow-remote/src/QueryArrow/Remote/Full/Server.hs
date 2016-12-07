@@ -2,6 +2,7 @@
 
 module QueryArrow.Remote.Full.Server where
 
+import Prelude hiding (lookup)
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
 import Foreign.StablePtr
@@ -9,6 +10,7 @@ import Control.Monad.Trans.Resource
 import Data.Typeable
 import QueryArrow.Remote.Definitions
 import QueryArrow.Remote.Full.Definitions
+import Data.Map.Strict (lookup)
 
 runQueryArrowServer :: (Typeable db, Typeable (DBFormulaType db), Channel a, SendType a ~ RemoteResultSet db, ReceiveType a ~ RemoteCommand db, IDatabase db) => a -> db -> IO ()
 runQueryArrowServer chan db = do

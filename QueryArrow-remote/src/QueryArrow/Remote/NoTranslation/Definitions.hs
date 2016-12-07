@@ -24,7 +24,7 @@ data RemoteCommand  = GetName
 
 data RemoteResultSet = StringResult String
   | PredListResult [Pred]
-  | PredIntListMapResult (Map Pred [Int])
+  | PredIntListMapResult (Map PredName [Int])
   | VarSetResult (Set Var)
   | BoolResult Bool
   | ConnectionResult (Ptr ())

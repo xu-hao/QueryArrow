@@ -473,10 +473,10 @@ type Dependencies = [(CypherVar, [CypherVar])]
 type CypherVarMap = Map Var CypherExpr
 
 -- predicate -> pattern (query, insert, update, delete)
-type CypherPredTableMap = Map Pred CypherMapping
+type CypherPredTableMap = Map PredName CypherMapping
 -- builtin predicate -> op, neg op
-newtype CypherBuiltIn = CypherBuiltIn (Map Pred ([CypherExpr] -> TransMonad Cypher))
-type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap, CypherVarExprMap, [Var], [Var]) NewEnv a
+newtype CypherBuiltIn = CypherBuiltIn (Map PredName ([CypherExpr] -> TransMonad Cypher))
+type TransMonad a = StateT (CypherBuiltIn, CypherPredTableMap, CypherVarExprMap, [Var], [Var], PredTypeMap) NewEnv a
 
 extractPropertyVarInMatch :: [CypherVar] -> Cypher -> Cypher
 extractPropertyVarInMatch env (Cypher r as w s c d) =
@@ -517,7 +517,7 @@ extractPropertyVarInNodePattern env n@(NodePattern v l p) (CypherVarExprMap vmap
 
 translateQueryToCypher :: Formula -> TransMonad CypherQuery
 translateQueryToCypher form  = do
-    (_ , _, _, vars, env) <- get
+    (_ , _, _, vars, env, ptm) <- get
     lift $ registerVars env
     cypher <- translateFormulaToCypher form
     cypher' <- mapM addDummyIfNull cypher
@@ -541,12 +541,12 @@ cypherDeterminedVars builtin _ = error "unsupported"
 
 translateFormulaToCypher :: Formula -> TransMonad [Cypher]
 translateFormulaToCypher (FSequencing form1 form2) = do
-    (builtin , predmap, s, rvars, env) <- get
+    (builtin , predmap, s, rvars, env, ptm) <- get
     let determinedvars = cypherDeterminedVars builtin form1
     let rvars1 = (determinedvars `union` env) `intersect` (toAscList (freeVars form2) `union` rvars)
-    put (builtin, predmap, s, rvars1, env)
+    put (builtin, predmap, s, rvars1, env, ptm)
     cypher1 <- translateFormulaToCypher form1
-    put (builtin, predmap, s, rvars, rvars1)
+    put (builtin, predmap, s, rvars, rvars1, ptm)
     cypher2 <- translateFormulaToCypher form2
     return (cypher1 ++ cypher2)
 translateFormulaToCypher  (FChoice disj1 disj2)  =
@@ -579,14 +579,14 @@ instantiate vars matchpattern pattern args = do
 -- translate atom to cypher in a query
 translateQueryAtomToCypher :: Atom -> TransMonad Cypher
 translateQueryAtomToCypher atom  = do
-    (CypherBuiltIn builtin, predtablemap, s, rvars, env) <- get
+    (CypherBuiltIn builtin, predtablemap, s, rvars, env, ptm) <- get
     let (Atom pred1 args) = atom
     let exprs = subst s (convert args)
     --try builtin first
     case lookup pred1 builtin of
         Just builtinpred -> do
             cypher <- builtinpred exprs
-            (_, _, s, _, _) <- get
+            (_, _, s, _, _, _) <- get
             return (cypher <> creturn (map (\(Var var) -> (subst s (CypherVarExpr (CypherVar var)), CypherVar var)) rvars))
         Nothing -> case lookup pred1 predtablemap of
                 Just (vars, matchpattern, pattern, _) -> do
@@ -596,7 +596,7 @@ translateQueryAtomToCypher atom  = do
 
 translateDeleteAtomToCypher :: Atom -> TransMonad Cypher
 translateDeleteAtomToCypher atom = do
-    (CypherBuiltIn builtin, predtablemap, s, rvars, env) <- get
+    (CypherBuiltIn builtin, predtablemap, s, rvars, env, ptm) <- get
     let (Atom pred1 args) = atom
     case lookup pred1 predtablemap of
         Just (vars, matchpattern, pattern, _) -> do
@@ -615,7 +615,7 @@ translateDeleteAtomToCypher atom = do
 
 translateInsertAtomToCypher :: Atom -> TransMonad Cypher
 translateInsertAtomToCypher (Atom pred1 args) = do
-    (CypherBuiltIn builtin, predtablemap, s, rvars, env) <- get
+    (CypherBuiltIn builtin, predtablemap, s, rvars, env, ptm) <- get
     case lookup pred1 predtablemap of
         Just (vars, matchpattern, pattern, _) -> do
             (matchpattern, pattern) <- instantiate vars matchpattern pattern (subst s (convert args))
@@ -637,7 +637,7 @@ addDummyIfNull (Cypher [] m w s c d) = do
     return (Cypher [(CypherIntConstExpr 1, dummy)] m w s c d)
 addDummyIfNull cypher = return cypher
 
-data CypherTrans = CypherTrans CypherBuiltIn CypherPredTableMap
+data CypherTrans = CypherTrans CypherBuiltIn CypherPredTableMap PredTypeMap
 
 nodevl' v l = GraphNodePattern (NodePattern (Just ( v)) ( l) [])
 nodevl v l = GraphNodePattern (NodePattern (Just (CypherVar v)) (Just l) [])
@@ -724,15 +724,18 @@ translateableCypher trans (FReturn _)  = lift $ Nothing
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
     type GDBFormulaType CypherTrans = Formula
-    gDeterminateVars trans =
-      fromList (map (\name @(Pred _ (PredType _ pt)) -> (name, propComponents name [0..length pt - 1])) builtins)
+    gDeterminateVars trans@(CypherTrans (CypherBuiltIn builtin) predtablemap ptm) =
+      fromList (map (\name  ->
+                            case lookup name ptm of
+                              Nothing -> error ("Cypher: cannot find predicate " ++ show name)
+                              Just ptype@(PredType _ pt) ->
+                                (name, propComponents ptype [0..length pt - 1])) builtins)
       where
           builtins = keys builtin
-          (CypherTrans (CypherBuiltIn builtin) predtablemap) = trans
 
     gTranslateQuery trans vars query env =
-        let (CypherTrans builtin predtablemap) = trans in
-            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, toAscList vars, toAscList env)))
+        let (CypherTrans builtin predtablemap ptm) = trans in
+            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, toAscList vars, toAscList env, ptm)))
     gSupported trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
 
 instance New CypherVar CypherExpr where

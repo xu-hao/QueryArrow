@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.Template where
 
-import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..))
+import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..), constructPredTypeMap)
 import QueryArrow.DB.DB
 import QueryArrow.Rewriting
 import Data.Namespace.Path
@@ -28,6 +28,8 @@ import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.Data.Abstract
 import QueryArrow.Data.Template
+import Data.Maybe (fromMaybe)
+import Data.Map.Strict (lookup)
 
 functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
@@ -514,9 +516,11 @@ hsDeleteFunction n a = do
 
 functions :: String -> DecsQ
 functions path = do
-    (qr, ir, dr) <- runIO (getRewritingRules path)
-    qr1 <- concat <$> mapM (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) (PredType _ ts) ) _) _) ->
+    (qr, ir, dr, preds) <- runIO (getRewritingRules path)
+    let ptm = constructPredTypeMap preds
+    qr1 <- concat <$> mapM (\(InsertRewritingRule (Atom ( name@(ObjectPath _ n0)  ) _) _) ->
                         let n = map toLower (drop 2 n0)
+                            (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
                             getInputOutputTypes [] = ([], [])
                             getInputOutputTypes (Key "Int" : t) = ((IntType :) *** id) (getInputOutputTypes t)
                             getInputOutputTypes (Key "Text" : t) = ((StringType :) *** id) (getInputOutputTypes t)
@@ -536,12 +540,12 @@ functions path = do
                               queryAllFunction n inputtypes outputtypes, hsQueryAllFunction n inputtypes outputtypes, hsQueryAllForeign n inputtypes outputtypes,
                               queryAll2Function n inputtypes outputtypes, hsQueryAll2Function n inputtypes outputtypes, hsQueryAll2Foreign n inputtypes outputtypes]
                     ) qr
-    ir1 <- concat <$> mapM (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) args) _) ->
+    ir1 <- concat <$> mapM (\(InsertRewritingRule (Atom (ObjectPath _ n0) args) _) ->
                         let n = map toLower (drop 2 n0) in
                             sequence [createFunction n (length args), hsCreateFunction n (length args), hsCreateForeign n (length args), hsUpdateForeign n (length args),
                               createFunctionArray n (length args), hsCreateFunctionArray n, hsCreateForeignArray n]
                     ) ir
-    dr1 <- concat <$> mapM (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) args) _) ->
+    dr1 <- concat <$> mapM (\(InsertRewritingRule (Atom (ObjectPath _ n0) args) _) ->
                         let n = map toLower (drop 2 n0) in
                             sequence [deleteFunction n (length args), hsDeleteFunction n (length args), hsDeleteForeign n (length args)]
                     ) dr

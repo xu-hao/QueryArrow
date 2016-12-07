@@ -33,9 +33,9 @@ instance FromJSON (StablePtr a) where
 instance ToJSON Fingerprint
 instance FromJSON Fingerprint
 
-instance ToJSON (Map Pred [Int]) where
+instance ToJSON (Map PredName [Int]) where
   toJSON pm = toJSON (toList pm)
-instance FromJSON (Map Pred [Int]) where
+instance FromJSON (Map PredName [Int]) where
   parseJSON js = fromList <$> parseJSON js
 
 instance (FromJSON a, Generic a) => FromJSON (NTDBQuery a)

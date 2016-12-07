@@ -26,7 +26,7 @@ data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula 
 
 localService :: QueryArrowService Session
 localService = QueryArrowService {
-  getPredicates = \(Session db conn ) -> predicates (constructPredicateMap (getPreds db)),
+  getPredicates = \(Session db conn ) -> predicates,
   execQuery =  \(Session db conn ) form params -> do
     liftIO $ putStrLn ("execQuery: " ++ serialize (  form) ++ show params)
     liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn empty (  form) (fromList (Map.keys params)) (listResultStream [params]))),

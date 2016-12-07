@@ -27,7 +27,7 @@ data ElasticSearchQuery = ElasticSearchQuery Text (Map Text ElasticSearchQueryEx
                         | ElasticSearchDelete Text (Map Text ElasticSearchQueryExpr)
                         | ElasticSearchDeleteProperty Text (Map Text ElasticSearchQueryExpr) [Text] deriving (Show, Read)
 
-data ESTrans = ESTrans (Map Pred (Text, [Text]))
+data ESTrans = ESTrans PredTypeMap (Map PredName (Text, [Text]))
 
 translateQueryArg :: [Var] -> Expr -> ([ElasticSearchQueryExpr], [Var])
 translateQueryArg env (VarExpr var)  =
@@ -42,50 +42,56 @@ translateQueryArg _ _  =
     error "unsupported"
 
 
-translateQueryToElasticSearch :: ESTrans -> [Var] -> Pred -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
-translateQueryToElasticSearch (ESTrans map1) _ pred0 args env =
+translateQueryToElasticSearch :: ESTrans -> [Var] -> PredName -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
+translateQueryToElasticSearch (ESTrans ptm map1) _ pred0 args env =
     let (args2, params) = mconcat (map (translateQueryArg env) args)
         (type0, props) = case lookup pred0 map1 of
                 Just props0 -> props0
                 Nothing -> error "cannot find predicate" in
         (ElasticSearchQuery type0 (fromList (zip props args2)), params)
 
-translateInsertToElasticSearch :: ESTrans -> Pred -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
-translateInsertToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType ObjectPred _) ) args env =
-    let (args2, params) = mconcat (map (translateQueryArg env) args)
-        (type0, props) = case lookup pred0 map1 of
-                Just props0 -> props0
-                Nothing -> error "cannot find predicate" in
-        (ElasticSearchInsert type0 (fromList (zip props args2)), params)
-translateInsertToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPred _) ) args env =
-    let (args2, params) = mconcat (map (translateQueryArg env) args)
-        keyargs = keyComponents pred0 args2
-        propargs = propComponents pred0 args2
-        (type0, props) = case lookup pred0 map1 of
-                Just props0 -> props0
-                Nothing -> error "cannot find predicate"
-        keyprops = keyComponents pred0 props
-        propprops = propComponents pred0 props in
-        (ElasticSearchUpdateProperty type0 (fromList (zip keyprops keyargs)) (fromList (zip propprops propargs)), params)
+translateInsertToElasticSearch :: ESTrans -> PredName -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
+translateInsertToElasticSearch (ESTrans ptm map1) pred0 args env =
+  case lookup pred0 ptm of
+    Nothing -> error ("translateInsertToElasticSearch: cannot find predicate " ++ show pred0)
+    Just (PredType ObjectPred _) ->
+        let (args2, params) = mconcat (map (translateQueryArg env) args)
+            (type0, props) = case lookup pred0 map1 of
+                    Just props0 -> props0
+                    Nothing -> error "cannot find predicate" in
+            (ElasticSearchInsert type0 (fromList (zip props args2)), params)
+    Just pt@(PredType PropertyPred _) ->
+        let (args2, params) = mconcat (map (translateQueryArg env) args)
+            keyargs = keyComponents pt args2
+            propargs = propComponents pt args2
+            (type0, props) = case lookup pred0 map1 of
+                    Just props0 -> props0
+                    Nothing -> error "cannot find predicate"
+            keyprops = keyComponents pt props
+            propprops = propComponents pt props in
+            (ElasticSearchUpdateProperty type0 (fromList (zip keyprops keyargs)) (fromList (zip propprops propargs)), params)
 
 
-translateDeleteToElasticSearch :: ESTrans -> Pred -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
-translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType ObjectPred _) ) args env =
-    let (args2, params) = mconcat (map (translateQueryArg env) args)
-        (type0, props) = case lookup pred0 map1 of
-                Just props0 -> props0
-                Nothing -> error "cannot find predicate" in
-        (ElasticSearchDelete type0 (fromList (zip props args2)), params)
-translateDeleteToElasticSearch (ESTrans map1) pred0@(Pred _ (PredType PropertyPred _) ) args env =
-    let (args2, params) = mconcat (map (translateQueryArg env) args)
-        keyargs = keyComponents pred0 args2
-        propargs = propComponents pred0 args2
-        (type0, props) = case lookup pred0 map1 of
-                Just props0 -> props0
-                Nothing -> error "cannot find predicate"
-        keyprops = keyComponents pred0 props
-        propprops = propComponents pred0 props in
-        (ElasticSearchDeleteProperty type0 (fromList (zip keyprops keyargs)) propprops, params)
+translateDeleteToElasticSearch :: ESTrans -> PredName -> [Expr] -> [Var] -> (ElasticSearchQuery, [Var])
+translateDeleteToElasticSearch (ESTrans ptm map1) pred0 args env =
+  case lookup pred0 ptm of
+    Nothing -> error ("translateInsertToElasticSearch: cannot find predicate " ++ show pred0)
+    Just (PredType ObjectPred _) ->
+        let (args2, params) = mconcat (map (translateQueryArg env) args)
+            (type0, props) = case lookup pred0 map1 of
+                    Just props0 -> props0
+                    Nothing -> error "cannot find predicate" in
+            (ElasticSearchDelete type0 (fromList (zip props args2)), params)
+    Just pt@(PredType PropertyPred _) ->
+        let (args2, params) = mconcat (map (translateQueryArg env) args)
+            keyargs = keyComponents pt args2
+            propargs = propComponents pt args2
+            (type0, props) = case lookup pred0 map1 of
+                    Just props0 -> props0
+                    Nothing -> error "cannot find predicate"
+            keyprops = keyComponents pt props
+            propprops = propComponents pt props in
+            (ElasticSearchDeleteProperty type0 (fromList (zip keyprops keyargs)) propprops, params)
 
 instance IGenericDatabase01 ESTrans where
     type GDBQueryType ESTrans = (ElasticSearchQuery, [Var])

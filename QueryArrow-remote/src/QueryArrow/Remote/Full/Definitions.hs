@@ -30,7 +30,7 @@ data RemoteCommand db = GetDB
 data RemoteResultSet db = DBResult db
   | StringResult String
   | PredListResult [Pred]
-  | PredIntListMapResult (Map Pred [Int])
+  | PredIntListMapResult (Map PredName [Int])
   | SFResult (StaticPtr (Dict (IDatabase0 db) -> db -> DBFormulaType db -> Set Var -> Bool))
   | VarSetResult (Set Var)
   | BoolResult Bool

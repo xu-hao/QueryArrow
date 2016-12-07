@@ -77,7 +77,7 @@ instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need
     getName (SumDB name _ ) = name
     getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
     determinateVars (SumDB _ dbs )  =
-        let mps = hMapCUL @IDatabase @(Map Pred [Int]) determinateVars dbs in
+        let mps = hMapCUL @IDatabase @(Map PredName [Int]) determinateVars dbs in
             mconcat mps
     supported _ _ _ = True
 instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula Formula) l) => IDatabase1 (SumDB row l) where

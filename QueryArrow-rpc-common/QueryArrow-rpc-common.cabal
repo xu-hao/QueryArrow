@@ -10,6 +10,7 @@ library
                    QueryArrow.Serialization QueryArrow.RPC.Message QueryArrow.RPC.DB
   build-depends:
                    base >= 4,
+                   transformers,
                    aeson,
                    containers,
                    bytestring,

@@ -16,7 +16,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Data.Map.Strict
 
 data QueryArrowClient a where
-  QueryArrowClient :: a -> String -> [Pred] -> Map Pred [Int] -> QueryArrowClient a
+  QueryArrowClient :: a -> String -> [Pred] -> Map PredName [Int] -> QueryArrowClient a
 
 getQueryArrowClient :: (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => a -> IO (QueryArrowClient a)
 getQueryArrowClient chan = do

@@ -8,7 +8,7 @@ import QueryArrow.ListUtils
 import QueryArrow.DB.DB
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys)
+import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys, fromList)
 import qualified Data.Map.Strict as M
 import Data.List ((\\), intercalate, transpose)
 import Data.Convertible
@@ -45,10 +45,9 @@ constructPredDBMap = foldr addPredFromDBToMap empty where
             alterValue (Just dbnames) = Just (dbname : dbnames)
             preds = getPreds db
 
-
-combineLits :: [Lit] -> ([Atom] -> [Atom] -> a) -> ([Atom] -> a) -> (Atom -> a) -> a
-combineLits lits generateUpdate generateInsert generateDelete = do
-    let objpredlits = filter isObjectPredLit lits
+combineLits :: PredTypeMap -> [Lit] -> ([Atom] -> [Atom] -> a) -> ([Atom] -> a) -> (Atom -> a) -> a
+combineLits ptm lits generateUpdate generateInsert generateDelete = do
+    let objpredlits = filter (isObjectPredLit ptm) lits
     let proppredlits = lits \\ objpredlits
     let (posobjpredatoms, negobjpredatoms) = splitPosNegLits objpredlits
     let (pospropredatoms, negproppredatoms) = splitPosNegLits proppredlits

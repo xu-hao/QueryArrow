@@ -10,6 +10,7 @@ import Control.Monad.Except
 import Data.Convertible.Base
 import Data.Maybe
 import Control.Monad.Trans.Resource
+import Control.Monad.Trans.Reader
 import qualified Data.Text as T
 import Data.Set (Set)
 import System.Log.Logger (errorM, noticeM)
@@ -68,7 +69,7 @@ instance SubstituteResultValue Lit where
 
 data Command = Begin | Prepare | Commit | Rollback | Execute Formula
 
-checkQuery :: Formula -> Except String ()
+checkQuery :: Formula -> ReaderT PredTypeMap (Either String) ()
 checkQuery form = checkFormula form
 
 {-
@@ -118,7 +119,7 @@ class IDatabase0 db where
     getName :: db -> String
     getPreds :: db -> [Pred]
     -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
-    determinateVars :: db -> Map Pred [Int] 
+    determinateVars :: db -> Map PredName [Int]
     supported :: db -> DBFormulaType db -> Set Var -> Bool
 
 class IDatabase0 db => IDatabase1 db where

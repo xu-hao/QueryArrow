@@ -75,8 +75,8 @@ transDB name transinfo = do
                         then
                             let pred0 = Pred key predtype
                                 params = map (\i -> VarExpr (Var ("var" ++ show i))) [0..length paramTypes - 1]
-                                atom = Atom pred0 params
-                                atom1 = Atom pred1 params in
+                                atom = Atom key params
+                                atom1 = Atom pn params in
                                 (([InsertRewritingRule atom (FAtomic atom1)], [InsertRewritingRule atom (FInsert (Lit Pos atom1))], [InsertRewritingRule atom (FInsert (Lit Neg atom1))]) <> rules0', pred0 : exportedpreds')
                         else
                             (rules0', pred1 : exportedpreds')) (([], [], []), []) exportmap

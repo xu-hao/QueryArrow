@@ -12,12 +12,15 @@ import qualified Data.Set as Set
 import Data.Maybe
 import qualified Data.Map as Map
 import Data.Convertible
-import Control.Monad.Except
+import Control.Monad.Trans.Reader
+import Control.Monad.Except (throwError)
 import qualified Data.Text as T
 import Data.Namespace.Path
 import Data.Namespace.Namespace
 import Algebra.Lattice
 import Algebra.SemiBoundedLattice
+import Control.Monad.Trans.Class (lift)
+import Control.Monad (foldM)
 
 -- variable types
 type Type = String
@@ -49,7 +52,7 @@ data CastType = TextType | NumberType deriving (Eq, Ord, Show, Read)
 data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text | NullExpr | CastExpr CastType Expr deriving (Eq, Ord, Show, Read)
 
 -- atoms
-data Atom = Atom { atomPred :: Pred, atomArgs :: [Expr] } deriving (Eq, Ord, Show, Read)
+data Atom = Atom { atomPred :: PredName, atomArgs :: [Expr] } deriving (Eq, Ord, Show, Read)
 
 -- sign of literal
 data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
@@ -196,43 +199,51 @@ splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     Pos -> (theatom : pos, neg)
     Neg -> (pos, theatom : neg)) ([],[])
 
-keyComponents :: Pred -> [a] -> [a]
-keyComponents (Pred _ (PredType _ paramtypes)) = map snd . filter (\(type1, _) -> case type1 of
+keyComponents :: PredType -> [a] -> [a]
+keyComponents (PredType _ paramtypes) = map snd . filter (\(type1, _) -> case type1 of
     Key _ -> True
     _ -> False) . zip paramtypes
 
-propComponents :: Pred -> [a] -> [a]
-propComponents (Pred _ (PredType _ paramtypes)) = map snd . filter (\(type1, _) -> case type1 of
+propComponents :: PredType -> [a] -> [a]
+propComponents (PredType _ paramtypes) = map snd . filter (\(type1, _) -> case type1 of
     Property _ -> True
     _ -> False) . zip paramtypes
 
-isObjectPred :: Pred -> Bool
-isObjectPred (Pred _ (PredType predKind _)) = case predKind of
+isObjectPred2 :: Pred -> Bool
+isObjectPred2 (Pred _ (PredType predKind _)) = case predKind of
+            ObjectPred -> True
+            PropertyPred -> False
+
+isObjectPred :: PredTypeMap -> PredName -> Bool
+isObjectPred ptm pn  = case lookup pn ptm of
+  Nothing -> error ("isObjectPred: cannot find predicate " ++ show pn)
+  Just (PredType predKind _) -> case predKind of
             ObjectPred -> True
             PropertyPred -> False
 
 constructPredMap :: [Pred] -> PredMap
 constructPredMap = foldl (\map1 pred1@(Pred name _) -> insertObject name pred1 map1) mempty
 
-constructPredicateMap :: [Pred] -> Map String Pred
-constructPredicateMap = foldl (\map1 pred1@(Pred (ObjectPath _ name) _) -> insert name pred1 map1) mempty
+type PredTypeMap = Map PredName PredType
 
-sortByKey :: [Lit] -> Map [Expr] [Lit]
-sortByKey = foldl insertByKey empty where
+sortByKey :: PredTypeMap -> [Lit] -> Map [Expr] [Lit]
+sortByKey ptm = foldl insertByKey empty where
     insertByKey map1 lit@(Lit _ (Atom pred1 args)) =
-        let keyargs = keyComponents pred1 args in
+        let keyargs = keyComponents (fromMaybe (error ("sortByKey: cannot find predicate " ++ show pred1)) (lookup pred1 ptm)) args in
             alter (\l -> case l of
                 Nothing -> Just [lit]
                 Just lits -> Just (lits ++ [lit])) keyargs map1
 
-isObjectPredAtom :: Atom -> Bool
-isObjectPredAtom (Atom (Pred _ (PredType ObjectPred _)) _) = True
-isObjectPredAtom _ = False
+isObjectPredAtom :: PredTypeMap -> Atom -> Bool
+isObjectPredAtom ptm (Atom pn _) =
+  case fromMaybe (error ("isObjectPredAtom: cannot find predicate " ++ show pn)) (lookup pn ptm) of
+    PredType ObjectPred _ -> True
+    _ -> False
 
-isObjectPredLit :: Lit -> Bool
-isObjectPredLit (Lit _ a) = isObjectPredAtom a
+isObjectPredLit :: PredTypeMap -> Lit -> Bool
+isObjectPredLit ptm (Lit _ a) = isObjectPredAtom ptm a
 
-sortAtomByPred :: [Atom] -> Map Pred [Atom]
+sortAtomByPred :: [Atom] -> Map PredName [Atom]
 sortAtomByPred = foldl insertAtomByPred empty where
     insertAtomByPred map1 a@(Atom pred1 _) =
         alter (\asmaybe -> case asmaybe of
@@ -254,6 +265,10 @@ predNameMatches (UQPredName n1) (UQPredName n2) = n1 == n2
 predNameMatches (QPredName _ _ n1) (UQPredName n2) = n1 == n2
 predNameMatches (QPredName k1 ks1 n1) (QPredName k2 ks2 n2) = k1 == k2 && ks1 == ks2 && n1 == n2
 predNameMatches _ _ = False
+
+constructPredTypeMap :: [Pred] -> PredTypeMap
+constructPredTypeMap =
+  fromList . (map (\(Pred pn pt) -> (pn, pt)))
 
 instance Key String where
 
@@ -298,7 +313,7 @@ class Serialize a where
     serialize :: a -> String
 
 instance Serialize Atom where
-    serialize (Atom (Pred name _) args) = (predNameToString name) ++ "(" ++ intercalate "," (map serialize args) ++ ")"
+    serialize (Atom name args) = (predNameToString name) ++ "(" ++ intercalate "," (map serialize args) ++ ")"
 
 instance Serialize Expr where
     serialize (VarExpr var) = serialize var
@@ -590,7 +605,7 @@ fchoice = foldl (.+.) FZero
 fpar :: [Formula] -> Formula
 fpar = foldl (.|.) FZero
 
-(@@) :: Pred -> [Expr] -> Formula
+(@@) :: PredName -> [Expr] -> Formula
 pred' @@ args = FAtomic (Atom pred' args)
 
 {- class SubstPred a where
@@ -623,7 +638,7 @@ instance SubstPred a => SubstPred [a] where
 -- predicate map
 type PredMap = Namespace String Pred
 
-checkFormula :: Formula -> Except String ()
+checkFormula :: Formula -> ReaderT PredTypeMap (Either String) ()
 checkFormula (FReturn _) = return ()
 checkFormula (FAtomic a) = checkAtom a
 checkFormula (FTransaction) = return ()
@@ -641,11 +656,15 @@ checkFormula (FInsert lit) =
     checkLit lit
 checkFormula _ = return ()
 
-checkLit :: Lit -> Except String ()
+checkLit :: Lit -> ReaderT PredTypeMap (Either String) ()
 checkLit (Lit _ a) = checkAtom a
 
-checkAtom :: Atom -> Except String ()
-checkAtom a@(Atom (Pred _ (PredType _ ptypes)) args) =
-    if length ptypes /= length args
-        then throwError ("number of arguments doesn't match predicate" ++ serialize a)
-        else return ()
+checkAtom :: Atom -> ReaderT PredTypeMap (Either String) ()
+checkAtom a@(Atom pn args) = do
+    ptm <- ask
+    case lookup pn ptm of
+      Nothing -> lift $ throwError ("checkAtom: cannot find predicate " ++ show pn)
+      Just (PredType _ ptypes) ->
+        if length ptypes /= length args
+            then lift $ throwError ("number of arguments doesn't match predicate" ++ serialize a)
+            else return ()

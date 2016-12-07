@@ -8,6 +8,7 @@ import Data.List (partition)
 import QueryArrow.FO.Data
 import QueryArrow.ListUtils
 import Control.Arrow ((***))
+import Data.Maybe (fromMaybe)
 import Debug.Trace
 
 type ColI = (String, Int)
@@ -33,11 +34,12 @@ lookup2 tablename0 table =
             Nothing -> tablename0
             Just t -> t
 
-sqlToCypher :: PredTableMap -> CypherPredTableMap
-sqlToCypher mappings =
-        foldrWithKey (\predtype (OneTable tablename _, qcols) mappings' ->
+sqlToCypher :: PredTypeMap -> PredTableMap -> CypherPredTableMap
+sqlToCypher ptm mappings =
+        foldrWithKey (\predname (OneTable tablename _, qcols) mappings' ->
             let cols = map ((\key0 -> lookup2 key0 colprop) . snd) qcols
                 colsi = zip cols [1..length cols]
+                predtype = fromMaybe (error ("sqlToCypher: cannot find predicate " ++ show predname)) (lookup predname ptm)
                 keycols = keyComponents predtype colsi
                 propcols = propComponents predtype colsi
                 (keyedges, keyprops) =
@@ -53,7 +55,7 @@ sqlToCypher mappings =
                         [] -> mappingPattern3 keyedges foreignkeyedges ty keyprops
                         _ -> mappingPattern5 keyedges foreignkeyedges propedges propedges ty keyprops propprops
             in
-                insert predtype mapping' mappings') empty mappings
+                insert predname mapping' mappings') empty mappings
 
 
 nodePattern :: [ColI] -> [OneGraphPattern]

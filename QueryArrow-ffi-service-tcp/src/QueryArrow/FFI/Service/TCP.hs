@@ -84,7 +84,7 @@ tcpService path0 =
                   Just ps -> do
                       ps2 <- liftIO $ getConfig path0
                       (AbstractDatabase db) <- liftIO $ transDB "preds" ps2
-                      let pm = predicates (constructPredicateMap (getPreds db))
+                      let pm = predicates
                       handle <- liftIO $ try (connectTo (tcpServerAddr ps) (PortNumber (fromIntegral (tcpServerPort ps))))
                       case handle of
                         Left e -> throwError (-1, pack (show (e :: SomeException)))

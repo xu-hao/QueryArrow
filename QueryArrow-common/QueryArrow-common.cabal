@@ -61,6 +61,7 @@ library
                    monad-logger,
                    fast-logger,
                    constraints,
+                   either,
                    lrucache,
                    heterogeneous-list,
                    log-adapter

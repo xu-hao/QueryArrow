@@ -9,6 +9,7 @@ import QueryArrow.Rewriting
 import QueryArrow.Config
 import QueryArrow.Utils
 import Data.Namespace.Path
+import Data.Namespace.Namespace
 import QueryArrow.SQL.ICAT
 
 import Prelude hiding (lookup)
@@ -16,9 +17,10 @@ import Language.Haskell.TH hiding (Pred)
 import Language.Haskell.TH.Syntax (VarBangType)
 import Data.Char (toLower)
 import Data.List (nub)
+import Data.Map.Strict (elems)
 
 field :: String -> VarBangType
-field x = (mkName x, Bang NoSourceUnpackedness NoSourceStrictness, ConT (mkName "Pred"))
+field x = (mkName x, Bang NoSourceUnpackedness NoSourceStrictness, ConT (mkName "PredName"))
 
 struct :: [String] -> DecQ
 struct xs = dataD (return []) (mkName "Predicates") [] Nothing [return (RecC (mkName "Predicates") (map field xs))] (return [])
@@ -30,14 +32,13 @@ pathE (ObjectPath (NamespacePath as) a) = do
 
 structval :: [(String,  String)] -> DecsQ
 structval xs = do
-      let pm = mkName "pm"
       let exprs = map (\(n, pn) -> do
-          pval <- [|fromMaybe (error ("cannot find " ++ $(stringE n) ++ " from path " ++ $(stringE pn) ++ " available predicates " ++ show $(varE pm))) (lookup $(stringE pn) $(varE pm)) |]
+          pval <- [| UQPredName $(stringE pn) |]
           return (mkName n, pval)) xs
       let expr = recConE (mkName "Predicates") exprs
-      [d| predicates pm = $(expr)|]
+      [d| predicates = $(expr)|]
 
-getRewritingRules :: String -> IO ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule])
+getRewritingRules :: String -> IO ([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule], [Pred])
 getRewritingRules path = do
   transinfo <- getConfig path
   let ps = db_info (head (db_plugins transinfo))
@@ -46,8 +47,8 @@ getRewritingRules path = do
   putStrLn "predicates loaded "
   print predmap0
   -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
-  (rewriting, _, _) <- getRewriting predmap0 transinfo
-  return rewriting
+  ((qr, ir, dr), predmap, _) <- getRewriting predmap0 transinfo
+  return (qr, ir, dr, elems (allObjects predmap))
 
 getPredicates :: String -> IO [Pred]
 getPredicates path = do
@@ -58,11 +59,11 @@ getPredicates path = do
 
 structs :: String -> DecsQ
 structs path = do
-    (qr, ir, dr) <- runIO (getRewritingRules path)
+    (qr, ir, dr, _) <- runIO (getRewritingRules path)
     preds <- runIO (getPredicates path)
     runIO $ mapM_ (\(Pred (ObjectPath _ n0) _) -> putStrLn ("generating struct field: _" ++ map toLower n0)) preds
-    let n = (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
-    let pn = (nub (map (\(InsertRewritingRule (Atom (Pred (ObjectPath _ n0) _) _) _) -> n0) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> n0) preds)
+    let n = (nub (map (\(InsertRewritingRule (Atom (ObjectPath _ n0)  _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
+    let pn = (nub (map (\(InsertRewritingRule (Atom (ObjectPath _ n0)  _) _) -> n0) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> n0) preds)
     st <- struct n
     stv <- structval (zip n pn)
     return (st : stv)

@@ -12,7 +12,7 @@ import Data.Map.Strict (fromList, keys)
 import Text.Read
 
 
-sqlBuiltIn :: (String -> Pred) -> BuiltIn
+sqlBuiltIn :: (String -> PredName) -> BuiltIn
 sqlBuiltIn lookupPred =
       BuiltIn ( fromList [
         (lookupPred "le", simpleBuildIn "le" (\args ->

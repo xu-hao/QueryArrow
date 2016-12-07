@@ -13,7 +13,7 @@ data GenericDatabase db a = GenericDatabase db a String [Pred]
 class IGenericDatabase01 db where
   type GDBQueryType db
   type GDBFormulaType db
-  gDeterminateVars :: db -> Map Pred [Int]
+  gDeterminateVars :: db -> Map PredName [Int]
   gSupported :: db -> GDBFormulaType db -> Set Var -> Bool
   gTranslateQuery :: db -> Set Var -> GDBFormulaType db -> Set Var -> IO (GDBQueryType db)
 

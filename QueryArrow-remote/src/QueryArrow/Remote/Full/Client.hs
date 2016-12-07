@@ -14,7 +14,7 @@ import QueryArrow.Remote.Definitions
 import QueryArrow.Remote.Full.Definitions
 
 data QueryArrowClient db a where
-  QueryArrowClient :: (Channel a, SendType a ~ RemoteCommand db, ReceiveType a ~ RemoteResultSet db, IDatabase db) => db -> a -> String -> [Pred] -> Map Pred [Int] -> (db -> DBFormulaType db -> Set Var -> Bool) -> QueryArrowClient db a
+  QueryArrowClient :: (Channel a, SendType a ~ RemoteCommand db, ReceiveType a ~ RemoteResultSet db, IDatabase db) => db -> a -> String -> [Pred] -> Map PredName [Int] -> (db -> DBFormulaType db -> Set Var -> Bool) -> QueryArrowClient db a
 
 getQueryArrowClient :: forall db a . (Channel a, SendType a ~ RemoteCommand db, ReceiveType a ~ RemoteResultSet db, IDatabase db) => db -> a -> IO (QueryArrowClient db a)
 getQueryArrowClient _ chan = do

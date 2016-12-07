@@ -102,14 +102,14 @@ data QueryPlanT l = ExecT (Set Var) (HVariant' DBQueryTypeIso l) String
 
 
 
-findDB :: forall  (l :: [*]) . (HMapConstraint (IDatabase) l) => Pred -> HList l -> Int
+findDB :: forall  (l :: [*]) . (HMapConstraint (IDatabase) l) => PredName -> HList l -> Int
 findDB pred0 dbs =
     toIntegerV
       (fromMaybe (error ("no database for predicate " ++ show pred0 ++ " available " ++ (
           let preds = filter (\(Pred (PredName _ pn1) _) ->
                           case pred0 of
-                            Pred (PredName _ pn0) _ -> pn1 == pn0) (concat (hMapCUL @(IDatabase) getPreds dbs))
-          in show preds))) (hFindCULV @(IDatabase) (\db -> pred0 `elem` getPreds db) dbs))
+                            PredName _ pn0 -> pn1 == pn0) (concat (hMapCUL @(IDatabase) getPreds dbs))
+          in show preds))) (hFindCULV @(IDatabase) (\db -> pred0 `elem` (map predName (getPreds db))) dbs))
 
 formulaToQueryPlan :: (HMapConstraint (IDatabase) l) => HList l -> Formula -> QueryPlan
 formulaToQueryPlan dbs  form@(FAtomic (Atom pred0  _)) =

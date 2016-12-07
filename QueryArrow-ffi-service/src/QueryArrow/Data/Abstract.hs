@@ -9,7 +9,7 @@ import Control.Monad.Reader
 import Control.Applicative (liftA2)
 
 type AbstractFormula a = a -> Formula
-type AbstractPred a = a -> Pred
+type AbstractPred a = a -> PredName
 
 (.*.) :: AbstractFormula a -> AbstractFormula a -> AbstractFormula a
 a .*. b = liftA2 FSequencing a b

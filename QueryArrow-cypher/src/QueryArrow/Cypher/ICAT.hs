@@ -10,7 +10,7 @@ import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.NoConnection
 import QueryArrow.ICAT
 import QueryArrow.BuiltIn
-import QueryArrow.SQL.ICAT hiding (lookupPred)
+import QueryArrow.SQL.ICAT hiding (lookupPred, lookupPredByName)
 import QueryArrow.SQL.SQL
 
 import Prelude hiding (lookup)
@@ -18,19 +18,25 @@ import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, fold
 
 import Data.Namespace.Namespace
 
-lookupPred :: String -> String -> Pred
+lookupPred :: String -> String -> PredName
 lookupPred ns n =
+  predName (lookupPredByName (PredName [ns] n))
+
+lookupPredByName :: PredName -> Pred
+lookupPredByName n@(PredName [ns] _) =
   let cypherStandardBuiltInPredsMap = qStandardBuiltInPredsMap ns
   in
-      case lookupObject (QPredName ns [] n) cypherStandardBuiltInPredsMap of
-            Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ n)
+      case lookupObject n cypherStandardBuiltInPredsMap of
+            Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ show n)
             Just pred1 -> pred1
-
 cypherMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherPredTableMap
-cypherMapping ns preds mappings = (sqlToCypher  (sqlMapping ns preds mappings))
+cypherMapping ns preds mappings = (sqlToCypher (constructPredTypeMap preds) (sqlMapping ns preds mappings))
 
 cypherTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherTrans
-cypherTrans ns preds mappings = CypherTrans (cypherBuiltIn (lookupPred ns))  ((cypherMapping ns preds mappings))
+cypherTrans ns preds mappings =
+  let builtins@(CypherBuiltIn cypherbuiltinmap) = (cypherBuiltIn (lookupPred ns))
+      total = map (setPredNamespace ns) preds ++ map lookupPredByName (keys cypherbuiltinmap) in
+      CypherTrans builtins ((cypherMapping ns preds mappings)) (constructPredTypeMap total)
 {- fromList [
         ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
         ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
@@ -59,4 +65,4 @@ makeICATCypherDBAdapter ns [predsPath, mappingsPath] conn = do
     mappings <- loadMappings mappingsPath
     let (CypherBuiltIn cypherbuiltin) = cypherBuiltIn (lookupPred ns)
     let cypherbuiltinpreds = keys cypherbuiltin
-    return (NoConnectionDatabase (GenericDatabase  (cypherTrans ns preds mappings) conn ns (qStandardPreds ns preds ++ cypherbuiltinpreds)))
+    return (NoConnectionDatabase (GenericDatabase  (cypherTrans ns preds mappings) conn ns (qStandardPreds ns preds ++ map lookupPredByName cypherbuiltinpreds)))

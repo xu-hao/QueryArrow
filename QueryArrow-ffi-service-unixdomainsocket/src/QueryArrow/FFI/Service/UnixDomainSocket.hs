@@ -65,7 +65,7 @@ unixDomainSocketService path0 =
             qasConnect = \ path -> do
               ps2 <- liftIO $ getConfig path0
               (AbstractDatabase db) <- liftIO $ transDB "preds" ps2
-              let pm = predicates (constructPredicateMap (getPreds db))
+              let pm = predicates
               handle <- liftIO $ try (do
                   sock <- socket AF_UNIX Stream defaultProtocol
                   connect sock (SockAddrUnix path)

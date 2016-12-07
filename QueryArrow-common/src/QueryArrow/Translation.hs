@@ -15,6 +15,8 @@ import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Map.Strict (foldrWithKey)
 import Control.Applicative ((<$>))
 import Control.Monad.Except
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Either
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
 import Data.Namespace.Namespace
@@ -65,16 +67,17 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
     type DBFormulaType (TransDB db) = Formula
     getName (TransDB name _ _ _ ) = name
     getPreds (TransDB _ _ predmap _ ) = predmap
-    determinateVars (TransDB _ db _ _ )  = determinateVars db 
+    determinateVars (TransDB _ db _ _ )  = determinateVars db
     supported _ _ _ = True
 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
-    translateQuery (TransDB _ db _ (qr, ir, dr) ) vars2 qu vars =
-        case runExcept (checkQuery qu) of
+    translateQuery (TransDB _ db preds (qr, ir, dr) ) vars2 qu vars =
+      let ptm = constructPredTypeMap preds in
+          case runReaderT (checkQuery qu) ptm of
             Right () ->
                 let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
-                    case runExcept (checkQuery qu') of
+                    case runReaderT (checkQuery qu') ptm of
                         Right () -> translateQuery db vars2 qu' vars
                         Left err -> error err
             Left err -> error err

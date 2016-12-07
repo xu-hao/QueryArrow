@@ -11,7 +11,7 @@ import Data.Convertible (convert)
 import Data.Monoid ((<>))
 
 
-cypherBuiltIn :: (String -> Pred) -> CypherBuiltIn
+cypherBuiltIn :: (String -> PredName) -> CypherBuiltIn
 cypherBuiltIn lookupPred =
         CypherBuiltIn ( fromList [
             (lookupPred "le",  \ [arg1, arg2] ->
@@ -19,7 +19,7 @@ cypherBuiltIn lookupPred =
             (lookupPred "lt",  \ [arg1, arg2] ->
                 return (cwhere (CypherCompCond "<" arg1 arg2 Pos))),
             (lookupPred "eq", \  [arg1, arg2] -> do
-                (a, b, repmap, rvars0, env0) <- get
+                (a, b, repmap, rvars0, env0, ptm) <- get
                 let rvars = map convert rvars0
                 let env = map convert env0
                 let fv2 = fv arg2
@@ -31,7 +31,7 @@ cypherBuiltIn lookupPred =
                                 then return (cwhere (CypherCompCond "=" arg1 arg2 Pos))
                                 else if v `elem` rvars
                                     then do
-                                        put (a, b, repmap <> cypherVarExprMap v arg2, rvars0, env0)
+                                        put (a, b, repmap <> cypherVarExprMap v arg2, rvars0, env0, ptm)
                                         return mempty
                                     else return mempty
                         _ -> do

@@ -61,7 +61,7 @@ isVar :: Expr -> Bool
 isVar (VarExpr _) = True
 isVar _ = False
 
-toDSP :: Map Pred [Int] -> DomainSizeFunction Atom
+toDSP :: Map PredName [Int] -> DomainSizeFunction Atom
 toDSP pm vars a@(Atom p args) =
   (case lookup p pm of
     Nothing -> freeVars a
