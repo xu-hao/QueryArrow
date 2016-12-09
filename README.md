@@ -48,7 +48,7 @@ make a new directory
 
     cd build
 
-    ../QueryArrow/find_dependencies.sh
+    ../QueryArrow/find_dependencies.sh ../QueryArrow
 
     cpack --config CPackConfig.cmake
 
