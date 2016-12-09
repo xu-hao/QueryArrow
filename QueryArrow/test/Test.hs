@@ -1,22 +1,22 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings #-}
 
 module Main where
-import Translation
-import QueryPlan
-import DB.DB
-import DB.ResultStream
-import FO.Data
-import Parser
-import SQL.SQL
-import qualified ICAT as ICAT
-import qualified BuiltIn as BuiltIn
-import qualified SQL.ICAT as SQL.ICAT
-import Cypher.ICAT
-import Cypher.Cypher
-import qualified Cypher.Cypher as Cypher
-import DB.GenericDatabase
-import InMemory
-import Utils
+import QueryArrow.Translation
+import QueryArrow.QueryPlan
+import QueryArrow.DB.DB
+import QueryArrow.DB.ResultStream
+import QueryArrow.FO.Data
+import QueryArrow.Parser
+import QueryArrow.SQL.SQL
+import qualified QueryArrow.ICAT as ICAT
+import qualified QueryArrow.BuiltIn as BuiltIn
+import qualified QueryArrow.SQL.ICAT as SQL.ICAT
+import QueryArrow.Cypher.ICAT
+import QueryArrow.Cypher.Cypher
+import qualified QueryArrow.Cypher.Cypher as Cypher
+import QueryArrow.DB.GenericDatabase
+import QueryArrow.InMemory
+import QueryArrow.Utils
 
 import Test.QuickCheck
 import Control.Applicative ((<$>), (<*>))
@@ -219,18 +219,18 @@ translateQuery2 trans vars qu = translateQuery1 trans vars qu Set.empty
 
 translateQuery1 :: SQLTrans -> Set.Set Var -> Formula -> Set.Set Var -> SQLQuery
 translateQuery1 trans vars qu env =
-  let (SQLTrans  builtin predtablemap _) = trans
+  let (SQLTrans  builtin predtablemap _ ptm) = trans
       env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
-      fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid="nextid"})))
+      fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid=Just (SQL.ICAT.nextidPred ["cat"] "nextid"), ptm = ptm})))
 
 translateCypherQuery2 :: CypherTrans -> Set.Set Var -> Formula -> CypherQuery
 translateCypherQuery2 trans vars qu = translateCypherQuery1 trans vars qu Set.empty
 
 translateCypherQuery1 :: CypherTrans -> Set.Set Var -> Formula -> Set.Set Var -> CypherQuery
 translateCypherQuery1 trans vars qu env =
-  let (CypherTrans  builtin predtablemap) = trans
+  let (CypherTrans  builtin predtablemap ptm) = trans
       env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
-      fst (runNew (runStateT (translateQueryToCypher qu) (builtin, predtablemap, mempty, Set.toAscList vars, Set.toAscList env)))
+      fst (runNew (runStateT (translateQueryToCypher qu) (builtin, predtablemap, mempty, Set.toAscList vars, Set.toAscList env, ptm)))
 
 testTranslateSQLInsert :: String -> String -> String -> IO ()
 testTranslateSQLInsert ns qus sqls = do
@@ -257,7 +257,7 @@ main = hspec $ do
             (v1, v2) <- return (runNew (evalStateT (do
                 v1 <- freshSQLVar "t"
                 v2 <- freshSQLVar "t"
-                return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty "nextid")))
+                return (v1, v2)) (TransState  (BuiltIn empty) empty empty empty (Just (SQL.ICAT.nextidPred ["cat"] "nextid")) mempty)))
             v1 `shouldBe` SQLVar "t"
             v2 `shouldBe` SQLVar "t0"
         it "test parse query 0" $ do
@@ -265,7 +265,7 @@ main = hspec $ do
             standardPredMap <- standardPredMap
             formula `shouldBe`
               FSequencing
-                (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")]))
+                (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")]))
                 (FReturn [Var "x", Var "y", Var "z"])
 
         it "test parse query 1" $ do
@@ -273,7 +273,7 @@ main = hspec $ do
             standardPredMap <- standardPredMap
             formula `shouldBe`
               FSequencing
-                (Aggregate (Summarize [(Var "a", Count)] []) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [(Var "a", Count)] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
                 (FReturn [Var "a"])
 
         it "test parse query 1.2" $ do
@@ -281,7 +281,7 @@ main = hspec $ do
             standardPredMap <- standardPredMap
             formula `shouldBe`
               FSequencing
-                (Aggregate (Summarize [(Var "a", CountDistinct (Var "b"))] []) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [(Var "a", CountDistinct (Var "b"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
                 (FReturn [Var "a"])
 
         it "test parse query 1.1" $ do
@@ -289,7 +289,7 @@ main = hspec $ do
             standardPredMap <- standardPredMap
             formula `shouldBe`
               FSequencing
-                (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))] []) (FAtomic (Atom (fromMaybe (error "no such predicate") (lookupObject (ObjectPath mempty "DATA_NAME") standardPredMap) ) [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
                 (FReturn [Var "a"])
 
         it "test translate sql query 0.1" $ do
@@ -385,13 +385,21 @@ main = hspec $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") cat.DATA_NAME(x, \"bar\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (resc_id = 'bar' AND data_name = 'foo1')"
         it "test translate sql insert 7.1" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\")" "UPDATE r_data_main SET data_name = NULL WHERE (resc_id = 'bar' AND data_name = 'foo1')"
-        it "test translate sql insert 7.2" $ do
-            form <- parseStandardQuery "insert ~DATA_NAME(x, \"bar\", \"foo1\") DATA_SIZE(x, \"bar\", 1000)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
+        it "test translate sql insert 21 no insert and delete" $ do
+            form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") cat.DATA_SIZE(x, \"bar\", 1000)"
+            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
             sql `shouldBe` False
             -- length sql `shouldBe` 2
             -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
             -- show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
+        it "test translate sql insert 22 no delete conditional and other delete" $ do
+            form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") ~cat.DATA_SIZE(x, \"bar\", 1000)"
+            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
+            sql `shouldBe` False
+        it "test translate sql insert 23 delete and other delete" $ do
+            form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", w) ~cat.DATA_SIZE(x, \"bar\", z)"
+            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
+            sql `shouldBe` True
         it "test translate sql insert 8" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar1\", \"bar\") insert cat.DATA_NAME(x, \"bar1\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (resc_id = 'bar1' AND data_name = 'bar')"
         it "test translate sql insert 9" $ do
@@ -402,7 +410,7 @@ main = hspec $ do
                 print (show ((\(_,x,_) -> x)sql))
             ) `shouldThrow` anyException
         it "test translate sql insert 11" $ do
-            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.concat(y, \"foo\", z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = concat(data_name,'foo') WHERE resc_id = 'bar'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.concat(y, \"foo\", z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = (data_name||'foo') WHERE resc_id = 'bar'"
         it "test translate sql insert 12" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.substr(y, 0, 1, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = substr(data_name,0,1) WHERE resc_id = 'bar'"
         it "test translate sql insert 13" $ do
@@ -465,7 +473,7 @@ main = hspec $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_OBJ(x, y) return x y"
             cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
             let cypher = translateCypherQuery1  cyphertrans (Set.fromList []) qu (Set.fromList [Var "x", Var "y"])
-            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y MATCH (var0:DataObject)-[var1:resc_id]->(var) WHERE (var0.data_id = x AND var.resc_id = y) RETURN 1"
+            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y MATCH (var0:DataObject)-[var1:resc_id]->(var) WHERE (var0.data_id = x AND var.resc_id = y) WITH 1 AS dummy RETURN 1"
         it "test translate cypher query 6" $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_OBJ(x, y) return y"
             cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
@@ -480,7 +488,7 @@ main = hspec $ do
             qu <- qParseStandardQuery "cat" "insert cat.DATA_NAME(x, y, z)"
             cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings
             let cypher = translateCypherQuery1 cyphertrans (Set.fromList []) qu (Set.fromList [Var "x", Var "y",Var "z"])
-            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y,{z} AS z MATCH (var:DataObject)-[var1:resc_id]->(var0) WHERE (var0.resc_id = y AND var.data_id = x) SET var.data_name = z RETURN 1"
+            serialize cypher `shouldBe` "WITH {x} AS x,{y} AS y,{z} AS z MATCH (var:DataObject)-[var1:resc_id]->(var0) WHERE (var0.resc_id = y AND var.data_id = x) SET var.data_name = z WITH 1 AS dummy RETURN 1"
         it "test translate cypher insert 1" $ do
             qu <- qParseStandardQuery "cat" "insert cat.DATA_OBJ(1, 2) cat.DATA_NAME(1, 2, \"foo\") cat.DATA_SIZE(1, 2, 1000)"
             cyphertrans <- cypherTrans "cat" <$> standardPreds <*> standardMappings

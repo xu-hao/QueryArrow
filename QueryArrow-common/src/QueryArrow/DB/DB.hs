@@ -69,9 +69,6 @@ instance SubstituteResultValue Lit where
 
 data Command = Begin | Prepare | Commit | Rollback | Execute Formula
 
-checkQuery :: Formula -> ReaderT PredTypeMap (Either String) ()
-checkQuery form = checkFormula form
-
 {-
     class A a b | a -> b
     class B a b | a -> b
@@ -118,8 +115,6 @@ class IDatabase0 db where
     type DBFormulaType db
     getName :: db -> String
     getPreds :: db -> [Pred]
-    -- determinateVars function is a function from a given list of determined vars to vars determined by this atom
-    determinateVars :: db -> Map PredName [Int]
     supported :: db -> DBFormulaType db -> Set Var -> Bool
 
 class IDatabase0 db => IDatabase1 db where
@@ -139,7 +134,6 @@ instance IDatabase0 (AbstractDatabase row form) where
     type DBFormulaType (AbstractDatabase row form) = form
     getName (AbstractDatabase db) = getName db
     getPreds (AbstractDatabase db) = getPreds db
-    determinateVars (AbstractDatabase db) = determinateVars db
     supported (AbstractDatabase db) = supported db
 
 doQuery :: (IDatabase db) => db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))

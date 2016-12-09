@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.Template where
 
-import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..), constructPredTypeMap)
+import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..), constructPredTypeMap, CastType(..))
 import QueryArrow.DB.DB
 import QueryArrow.Rewriting
 import Data.Namespace.Path
@@ -522,14 +522,14 @@ functions path = do
                         let n = map toLower (drop 2 n0)
                             (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
                             getInputOutputTypes [] = ([], [])
-                            getInputOutputTypes (Key "Int" : t) = ((IntType :) *** id) (getInputOutputTypes t)
-                            getInputOutputTypes (Key "Text" : t) = ((StringType :) *** id) (getInputOutputTypes t)
-                            getInputOutputTypes (Property "Int" : t) = ([], IntType : getTypes t)
-                            getInputOutputTypes (Property "Text" : t) = ([], StringType : getTypes t)
+                            getInputOutputTypes (ParamType _ _ False NumberType : t) = ((StringType :) *** id) (getInputOutputTypes t)
+                            getInputOutputTypes (ParamType _ _ False TextType : t) = ((StringType :) *** id) (getInputOutputTypes t)
+                            getInputOutputTypes (ParamType _ _ True NumberType : t) = ([], StringType : getTypes t)
+                            getInputOutputTypes (ParamType _ _ True TextType : t) = ([], StringType : getTypes t)
                             getInputOutputTypes t = error ("getInputOutputTypes: error unsupported type " ++ show t)
                             getTypes [] = []
-                            getTypes (Property "Int" : t) = IntType : getTypes t
-                            getTypes (Property "Text" : t) = StringType : getTypes t
+                            getTypes (ParamType _ _ True NumberType : t) = StringType : getTypes t
+                            getTypes (ParamType _ _ True TextType : t) = StringType : getTypes t
                             getTypes t = error ("getTypes: error unsupported type " ++ show t)
                             (inputtypes, outputtypes) = getInputOutputTypes ts in
                             concat <$> sequence [

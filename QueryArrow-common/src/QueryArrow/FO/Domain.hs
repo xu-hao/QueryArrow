@@ -6,6 +6,7 @@ import Data.Map.Strict (Map, lookup, empty, intersectionWith, unionWith, unionsW
 import Prelude hiding (lookup)
 import Data.Set (Set, singleton, fromList)
 import Data.Maybe (fromMaybe)
+import Control.Monad.Except (throwError)
 import Algebra.Lattice
 import Algebra.SemiBoundedLattice
 
@@ -61,11 +62,11 @@ isVar :: Expr -> Bool
 isVar (VarExpr _) = True
 isVar _ = False
 
-toDSP :: Map PredName [Int] -> DomainSizeFunction Atom
-toDSP pm vars a@(Atom p args) =
-  (case lookup p pm of
-    Nothing -> freeVars a
-    Just indexes -> fromList (map extractVar (filter isVar (map (args !!) indexes)))) \/ vars
+toDSP :: PredTypeMap -> DomainSizeFunction Atom
+toDSP ptm vars a@(Atom p args) =
+  (case lookup p ptm of
+    Nothing -> error ("toDSP: cannot find predicate " ++ show p)
+    Just pt -> fromList (map extractVar (filter isVar (outputComponents pt args)))) \/ vars
 
 class DeterminedVars a where
   {-|
@@ -101,3 +102,53 @@ instance DeterminedVars Formula where
     determinedVars dsp vars (Aggregate (OrderByDesc _) form) = determinedVars dsp vars form
     determinedVars _ vars FOne = vars
     determinedVars _ vars FZero = vars
+
+
+toOutputVarsFunction :: PredTypeMap -> OutputVarsFunction Atom
+toOutputVarsFunction ptm vars a@(Atom p args) =
+  case lookup p ptm of
+    Nothing -> error ("toOutputVarsFunction: cannot find predicate " ++ show p)
+    Just pt ->
+        let outputOnly = fromList (map extractVar (filter isVar (outputOnlyComponents pt args))) in
+            if not (null (outputOnly /\ vars))
+                then
+                    throwError (outputOnly /\ vars)
+                else
+                    return (fromList (map extractVar (filter isVar (outputComponents pt args))) \/ vars)
+
+type OutputVarsFunction a = Set Var -> a -> Either (Set Var) (Set Var)
+
+class OutputVars a where
+  {-|
+    This function must return all determined vars including those in the input set
+  -}
+    outputVars :: OutputVarsFunction Atom -> OutputVarsFunction a
+
+instance OutputVars Atom where
+    outputVars dsp vars a = (\/ vars) <$> dsp vars a
+
+instance OutputVars Formula where
+    outputVars dsp vars (FAtomic atom0) = outputVars dsp vars atom0
+    outputVars _ vars (FReturn vars2) = return (fromList vars2 /\ vars)
+    outputVars _ vars (FInsert _) = return vars
+    outputVars _ vars (FTransaction ) = return vars
+    outputVars dsp vars (FSequencing form1 form2) = do
+        map1 <- outputVars dsp vars form1
+        outputVars dsp map1 form2
+    outputVars dsp vars (FChoice form1 form2) = do
+        map1 <- outputVars dsp vars form1
+        map2 <- outputVars dsp vars form2
+        return (map1 \/ map2)
+    outputVars dsp vars (FPar form1 form2) = do
+        map1 <- outputVars dsp vars form1
+        map2 <- outputVars dsp vars form2
+        return (map1 \/ map2)
+    outputVars _ vars (Aggregate Not _) = return vars
+    outputVars dsp vars (Aggregate Distinct form) = outputVars dsp vars form
+    outputVars _ vars (Aggregate Exists _) = return vars
+    outputVars _ vars (Aggregate (Summarize funcs groupby) _) = return ((fromList (fst (unzip funcs))) \/ vars)
+    outputVars dsp vars (Aggregate (Limit _) form) = outputVars dsp vars form
+    outputVars dsp vars (Aggregate (OrderByAsc _) form) = outputVars dsp vars form
+    outputVars dsp vars (Aggregate (OrderByDesc _) form) = outputVars dsp vars form
+    outputVars _ vars FOne = return vars
+    outputVars _ vars FZero = return vars

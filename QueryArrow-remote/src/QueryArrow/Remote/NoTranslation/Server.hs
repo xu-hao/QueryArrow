@@ -23,8 +23,6 @@ runQueryArrowServer chan db = do
       res <- case cmd of
         GetName -> return (StringResult (getName db))
         GetPreds -> return (PredListResult (getPreds db))
-        DeterminateVars ->
-            return (PredIntListMapResult (determinateVars db))
         Supported form vars ->
             return (BoolResult (supported db form vars))
         DBOpen -> do

@@ -389,6 +389,7 @@ instance Serialize SQLQuery where
 translateQueryToSQL :: [Var] -> Formula -> TransMonad SQLQuery
 translateQueryToSQL vars formula = do
     ts <- get
+    trace ("************\n" ++ intercalate "," (map serialize vars) ++ "\n" ++ intercalate "," (map (\(k, v)-> serialize k ++ "->" ++ show v) (toList (repmap ts))) ++ "\ntranslating " ++ serialize formula++ "\n******************") $ return ()
     let nextid1 = nextid ts
     let repmap1 = repmap ts
     case formula of
@@ -820,7 +821,8 @@ data SQLState = SQLState {
     ksInsertProp :: [PredName],
     ksInsertObj :: Bool,
     ksQuery :: Bool,
-    env :: Set Var
+    env :: Set Var,
+    deleteConditional :: Bool
 }
 
 pureOrExecF :: SQLTrans -> Set Var -> Formula -> StateT SQLState Maybe ()
@@ -851,9 +853,9 @@ pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomi
                         put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
 pureOrExecF  trans _ (FTransaction ) =  lift Nothing
 
-pureOrExecF  trans dvars (FSequencing form1 form2) = do
+pureOrExecF  trans@(SQLTrans _ _ _ ptm) dvars (FSequencing form1 form2) = do
     pureOrExecF  trans dvars form1
-    let dvars2 = determinedVars (toDSP (gDeterminateVars trans)) dvars form1
+    let dvars2 = determinedVars (toDSP ptm) dvars form1
     pureOrExecF  trans dvars2 form2
 
 pureOrExecF  trans dvars (FPar form1 form2) =
@@ -884,11 +886,11 @@ pureOrExecF  trans dvars (FChoice form1 form2) =
             lift Nothing
 pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ (FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
-            if ksQuery ks
+            if ksQuery ks || deleteConditional ks
                 then lift Nothing
                 else do
                   case lookup pred0 ptm of
-                    Nothing -> error ("pureOrExecF: cannot find predicate " ++ show pred0)
+                    Nothing -> error ("pureOrExecF: cannot find predicate " ++ show pred0 ++ " available predicates: " ++ show ptm)
                     Just pt -> do
                       let key = keyComponents pt args
                           tablename = case lookup pred0 predtablemap of
@@ -898,33 +900,35 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ (FInsert (Lit sign0 (Atom 
                       let isDelete = case sign0 of
                               Pos -> False
                               Neg -> True
-                      case updateKey ks of
+                      ks' <- case updateKey ks of
                           Nothing ->
                               if isObject
                                   then if isDelete
                                       then if not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
-                                          else put ks{updateKey = Just (tablename, key), ksDeleteObj = True}
-                                      else put ks{updateKey = Just (tablename, key), ksInsertObj = True}
+                                          else return ks{updateKey = Just (tablename, key), ksDeleteObj = True}
+                                      else return ks{updateKey = Just (tablename, key), ksInsertObj = True}
                                   else if isDelete
                                       then if not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
-                                          else put ks{updateKey = Just (tablename, key), ksDeleteProp = [pred0]}
-                                      else put ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
+                                          else return ks{updateKey = Just (tablename, key), ksDeleteProp = [pred0]}
+                                      else return ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
                           Just key' ->
                               if isObject
                                   then if isDelete
                                       then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
-                                          else put ks{ksDeleteObj = True}
+                                          else return ks{ksDeleteObj = True}
                                       else lift Nothing
                                   else if isDelete
                                       then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || pred0 `elem` (ksDeleteProp ks) || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
-                                          else put ks{ksDeleteProp = ksDeleteProp ks ++ [pred0]}
+                                          else return ks{ksDeleteProp = ksDeleteProp ks ++ [pred0]}
                                       else if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || (tablename, key) /= key'
                                           then lift Nothing
-                                          else put ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
+                                          else return ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
+                      let isDeleteConditional = isDelete && not (all isVar (propComponents pt args)) -- || (not isDelete && not (all isVar (keyComponents pt args)))
+                      put ks'{deleteConditional = isDeleteConditional}
 
 pureOrExecF  _ _ FOne = return ()
 pureOrExecF  _ _ FZero = return ()
@@ -979,8 +983,8 @@ instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], String, [Var])
     type GDBFormulaType SQLTrans = Formula
     gTranslateQuery trans ret query env =
-        let (SQLTrans  builtin predtablemap nextid ptm) = trans
-            env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
+        let (SQLTrans builtin predtablemap nextid ptm) = trans
+            env2 = trace ("******************** \nenv =" ++ show env ++ "\n**************") $ foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm})) in
             return (case sqlquery of
                 SQLQueryStmt _ -> True
@@ -988,15 +992,7 @@ instance IGenericDatabase01 SQLTrans where
 
     gSupported trans form vars =
         let
-            initstate = SQLState [] Nothing [] False [] False (not (null vars)) vars
+            initstate = SQLState [] Nothing [] False [] False (not (null vars)) vars False
         in
             layeredF form && (isJust (evalStateT (limitF  trans vars form) initstate )
                 || isJust (evalStateT (sequenceF trans form) initstate))
-
-    gDeterminateVars trans@(SQLTrans (BuiltIn builtin) predtablemap _ ptm) =
-                fromList (map (\name ->
-                      case lookup name ptm of
-                        Nothing -> error ("SQL: cannot find predicate " ++ show name)
-                        Just ptype@(PredType _ pt) -> (name, propComponents ptype [0..length pt - 1])) builtins)
-                where
-                    builtins = keys builtin

@@ -27,7 +27,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "integer", "text", "null"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "transactional", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "integer", "text", "null"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -56,10 +56,13 @@ dot = T.dot lexer
 -- parser
 type FOParser = GenParser Char (PredMap, PredMap, PredMap)
 
+casttypep :: FOParser CastType
+casttypep = (reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType)
+
 argp :: FOParser Expr
 argp =
     (reserved "null" >> return NullExpr)
-    <|> (CastExpr <$> ((reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType)) <*> argp)
+    <|> (CastExpr <$> casttypep <*> argp)
     <|> (VarExpr <$> Var <$> identifier)
     <|> (IntExpr . fromIntegral <$> integer)
     <|> (reserved "pattern" >> PatternExpr. TE.pack <$> stringp )
@@ -161,7 +164,7 @@ formulaSequencingp = do
   return (fsequencing formulaConjs)
 
 paramtypep :: FOParser ParamType
-paramtypep = ((reserved "key" >> return Key) <|> (reserved "property" >> return Property)) <*> identifier
+paramtypep = ParamType <$> ((reserved "key" >> return True) <|> return False) <*> ((reserved "input" >> return True) <|> return False) <*> ((reserved "output" >> return True) <|> return False) <*> casttypep
 
 predtypep :: FOParser PredType
 predtypep = PredType <$> (reserved "object" *> return ObjectPred <|> reserved "property" *> return PropertyPred) <*>
@@ -257,11 +260,10 @@ importp = do
             prednames <- many1 identifier
             reserved "from"
             ns <- namespacepathp
-            trace ("***********\n" ++ show2 workspace) $ return ()
             let workspace' = (importQualifiedFromNamespaceE ns prednames predmap workspace)
             case workspace' of
                 Left e -> error (e ++ "\nthe import of " ++ show prednames ++ " at namespace " ++ show ns ++ " from \n" ++ show2 predmap ++ "\n into \n" ++ show2 workspace ++ "\n failed")
-                Right ws -> trace ("***********\n" ++ show2 ws ++ "\n@@@@@@@@@@@@@") $ return ()
+                Right ws -> return ()
             return workspace'
             )
         ) <|> (do

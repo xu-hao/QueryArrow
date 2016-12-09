@@ -15,7 +15,7 @@ import Data.Conduit.Combinators
 import Control.Monad.Trans.Resource
 import Data.Set (Set)
 
-class (Monoid row, Show row, Num (ElemType row), Ord (ElemType row), Fractional (ElemType row)) => IResultRow row where
+class (Monoid row, Show row, Num (ElemType row), Ord (ElemType row), Fractional (ElemType row), Eq row) => IResultRow row where
     type ElemType row
     transform :: Set Var -> row -> row
     ret :: Var -> ElemType row -> row

@@ -9,11 +9,12 @@ import QueryArrow.Config
 import QueryArrow.Utils
 import QueryArrow.Sum
 import QueryArrow.Translation
+import qualified QueryArrow.Translation as T
 import QueryArrow.ListUtils
 import QueryArrow.Cache
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (foldrWithKey, fromList, Map, lookup)
+import Data.Map.Strict (foldrWithKey, fromList, Map, lookup, elems)
 import Control.Monad.Except
 import Data.Namespace.Namespace
 import Data.Monoid
@@ -66,32 +67,7 @@ transDB name transinfo = do
     case dbs of
         AbstractDBList dbs -> do
             let sumdb = SumDB "sum" dbs
-            let predmap0 = constructDBPredMap sumdb
-            -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
-            (rewriting, _, exports) <- getRewriting predmap0 transinfo
-            let exportmap = allObjects exports
-            let (rules0, exportedpreds) = foldrWithKey (\key pred1@(Pred pn predtype@(PredType _ paramTypes)) (rules0', exportedpreds') ->
-                    if key /= pn
-                        then
-                            let pred0 = Pred key predtype
-                                params = map (\i -> VarExpr (Var ("var" ++ show i))) [0..length paramTypes - 1]
-                                atom = Atom key params
-                                atom1 = Atom pn params in
-                                (([InsertRewritingRule atom (FAtomic atom1)], [InsertRewritingRule atom (FInsert (Lit Pos atom1))], [InsertRewritingRule atom (FInsert (Lit Neg atom1))]) <> rules0', pred0 : exportedpreds')
-                        else
-                            (rules0', pred1 : exportedpreds')) (([], [], []), []) exportmap
-            -- trace (intercalate "\n" (map show (exports))) $ return ()
-            -- trace (intercalate "\n" (map show (predmap1))) $ return ()
-            let repeats = findRepeats exportedpreds
-            unless (null repeats) $ error ("more than one export for predicates " ++ show repeats)
-            let rules1@(qr, ir, dr) = rules0 <> rewriting
-            let checkPatterns rules = do
-                    let repeats = findRepeats (map (\(InsertRewritingRule (Atom p _) _) -> p) rules)
-                    unless (null repeats) $ error ("more than one definition for predicates " ++ show repeats)
-            checkPatterns qr
-            checkPatterns ir
-            checkPatterns dr
-            mapM_ (debugM "QA" . show) qr
-            mapM_ (debugM "QA" . show) ir
-            mapM_ (debugM "QA" . show) dr
-            AbstractDatabase <$> cacheDB name (TransDB name sumdb exportedpreds rules1) (Just (max_cc transinfo))
+            tdb <- T.transDB name (AbstractDatabase sumdb) transinfo
+            case tdb of
+              AbstractDatabase db ->
+                AbstractDatabase <$> cacheDB name db (Just (max_cc transinfo))

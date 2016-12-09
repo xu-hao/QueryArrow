@@ -15,14 +15,12 @@ class INoTranslationDatabase01 db where
   type NTDBFormulaType db
   ntGetName :: db -> String
   ntGetPreds :: db -> [Pred]
-  ntDeterminateVars :: db -> Map PredName [Int]
   ntSupported :: db -> NTDBFormulaType db -> Set Var -> Bool
 
 instance (INoTranslationDatabase01 db) => IDatabase0 (NoTranslationDatabase db) where
   type DBFormulaType (NoTranslationDatabase db) = NTDBFormulaType db
   getName (NoTranslationDatabase db) = ntGetName db
   getPreds (NoTranslationDatabase db) = ntGetPreds db
-  determinateVars (NoTranslationDatabase db) = ntDeterminateVars db
   supported (NoTranslationDatabase db) = ntSupported db
 
 instance (INoTranslationDatabase01 db) => IDatabase1 (NoTranslationDatabase db) where

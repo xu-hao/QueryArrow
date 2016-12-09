@@ -64,6 +64,7 @@ structs path = do
     runIO $ mapM_ (\(Pred (ObjectPath _ n0) _) -> putStrLn ("generating struct field: _" ++ map toLower n0)) preds
     let n = (nub (map (\(InsertRewritingRule (Atom (ObjectPath _ n0)  _) _) -> map toLower (drop 2 n0)) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> "_" ++ map toLower n0) preds)
     let pn = (nub (map (\(InsertRewritingRule (Atom (ObjectPath _ n0)  _) _) -> n0) (qr ++ ir ++ dr)) ++ map (\(Pred (ObjectPath _ n0) _) -> n0) preds)
+    if (length n /= length pn) then error ("number of predicates mismatch") else return ()
     st <- struct n
     stv <- structval (zip n pn)
     return (st : stv)

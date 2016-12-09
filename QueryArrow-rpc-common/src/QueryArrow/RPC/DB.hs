@@ -45,9 +45,7 @@ run3 hdr commands params tdb conn = do
                                         liftIO $ dbRollback conn
                                         return []
                                     Execute qu ->
-                                        case runReaderT (checkQuery qu) (constructPredTypeMap (getPreds tdb)) of
-                                              Right _ -> getAllResultsInStream ( doQueryWithConn tdb conn hdr qu (keysSet params) (pure params))
-                                              Left e -> error e) commands
+                                        getAllResultsInStream ( doQueryWithConn tdb conn hdr qu (keysSet params) (pure params))) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb
                             --     if b

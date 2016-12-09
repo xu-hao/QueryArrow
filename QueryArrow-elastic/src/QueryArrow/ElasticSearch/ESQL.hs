@@ -108,4 +108,3 @@ instance IGenericDatabase01 ESTrans where
     gSupported _ (FAtomic _) _ = True
     gSupported _ (FInsert _) _ = True
     gSupported _ _ _ = False
-    gDeterminateVars _  = mempty

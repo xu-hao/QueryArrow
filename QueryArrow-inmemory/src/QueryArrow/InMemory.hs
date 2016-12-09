@@ -31,8 +31,7 @@ instance IDatabase0 MapDB where
     type DBFormulaType MapDB = Formula
 
     getName (MapDB name _ _) = name
-    getPreds (MapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
-    determinateVars db = mempty
+    getPreds (MapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType]) ]
     supported (MapDB name predname _) (FAtomic (Atom p _)) _ | predNameMatches (QPredName name [] predname) p = True
     supported _ _ _ = False
 
@@ -60,8 +59,7 @@ instance IDatabase0 StateMapDB where
     type DBFormulaType StateMapDB = Formula
 
     getName (StateMapDB name _ _) = name
-    getPreds (StateMapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [Key "String", Key "String"]) ]
-    determinateVars db = mempty
+    getPreds (StateMapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType]) ]
     supported _ (FAtomic _) _ = True
     supported _ (FInsert _) _ = True
     supported _ _ _ = False
@@ -135,13 +133,12 @@ mapDBFilterResults rows  results args = do
 data RegexDB = RegexDB String
 
 pattern RegexPredName ns = QPredName ns [] "like_regex"
-pattern RegexPred ns = Pred (RegexPredName ns) (PredType ObjectPred [Key "String", Key "Pattern"])
+pattern RegexPred ns = Pred (RegexPredName ns) (PredType ObjectPred [ParamType True True False TextType, ParamType True True False TextType])
 
 instance IDatabase0 RegexDB where
     type DBFormulaType RegexDB = Formula
     getName (RegexDB name) = name
     getPreds db = [ RegexPred (getName db)]
-    determinateVars db = fromList [ (RegexPredName (getName db), [])]
     supported _ (FAtomic (Atom (RegexPredName _) _)) _ = True
     supported _ _ _ = False
 instance IDatabase1 RegexDB where
@@ -168,13 +165,12 @@ instance INoConnectionDatabase2 RegexDB where
 data EqDB = EqDB String
 
 pattern EqPredName ns = QPredName ns [] "eq"
-pattern EqPred ns = Pred (EqPredName ns) (PredType ObjectPred [Key "Any", Key "Any"])
+pattern EqPred ns = Pred (EqPredName ns) (PredType ObjectPred [ParamType True True False (TypeVar "a"), ParamType True True True (TypeVar "a")])
 
 instance IDatabase0 EqDB where
     type DBFormulaType EqDB = Formula
     getName (EqDB name) = name
     getPreds db = [ EqPred (getName db)]
-    determinateVars db = fromList [ (EqPredName (getName db), [])]
     supported _ (FAtomic (Atom (EqPredName _) _)) _ = True
     supported _ _ _ = False
 
@@ -206,13 +202,12 @@ instance INoConnectionDatabase2 EqDB where
 data UtilsDB = UtilsDB String
 
 pattern SleepPredName ns = QPredName ns [] "sleep"
-pattern SleepPred ns = Pred (SleepPredName ns) (PredType ObjectPred [Key "Number"])
+pattern SleepPred ns = Pred (SleepPredName ns) (PredType ObjectPred [ParamType True True False NumberType])
 
 instance IDatabase0 UtilsDB where
     type DBFormulaType UtilsDB = Formula
     getName (UtilsDB name) = name
     getPreds db = [ SleepPred (getName db)]
-    determinateVars db = fromList [ (SleepPredName (getName db), [])]
     supported _ (FAtomic (Atom (SleepPredName _) [_])) _ = True
     supported _ _ _ = False
 instance IDatabase1 UtilsDB where

@@ -2,12 +2,20 @@
 
 module QueryArrow.Rewriting where
 
+import Prelude hiding (lookup)
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
+import QueryArrow.FO.Domain
 
-import Data.Map.Strict (empty, singleton, union, fromList)
+import Data.Map.Strict (empty, singleton, union, fromList, lookup)
 import Control.Monad
-import Data.List ((\\))
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State
+import Control.Monad.Trans.Class
+import Control.Monad.Except
+import Data.List ((\\), nub)
 import Data.Set (Set, toAscList)
+import qualified Data.Set as Set
 import Algebra.Lattice
 import Algebra.SemiBoundedLattice
 -- import Debug.Trace
@@ -19,6 +27,30 @@ data InsertRewritingRule = InsertRewritingRule Pattern Formula
 
 instance Show InsertRewritingRule where
   show (InsertRewritingRule pat form) = serialize pat ++ " -> " ++ serialize form
+
+instance Typecheck InsertRewritingRule where
+  typecheck r@(InsertRewritingRule pat@(Atom pn args) form) =
+    if all isVar args
+      then if length (nub args) < length args
+        then
+          throwError ("typecheck: rule pattern is not linear in vars " ++ show r)
+        else do
+          ptm <- lift . lift $ ask
+          case lookup pn ptm of
+            Nothing ->
+              throwError ("typecheck: cannot find predicate " ++ show pn ++ " rule " ++ show r)
+            Just pt -> do
+              pt'@(PredType _ pts) <- instantiatePredType pt
+              unless (length args == length pts) $ throwError ("typecheck: parameter count mismatch " ++ show r)
+              initTCMonad pts (map extractVar args)
+              typecheck form
+              (vtm, _) <- lift get
+              let ovars = outputComponents pt' args
+              let ub = unbounded vtm (Set.fromList (map extractVar ovars))
+              unless (null ub) $ throwError ("typecheck: unbounded vars " ++ show ub ++ " rule " ++ show r ++ " bounded " ++ show vtm)
+      else
+        throwError ("typecheck: rule pattern are not all vars " ++ show r)
+
 
 class Match a b where
     match :: a -> b -> Maybe Substitution

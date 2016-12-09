@@ -19,7 +19,6 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (CacheTransDB db) 
     type DBFormulaType (CacheTransDB db) = Formula
     getName (CacheTransDB name _ _ ) = name
     getPreds (CacheTransDB _ db _ ) = getPreds db
-    determinateVars (CacheTransDB _ db _ )  = determinateVars db
     supported (CacheTransDB _ db _) = supported db
 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) where

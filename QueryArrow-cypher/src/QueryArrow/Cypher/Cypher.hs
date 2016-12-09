@@ -724,14 +724,6 @@ translateableCypher trans (FReturn _)  = lift $ Nothing
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
     type GDBFormulaType CypherTrans = Formula
-    gDeterminateVars trans@(CypherTrans (CypherBuiltIn builtin) predtablemap ptm) =
-      fromList (map (\name  ->
-                            case lookup name ptm of
-                              Nothing -> error ("Cypher: cannot find predicate " ++ show name)
-                              Just ptype@(PredType _ pt) ->
-                                (name, propComponents ptype [0..length pt - 1])) builtins)
-      where
-          builtins = keys builtin
 
     gTranslateQuery trans vars query env =
         let (CypherTrans builtin predtablemap ptm) = trans in

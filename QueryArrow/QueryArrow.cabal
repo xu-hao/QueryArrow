@@ -63,6 +63,8 @@ Test-Suite Test
                      exceptions,
                      utf8-string,
                      directory,
+                     lattices,
+                     QueryArrow-common,
                      template-haskell
     ghc-options:
     other-modules:

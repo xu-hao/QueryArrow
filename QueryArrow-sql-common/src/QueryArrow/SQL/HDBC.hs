@@ -42,6 +42,7 @@ instance IPSDBStatement HDBCStatement where
         type PSRowType HDBCStatement = MapResultRow
         execWithParams (HDBCStatement ret vars stmt params) args = do
                 liftIO $ infoM "SQL" ("execute stmt")
+                liftIO $ putStrLn ("execHDBCStatement: params = " ++ show args)
                 rcode <- liftIO $ execute stmt (map (\v -> convertExprToSQL (case lookup v args of
                     Just e -> e
                     Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args))) params)

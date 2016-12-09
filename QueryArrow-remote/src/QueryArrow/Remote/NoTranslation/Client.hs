@@ -16,21 +16,19 @@ import System.IO.Unsafe (unsafePerformIO)
 import Data.Map.Strict
 
 data QueryArrowClient a where
-  QueryArrowClient :: a -> String -> [Pred] -> Map PredName [Int] -> QueryArrowClient a
+  QueryArrowClient :: a -> String -> [Pred] -> QueryArrowClient a
 
 getQueryArrowClient :: (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => a -> IO (QueryArrowClient a)
 getQueryArrowClient chan = do
   StringResult name <- rpc chan GetName
   PredListResult preds <- rpc chan GetPreds
-  PredIntListMapResult pm <- rpc chan DeterminateVars
-  return (QueryArrowClient chan name preds pm)
+  return (QueryArrowClient chan name preds)
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => INoTranslationDatabase01 (QueryArrowClient a) where
   type NTDBFormulaType (QueryArrowClient chan) = Formula
-  ntGetName (QueryArrowClient _ n _ _) = n
-  ntGetPreds (QueryArrowClient _ _ ps _) = ps
-  ntDeterminateVars (QueryArrowClient chan _ _ pm) = pm
-  ntSupported (QueryArrowClient chan _ _ _) form vars = True -- assuming that the server is running a TransDB
+  ntGetName (QueryArrowClient _ n _) = n
+  ntGetPreds (QueryArrowClient _ _ ps) = ps
+  ntSupported (QueryArrowClient chan _ _) form vars = True -- assuming that the server is running a TransDB
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBConnection0 (ConnectionType (QueryArrowClient  a)) where
   dbClose (QueryArrowClientDBConnection chan connSP) = do
@@ -65,7 +63,7 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDatabase2 (QueryArrowClient  a) where
   data ConnectionType (QueryArrowClient a) = (SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => QueryArrowClientDBConnection a (Ptr ())
-  dbOpen (QueryArrowClient chan _ _ _) = do
+  dbOpen (QueryArrowClient chan _ _) = do
     ConnectionResult connSP <- rpc chan DBOpen
     return (QueryArrowClientDBConnection chan connSP)
 

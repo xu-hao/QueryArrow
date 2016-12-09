@@ -14,28 +14,26 @@ import QueryArrow.Remote.Definitions
 import QueryArrow.Remote.Full.Definitions
 
 data QueryArrowClient db a where
-  QueryArrowClient :: (Channel a, SendType a ~ RemoteCommand db, ReceiveType a ~ RemoteResultSet db, IDatabase db) => db -> a -> String -> [Pred] -> Map PredName [Int] -> (db -> DBFormulaType db -> Set Var -> Bool) -> QueryArrowClient db a
+  QueryArrowClient :: (Channel a, SendType a ~ RemoteCommand db, ReceiveType a ~ RemoteResultSet db, IDatabase db) => db -> a -> String -> [Pred] -> (db -> DBFormulaType db -> Set Var -> Bool) -> QueryArrowClient db a
 
 getQueryArrowClient :: forall db a . (Channel a, SendType a ~ RemoteCommand db, ReceiveType a ~ RemoteResultSet db, IDatabase db) => db -> a -> IO (QueryArrowClient db a)
 getQueryArrowClient _ chan = do
   DBResult db <- rpc chan GetDB
   StringResult name <- rpc chan GetName
   PredListResult preds <- rpc chan GetPreds
-  PredIntListMapResult dvs <- rpc chan DeterminateVars
   SFResult sfSP <- rpc chan GetSF
   let sf = deRefStaticPtr sfSP
-  return (QueryArrowClient db chan name preds dvs (sf Dict))
+  return (QueryArrowClient db chan name preds  (sf Dict))
 
 instance IDatabase0 (QueryArrowClient db chan) where
   type DBFormulaType (QueryArrowClient db chan) = DBFormulaType db
-  getName (QueryArrowClient _ _ n _ _ _) = n
-  getPreds (QueryArrowClient _ _ _ ps _ _) = ps
-  determinateVars (QueryArrowClient _ _ _ _ dvf _) = dvf
-  supported (QueryArrowClient db _ _ _ _ sf) = sf db
+  getName (QueryArrowClient _ _ n _  _) = n
+  getPreds (QueryArrowClient _ _ _ ps  _) = ps
+  supported (QueryArrowClient db _ _ _  sf) = sf db
 
 instance IDatabase1 (QueryArrowClient db chan) where
   type DBQueryType (QueryArrowClient db chan) = StablePtr (DBQueryType db)
-  translateQuery (QueryArrowClient _ chan _ _ _ _) vars form vars2 = do
+  translateQuery (QueryArrowClient _ chan _ _  _) vars form vars2 = do
       send chan (TranslateQuery vars form vars2)
       QueryResult quSP <- receive chan
       return quSP
@@ -82,6 +80,6 @@ instance IDBConnection (ConnectionType (QueryArrowClient db chan)) where
 instance IDatabase2 (QueryArrowClient db chan) where
   data ConnectionType (QueryArrowClient db chan) where
      QueryArrowClientDBConnection :: (Channel chan, SendType chan ~ RemoteCommand db, ReceiveType chan ~ RemoteResultSet db, IDatabase db) => chan -> StablePtr (ConnectionType db) -> ConnectionType (QueryArrowClient db chan)
-  dbOpen (QueryArrowClient _ chan _ _ _ _) = do
+  dbOpen (QueryArrowClient _ chan _ _  _) = do
     ConnectionResult connSP <- rpc chan DBOpen
     return (QueryArrowClientDBConnection chan connSP)

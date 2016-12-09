@@ -15,7 +15,7 @@ import QueryArrow.ElasticSearch.ESQL
 import QueryArrow.ElasticSearch.ElasticSearchConnection
 
 esMetaPred :: String -> Pred
-esMetaPred ns = Pred (esMetaPredName ns) (PredType ObjectPred [Key "Int", Key "Int", Property "String", Property "String", Property "String"])
+esMetaPred ns = Pred (esMetaPredName ns) (PredType ObjectPred [ParamType True True True NumberType, ParamType True True True NumberType, ParamType False True True TextType, ParamType False True True TextType, ParamType False True True TextType])
 
 esMetaPredName :: String -> PredName
 esMetaPredName ns = QPredName ns [] "ES_META"

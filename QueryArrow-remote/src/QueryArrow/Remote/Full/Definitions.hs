@@ -13,7 +13,6 @@ import QueryArrow.Remote.Definitions
 data RemoteCommand db = GetDB
   | GetName
   | GetPreds
-  | DeterminateVars
   | GetSF
   | TranslateQuery (Set Var) (DBFormulaType db) (Set Var)
   | DBOpen
@@ -32,7 +31,6 @@ data RemoteResultSet db = DBResult db
   | PredListResult [Pred]
   | PredIntListMapResult (Map PredName [Int])
   | SFResult (StaticPtr (Dict (IDatabase0 db) -> db -> DBFormulaType db -> Set Var -> Bool))
-  | VarSetResult (Set Var)
   | BoolResult Bool
   | ConnectionResult (StablePtr (ConnectionType db))
   | QueryResult (StablePtr (DBQueryType db))

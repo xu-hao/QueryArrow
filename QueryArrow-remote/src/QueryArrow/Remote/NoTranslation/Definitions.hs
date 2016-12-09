@@ -11,7 +11,6 @@ import Data.Map.Strict
 
 data RemoteCommand  = GetName
   | GetPreds
-  | DeterminateVars
   | Supported Formula (Set Var)
   | DBOpen
   | DBClose (Ptr ())
@@ -25,7 +24,6 @@ data RemoteCommand  = GetName
 data RemoteResultSet = StringResult String
   | PredListResult [Pred]
   | PredIntListMapResult (Map PredName [Int])
-  | VarSetResult (Set Var)
   | BoolResult Bool
   | ConnectionResult (Ptr ())
   | UnitResult

@@ -13,7 +13,7 @@ import Data.Map.Strict (fromList, keys)
 import Text.Read
 
 nextidPred :: [String] -> String -> Pred
-nextidPred nss nextid = Pred (PredName nss nextid) (PredType ObjectPred [Key "Text"])
+nextidPred nss nextid = Pred (PredName nss nextid) (PredType ObjectPred [ParamType True False True TextType])
 
 makeICATSQLDBAdapter :: String -> [String] -> Maybe String -> a -> IO (GenericDatabase SQLTrans a)
 makeICATSQLDBAdapter ns [predsPath, mappingsPath] nextid conninfo = do

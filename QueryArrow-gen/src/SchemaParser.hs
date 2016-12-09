@@ -172,6 +172,10 @@ colNameToPredName prefix colname =
       predname = if startswith "R_" predname0 then drop 2 predname0 else predname0 in
       (if startswith prefix predname then "" else prefix ++ "_") ++ predname
 
+colTypeToQExp :: ColType -> Q Exp
+colTypeToQExp keytype = case keytype of
+                                    Number -> conE 'NumberType
+                                    Text -> conE 'TextType
 generateICATDef :: Stmt2 -> Q Exp
 generateICATDef (Stmt tablename coldefs) = do
     let prefix = extractPrefix tablename
@@ -182,9 +186,9 @@ generateICATDef (Stmt tablename coldefs) = do
             let predname = prefixToPredName prefix
             -- find all keys
             let (keys, props) = findAllKeys prefix coldefs
-            let keysq = foldr (\(ColDef _ keytype _) q -> [| Key $(stringQ (show keytype)) : $q |]) [| [] |] keys
+            let keysq = foldr (\(ColDef _ keytype _) q -> [| ParamType True True True $(colTypeToQExp keytype) : $q |]) [| [] |] keys
             let q1 = [| Pred (PredName [] $(stringQ predname)) (PredType ObjectPred $keysq) |]
-            let propPred (ColDef key2 keytype2 _) = [| Pred  (PredName [] $(stringQ (colNameToPredName prefix key2))) (PredType PropertyPred ($keysq ++  [Property $(stringQ (show keytype2))])) |]
+            let propPred (ColDef key2 keytype2 _) = [| Pred  (PredName [] $(stringQ (colNameToPredName prefix key2))) (PredType PropertyPred ($keysq ++  [ParamType False True True $(colTypeToQExp keytype2)])) |]
             let propPreds = foldr (\coldef q2 -> [| $(propPred coldef) : $q2 |]) [| [] |] props
             [| $q1 : $propPreds |]
 

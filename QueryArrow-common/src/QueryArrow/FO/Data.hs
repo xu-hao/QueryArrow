@@ -30,8 +30,7 @@ data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
 -- predicate types
 data PredType = PredType PredKind [ParamType] deriving (Eq, Ord, Show, Read)
 
-data ParamType = Key Type
-               | Property Type deriving (Eq, Ord, Show, Read)
+data ParamType = ParamType {isKey :: Bool,  isInput :: Bool,  isOutput :: Bool, paramType:: CastType} deriving (Eq, Ord, Show, Read)
 
 -- predicate
 type PredName = ObjectPath String
@@ -46,7 +45,7 @@ data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Or
 newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
 -- types
-data CastType = TextType | NumberType deriving (Eq, Ord, Show, Read)
+data CastType = TextType | NumberType | TypeVar String deriving (Eq, Ord, Show, Read)
 
 -- expression
 data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text | NullExpr | CastExpr CastType Expr deriving (Eq, Ord, Show, Read)
@@ -200,14 +199,16 @@ splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     Neg -> (pos, theatom : neg)) ([],[])
 
 keyComponents :: PredType -> [a] -> [a]
-keyComponents (PredType _ paramtypes) = map snd . filter (\(type1, _) -> case type1 of
-    Key _ -> True
-    _ -> False) . zip paramtypes
+keyComponents (PredType _ paramtypes) = map snd . filter (\(ParamType type1 _ _ _, _) -> type1) . zip paramtypes
 
 propComponents :: PredType -> [a] -> [a]
-propComponents (PredType _ paramtypes) = map snd . filter (\(type1, _) -> case type1 of
-    Property _ -> True
-    _ -> False) . zip paramtypes
+propComponents (PredType _ paramtypes) = map snd . filter (\(ParamType type1 _ _ _, _) -> not type1) . zip paramtypes
+
+outputComponents :: PredType -> [a] -> [a]
+outputComponents (PredType _ paramtypes) = map snd . filter (\(ParamType  _ _ type1 _, _) -> type1) . zip paramtypes
+
+outputOnlyComponents :: PredType -> [a] -> [a]
+outputOnlyComponents (PredType _ paramtypes) = map snd . filter (\(ParamType  _ type1 _ _, _) -> not type1) . zip paramtypes
 
 isObjectPred2 :: Pred -> Bool
 isObjectPred2 (Pred _ (PredType predKind _)) = case predKind of
@@ -637,34 +638,3 @@ instance SubstPred a => SubstPred [a] where
 
 -- predicate map
 type PredMap = Namespace String Pred
-
-checkFormula :: Formula -> ReaderT PredTypeMap (Either String) ()
-checkFormula (FReturn _) = return ()
-checkFormula (FAtomic a) = checkAtom a
-checkFormula (FTransaction) = return ()
-checkFormula (FSequencing form1 form2) = do
-    checkFormula form1
-    checkFormula form2
-checkFormula (FChoice form1 form2) = do
-    checkFormula form1
-    checkFormula form2
-checkFormula (FPar form1 form2) = do
-    checkFormula form1
-    checkFormula form2
-checkFormula (Aggregate _ a) = checkFormula a
-checkFormula (FInsert lit) =
-    checkLit lit
-checkFormula _ = return ()
-
-checkLit :: Lit -> ReaderT PredTypeMap (Either String) ()
-checkLit (Lit _ a) = checkAtom a
-
-checkAtom :: Atom -> ReaderT PredTypeMap (Either String) ()
-checkAtom a@(Atom pn args) = do
-    ptm <- ask
-    case lookup pn ptm of
-      Nothing -> lift $ throwError ("checkAtom: cannot find predicate " ++ show pn)
-      Just (PredType _ ptypes) ->
-        if length ptypes /= length args
-            then lift $ throwError ("number of arguments doesn't match predicate" ++ serialize a)
-            else return ()

@@ -3,6 +3,7 @@ module QueryArrow.Translation where
 
 import QueryArrow.DB.DB
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.QueryPlan
 import QueryArrow.Rewriting
 import QueryArrow.Config
@@ -10,13 +11,13 @@ import QueryArrow.Parser
 import QueryArrow.Utils
 import QueryArrow.ListUtils
 
-import Prelude  hiding (lookup)
+import Prelude hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)
-import Data.Map.Strict (foldrWithKey)
-import Control.Applicative ((<$>))
+import Data.Map.Strict (foldrWithKey, elems, lookup)
 import Control.Monad.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Either
+import Control.Monad.Trans.State
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
 import Data.Namespace.Namespace
@@ -24,6 +25,7 @@ import Algebra.SemiBoundedLattice
 import Algebra.Lattice
 import Data.Set (toAscList, Set)
 import Data.Monoid
+import System.Log.Logger (debugM)
 import Language.Preprocessor.Cpphs (runCpphs, defaultCpphsOptions, CpphsOptions(..), defaultBoolOptions, BoolOptions(..))
 -- exec query from dbname
 
@@ -57,8 +59,8 @@ type RewritingRuleSets = ([InsertRewritingRule],  [InsertRewritingRule], [Insert
 rewriteQuery :: [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Formula -> Set Var -> Formula
 rewriteQuery  qr ir dr vars form ext = runNew (do
     registerVars (toAscList ((case vars of
-        Include vars -> vars
-        Exclude vars -> vars)  \/ freeVars form))
+        Include vs -> vs
+        Exclude vs -> vs)  \/ freeVars form))
     rewrites defaultRewritingLimit ext   qr ir dr form)
 
 data TransDB db = TransDB String db [Pred] RewritingRuleSets
@@ -67,20 +69,23 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
     type DBFormulaType (TransDB db) = Formula
     getName (TransDB name _ _ _ ) = name
     getPreds (TransDB _ _ predmap _ ) = predmap
-    determinateVars (TransDB _ db _ _ )  = determinateVars db
     supported _ _ _ = True
 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db preds (qr, ir, dr) ) vars2 qu vars =
-      let ptm = constructPredTypeMap preds in
-          case runReaderT (checkQuery qu) ptm of
-            Right () ->
-                let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
-                    case runReaderT (checkQuery qu') ptm of
-                        Right () -> translateQuery db vars2 qu' vars
-                        Left err -> error err
-            Left err -> error err
+      let ptm = constructPredTypeMap preds
+          effective = runNew (runReaderT (evalStateT (runEitherT (do
+                                          let varsl = toAscList vars
+                                          tvars <- lift . lift . lift $ new (map (StringWrapper . ("tv" ++) . show) [1..length varsl])
+                                          initTCMonad (map (\v -> ParamType False True False (TypeVar v)) tvars) varsl
+                                          typecheck qu
+                                          )) (mempty, mempty)) ptm) in
+          case effective of
+              Left errmsg -> error (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu)
+              Right _ ->
+                  let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
+                      translateQuery db vars2 qu' vars
 
 
 instance (IDatabase db) => IDatabase2 (TransDB db) where
@@ -108,8 +113,67 @@ getRewriting predmap ps = do
     d1 <- runCpphs defaultCpphsOptions{includes = include_file_path ps, boolopts = defaultBoolOptions {locations = False}}  (rewriting_file_path ps) d0
     case runParser rulesp (predmap, mempty, mempty) "" d1 of
         Left err -> error (show err)
-        Right ((qr, ir, dr), predmap, exports) -> do
-            mapM_ print qr
-            mapM_ print ir
-            mapM_ print dr
-            return ((qr, ir, dr), predmap, exports)
+        Right ((qr, ir, dr), predmap2, exports) ->
+            return ((qr, ir, dr), predmap2, exports)
+
+typecheckRules :: PredTypeMap -> RewritingRuleSets -> Either String ()
+typecheckRules ptm (qr, ir, dr) = do
+  mapM_ (\r ->
+      case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
+          Right () -> return ()
+          Left err -> Left ("typecheckRules: rewrite rule " ++ show r ++ " type error\n" ++ err)) qr
+  mapM_ (\r ->
+      case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
+          Right () -> return ()
+          Left err -> Left ("typecheckRules: insert rewrite rule " ++ show r ++ " type error\n" ++ err)) ir
+  mapM_ (\r ->
+      case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
+          Right () -> return ()
+          Left err -> Left ("typecheckRules: delete rewrite rule " ++ show r ++ " type error\n" ++ err)) dr
+
+transDB :: String -> AbstractDatabase MapResultRow Formula -> TranslationInfo -> IO (AbstractDatabase MapResultRow Formula)
+transDB name db transinfo =
+    case db of
+      AbstractDatabase sumdb -> do
+            let predmap0 = constructDBPredMap sumdb
+            -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
+            (rewriting, predmap, exports) <- getRewriting predmap0 transinfo
+            let exportmap = allObjects exports
+            let (rules0, exportedpreds) = foldrWithKey (\key pred1@(Pred pn predtype@(PredType _ paramTypes)) (rules0', exportedpreds') ->
+                    if key /= pn
+                        then
+                            let pred0 = Pred key predtype
+                                params = map (\i -> VarExpr (Var ("var" ++ show i))) [0..length paramTypes - 1]
+                                atom = Atom key params
+                                atom1 = Atom pn params in
+                                ((if null (outputOnlyComponents predtype params)
+                                  then ([InsertRewritingRule atom (FAtomic atom1)], [InsertRewritingRule atom (FInsert (Lit Pos atom1))], [InsertRewritingRule atom (FInsert (Lit Neg atom1))])
+                                  else ([InsertRewritingRule atom (FAtomic atom1)], [], [])) <> rules0', pred0 : exportedpreds')
+                        else
+                            (rules0', pred1 : exportedpreds')) (([], [], []), []) exportmap
+            -- trace (intercalate "\n" (map show (exports))) $ return ()
+            -- trace (intercalate "\n" (map show (predmap1))) $ return ()
+            let repeats = findRepeats exportedpreds
+            unless (null repeats) $ error ("more than one export for predicates " ++ show repeats)
+            let rules1@(qr, ir, dr) = rules0 <> rewriting
+            let checkPatterns rules = do
+                    let repeats = findRepeats (map (\(InsertRewritingRule (Atom p _) _) -> p) rules)
+                    unless (null repeats) $ error ("more than one definition for predicates " ++ show repeats)
+            checkPatterns qr
+            checkPatterns ir
+            checkPatterns dr
+            mapM_ (debugM "QA" . show) qr
+            mapM_ (debugM "QA" . show) ir
+            mapM_ (debugM "QA" . show) dr
+            let ptm = constructPredTypeMap (elems (allObjects predmap) ++ exportedpreds)
+            let checkNoOutput (InsertRewritingRule (Atom p args) _) =
+                    case lookup p ptm of
+                      Nothing -> error "error"
+                      Just pt ->
+                          unless (null (outputOnlyComponents pt args)) $ error "rule pattern contains output parameters"
+            mapM_ checkNoOutput ir
+            mapM_ checkNoOutput dr
+            case typecheckRules ptm rules1 of
+              Left err -> error err
+              Right _ ->
+                return (AbstractDatabase (TransDB name sumdb exportedpreds rules1))

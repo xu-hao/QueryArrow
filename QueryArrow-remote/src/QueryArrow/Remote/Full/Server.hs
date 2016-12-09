@@ -22,7 +22,6 @@ runQueryArrowServer chan db = do
         GetDB -> return (DBResult db)
         GetName -> return (StringResult (getName db))
         GetPreds -> return (PredListResult (getPreds db))
-        DeterminateVars -> return (PredIntListMapResult (determinateVars db))
         GetSF -> return (SFResult (static (\dict -> case dict of Dict -> supported)))
         TranslateQuery retvars form env -> do
           qu <- translateQuery db retvars form env

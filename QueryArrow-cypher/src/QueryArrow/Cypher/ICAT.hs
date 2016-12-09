@@ -30,7 +30,7 @@ lookupPredByName n@(PredName [ns] _) =
             Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ show n)
             Just pred1 -> pred1
 cypherMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherPredTableMap
-cypherMapping ns preds mappings = (sqlToCypher (constructPredTypeMap preds) (sqlMapping ns preds mappings))
+cypherMapping ns preds mappings = (sqlToCypher (constructPredTypeMap (map (setPredNamespace ns) preds)) (sqlMapping ns preds mappings))
 
 cypherTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherTrans
 cypherTrans ns preds mappings =

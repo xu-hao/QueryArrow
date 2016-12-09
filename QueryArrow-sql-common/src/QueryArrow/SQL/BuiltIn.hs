@@ -66,7 +66,7 @@ sqlBuiltIn lookupPred =
             )),
         (lookupPred "exp", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "^" a b)]
             )),
-        (lookupPred "concat", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLFuncExpr "concat" [a, b])]
+        (lookupPred "concat", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "||" a b)]
             )),
         (lookupPred "substr", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "substr" [a, b, c])]
             )),

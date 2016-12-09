@@ -9,7 +9,7 @@ import QueryArrow.DB.DB
 import QueryArrow.Data.Heterogeneous.List
 
 import Prelude  hiding (lookup, null)
-import Data.List (elem, union, sortBy, groupBy)
+import Data.List (elem, union, sortBy, groupBy, nub)
 import qualified Data.List as List
 import Control.Monad.Except
 import Control.Applicative ((<|>))
@@ -46,11 +46,12 @@ data QueryPlanData  = QueryPlanData {
     paramvs :: Set Var, -- parameter vars
     returnvs :: Set Var, -- return vars
     combinedvs :: Set Var, -- combined return and available vars that are still in scope
-    availablevs :: Set Var
+    availablevs :: Set Var,
+    mustbefreevs :: Set Var
 }
 
 dqdb :: QueryPlanData
-dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom
+dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom bottom
 
 data QueryPlanNode2   = Exec2 Formula Int
                 | QPReturn2 [Var]
@@ -290,94 +291,6 @@ optimizeQueryPlan dbsx (qpd, QPAggregate2 agg qp1) =
             _ -> (qpd, QPAggregate2 agg qp1')
 optimizeQueryPlan _ qp@(_, QPReturn2 _) = qp
 
-
-domainSizeFormula :: IDatabase db => Set Var -> Formula -> db -> (Set Var)
-domainSizeFormula vars form db =
-        determinedVars (toDSP (determinateVars db) ) vars form
-
-checkQueryPlan :: (HMapConstraint IDatabase l ) => HList l -> QueryPlan2 -> Except String ()
-checkQueryPlan dbs qp@(qpd, Exec2 form x) = do
-    let par0 = paramvs qpd
-        det0 = determinevs qpd
-        map2 = fromMaybe (error "index out of range") (hApplyCUL @IDatabase (domainSizeFormula par0  form) x dbs)
-    if det0 `isSubsetOf` map2
-        then return ()
-        else throwError ("checkQueryPlan: unbounded vars: " ++ show (det0 \\\ map2) ++ ", the formula is " ++ show form ++ "\n" ++ drawTree(toTree qp))
-
-checkQueryPlan dbs (_, QPChoice2 qp1 qp2) = do
-    checkQueryPlan dbs qp1
-    checkQueryPlan dbs qp2
-
-checkQueryPlan dbs (_, QPPar2 qp1 qp2) = do
-    checkQueryPlan dbs qp1
-    checkQueryPlan dbs qp2
-
-checkQueryPlan dbs (_, QPSequencing2 qp1 qp2) = do
-    checkQueryPlan dbs qp1
-    checkQueryPlan dbs qp2
-
-checkQueryPlan _ (_, QPOne2) = do
-    return ()
-
-checkQueryPlan _ (_, QPZero2) = do
-    return ()
-
-checkQueryPlan dbs   (_, QPAggregate2 Not qp) = do
-    checkQueryPlan dbs qp
-
-checkQueryPlan dbs  (_, QPAggregate2 Exists qp) = do
-    checkQueryPlan dbs qp
-
-checkQueryPlan dbs   (_, QPAggregate2 (Summarize funcs groupby) qp@(qpd, _)) = do
-    checkQueryPlan dbs qp
-    let det = determinevs qpd
-    mapM_ (\(_, func) ->
-        case func of
-            Max var2 ->
-                if var2 `member` det
-                    then return ()
-                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
-            Min var2 ->
-                if var2 `member` det
-                    then return ()
-                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
-            Sum var2 ->
-                if var2 `member` det
-                    then return ()
-                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
-            Average var2 ->
-                if var2 `member` det
-                    then return ()
-                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)
-            Count ->
-                return ()
-            CountDistinct var2 ->
-                if var2 `member` det
-                    then return ()
-                    else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)) funcs
-    mapM_ (\var2 -> if var2 `member` det
-        then return ()
-        else throwError ("checkQueryPlan: unbounded vars: " ++ show var2)) groupby
-
-checkQueryPlan dbs   (_, QPAggregate2 (Limit _) qp) = do
-    checkQueryPlan dbs qp
-
-checkQueryPlan dbs   (_, QPAggregate2 (OrderByAsc _) qp) = do
-    checkQueryPlan dbs qp
-
-checkQueryPlan dbs   (_, QPAggregate2 (OrderByDesc _) qp) = do
-    checkQueryPlan dbs qp
-
-checkQueryPlan _ (qpd, QPReturn2 vars) = do
-    let par0 = availablevs qpd
-    if null (fromList vars \\\ par0)
-        then return ()
-        else throwError ("checkQueryPlan': unbounded vars: " ++ show (fromList vars \\\ par0) ++ " " ++ show (FReturn vars))
-
-checkQueryPlan dbs (_, QPTransaction2 _) =
-    return ()
-
-
 calculateVars :: Set Var -> MSet Var -> QueryPlan -> QueryPlan2
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
 
@@ -426,6 +339,9 @@ calculateVars1 rvars  (QPAggregate agg@(Summarize funcs groupby) qp1) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
         ( dqdb{freevs = freevs qpd1, determinevs = fromList (fst (unzip funcs)), linscopevs = linscopevs qpd1, rinscopevs = rvars} , (QPAggregate2 agg qp1'))
 calculateVars1 rvars  (QPAggregate agg@(Limit _) qp1) =
+    let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
+        ( dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1} , (QPAggregate2 agg qp1'))
+calculateVars1 rvars  (QPAggregate agg@(Distinct) qp1) =
     let qp1'@(qpd1, _) = calculateVars1 rvars qp1 in
         ( dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1} , (QPAggregate2 agg qp1'))
 calculateVars1 rvars  (QPAggregate agg@(OrderByAsc _) qp1) =
@@ -718,6 +634,13 @@ execQueryPlan rs (QPAggregate3 combinedvs (Limit n) qp) =
         liftIO $ infoM "QueryPlan" ("limit " ++ show n ++ " input = " ++ show row)
         let rs2 = execQueryPlan (pure row) qp
         takeResultStream n rs2)
+execQueryPlan rs (QPAggregate3 combinedvs Distinct qp) =
+    transformResultStream combinedvs (do
+        row <- rs
+        liftIO $ infoM "QueryPlan" ("distinct input = " ++ show row)
+        let rs2 = execQueryPlan (pure row) qp
+        l <- lift $ getAllResultsInStream rs2
+        listResultStream (nub l))
 execQueryPlan rs (QPAggregate3 combinedvs (OrderByAsc v1) qp) =
     transformResultStream combinedvs (do
         row <- rs
