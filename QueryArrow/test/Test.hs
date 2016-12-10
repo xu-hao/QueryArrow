@@ -127,15 +127,15 @@ standardPredMap = ICAT.standardPredMap <$> standardPreds
 parseStandardQuery ::  String -> IO Formula
 parseStandardQuery query2 = do
     mappings <- standardPredMap
-    return (case runParser progp (mempty, mappings, mempty) "" query2 of
+    return (case runParser progp () "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right ([Execute qu2], _) -> qu2)
+            Right [Execute qu2] -> qu2)
 qParseStandardQuery ::  String -> String -> IO Formula
 qParseStandardQuery ns query2 = do
     preds <- ICAT.qStandardPredsMap ns <$> standardPreds
-    return (case runParser progp (mempty, preds, mempty) "" query2 of
+    return (case runParser progp () "" query2 of
             Left err -> let errmsg = "cannot parse " ++ query2 ++ show err in trace errmsg error ""
-            Right ([Execute qu2], _) -> qu2)
+            Right [Execute qu2] -> qu2)
 {-
 parseStandardInsert :: String -> Query
 parseStandardInsert  = parseStandardQuery

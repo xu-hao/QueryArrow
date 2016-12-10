@@ -13,7 +13,6 @@ import Data.Map.Strict (keysSet)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
 import Control.Monad.Except
-import Control.Monad.Trans.Reader
 import System.Log.Logger
 import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Monad.Trans.Either
@@ -64,8 +63,7 @@ run3 hdr commands params tdb conn = do
         Left e ->  left (show e)
 
 run :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
-run hdr query par tdb conn  = do
-    let predmap = constructDBPredMap tdb
-    case runParser progp (mempty, predmap, mempty) "" query of
+run hdr query par tdb conn =
+    case runParser progp () "" query of
                             Left err -> throwError (show err)
-                            Right (commands, _) -> run3 hdr commands par tdb conn
+                            Right commands -> run3 hdr commands par tdb conn

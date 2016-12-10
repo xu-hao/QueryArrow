@@ -111,10 +111,10 @@ getRewriting :: PredMap -> TranslationInfo -> IO (RewritingRuleSets, PredMap, Pr
 getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
     d1 <- runCpphs defaultCpphsOptions{includes = include_file_path ps, boolopts = defaultBoolOptions {locations = False}}  (rewriting_file_path ps) d0
-    case runParser rulesp (predmap, mempty, mempty) "" d1 of
+    case runParser rulesp () (rewriting_file_path ps) d1 of
         Left err -> error (show err)
-        Right ((qr, ir, dr), predmap2, exports) ->
-            return ((qr, ir, dr), predmap2, exports)
+        Right actions ->
+            return (processActions predmap actions)
 
 typecheckRules :: PredTypeMap -> RewritingRuleSets -> Either String ()
 typecheckRules ptm (qr, ir, dr) = do
