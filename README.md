@@ -30,7 +30,7 @@ If installed debian package, it is `/usr/lib/ghc`.
 
 ### Build QueryArrow
 
-    sudo apt-get install postgresql-server-dev-all libsqlite3-dev -y
+    apt-get install postgresql-server-dev-all libsqlite3-dev -y
 
     git clone http://github.com/xu-hao/QueryArrow
 
