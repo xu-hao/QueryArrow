@@ -18,7 +18,6 @@ import qualified Data.Map.Strict as Map
 import Control.Monad.IO.Class (liftIO)
 import System.Log.Logger (infoM)
 import QueryArrow.FFI.Service
-import QueryArrow.Data.PredicatesGen
 import QueryArrow.Config
 import QueryArrow.DBMap
 
@@ -26,7 +25,6 @@ data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula 
 
 localService :: QueryArrowService Session
 localService = QueryArrowService {
-  getPredicates = \(Session db conn ) -> predicates,
   execQuery =  \(Session db conn ) form params -> do
     liftIO $ putStrLn ("execQuery: " ++ serialize (  form) ++ show params)
     liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn empty (  form) (fromList (Map.keys params)) (listResultStream [params]))),

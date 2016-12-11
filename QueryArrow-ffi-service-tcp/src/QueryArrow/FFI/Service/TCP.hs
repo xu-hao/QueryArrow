@@ -14,7 +14,6 @@ import Control.Monad.IO.Class (liftIO)
 import System.Log.Logger (infoM, errorM)
 import Data.Aeson
 import QueryArrow.FFI.Service
-import QueryArrow.Data.PredicatesGen
 import QueryArrow.RPC.Message
 import QueryArrow.Config
 import QueryArrow.DBMap
@@ -24,7 +23,7 @@ import System.IO (Handle)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Network
 
-data TcpServiceSession = TcpServiceSession Handle Predicates
+data TcpServiceSession = TcpServiceSession Handle
 
 data TcpClientConfig = TcpClientConfig {
     tcpServerAddr :: String,
@@ -33,9 +32,9 @@ data TcpClientConfig = TcpClientConfig {
 
 instance FromJSON TcpClientConfig
 
-tcpService :: String -> QueryArrowService TcpServiceSession
-tcpService path0 =
-  let   getAllResult0 = \(TcpServiceSession  handle _) vars form params -> do
+tcpService :: QueryArrowService TcpServiceSession
+tcpService  =
+  let   getAllResult0 = \(TcpServiceSession  handle) vars form params -> do
             let name = QuerySet {
                           qsquery = Static [Execute form],
                           qsheaders = fromList vars,
@@ -54,8 +53,7 @@ tcpService path0 =
                     throwError (-1, "cannot parse response")
   in
           QueryArrowService {
-            getPredicates = \(TcpServiceSession  handle pm) -> pm,
-            execQuery =  \(TcpServiceSession  handle _) form params -> do
+            execQuery =  \(TcpServiceSession  handle) form params -> do
               let name = QuerySet {
                             qsquery = Static [Execute (form )],
                             qsheaders = mempty,
@@ -82,22 +80,19 @@ tcpService path0 =
                       liftIO $ errorM "TCP Service" msg
                       throwError (-1, pack msg)
                   Just ps -> do
-                      ps2 <- liftIO $ getConfig path0
-                      (AbstractDatabase db) <- liftIO $ transDB "preds" ps2
-                      let pm = predicates
                       handle <- liftIO $ try (connectTo (tcpServerAddr ps) (PortNumber (fromIntegral (tcpServerPort ps))))
                       case handle of
                         Left e -> throwError (-1, pack (show (e :: SomeException)))
                         Right handle ->
-                          return (TcpServiceSession  handle  pm),
-            qasDisconnect = \ session@(TcpServiceSession handle _) -> do
+                          return (TcpServiceSession  handle ),
+            qasDisconnect = \ session@(TcpServiceSession handle) -> do
               let name2 = QuerySet {
                             qsquery = Quit,
                             qsheaders = mempty,
                             qsparams = mempty
                             }
               liftIO $ sendMsg handle name2,
-            qasCommit = \ session@(TcpServiceSession handle _) -> do
+            qasCommit = \ session@(TcpServiceSession handle ) -> do
               let name2 = QuerySet {
                             qsquery = Static [Commit],
                             qsheaders = mempty,
@@ -115,7 +110,7 @@ tcpService path0 =
                   Nothing ->
                       throwError (-1, "cannot parse response"),
 
-            qasRollback = \ session@(TcpServiceSession handle _) -> do
+            qasRollback = \ session@(TcpServiceSession handle ) -> do
               let name2 = QuerySet {
                             qsquery = Static [Rollback],
                             qsheaders = mempty,

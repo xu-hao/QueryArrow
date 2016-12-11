@@ -27,8 +27,6 @@ import QueryArrow.FFI.GenQuery.Parser
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
-import QueryArrow.Data.Abstract
-import QueryArrow.Data.PredicatesGen
 import QueryArrow.ICAT
 
 foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
@@ -38,11 +36,10 @@ hs_gen_query svcptr sessionptr cqu cout ccol crow = do
   session <- deRefStablePtr sessionptr
   qu <- peekCString cqu
   putStrLn ("genquery = " ++ qu)
-  let preds = getPredicates svc session
   let (vars, form) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
                 Right gq -> translateGenQueryToQAL gq
-  res <- runEitherT (getAllResult svc session vars (formula preds form) mempty)
+  res <- runEitherT (getAllResult svc session vars form mempty)
   case res of
     Left err -> error (show err)
     Right res -> do

@@ -5,11 +5,10 @@ import QueryArrow.Cypher.Cypher
 import QueryArrow.SQL.SQL
 import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map, fromList)
 import Data.List (partition)
-import QueryArrow.FO.Data
+import QueryArrow.FO.Data (PredTypeMap, keyComponents, propComponents)
 import QueryArrow.ListUtils
 import Control.Arrow ((***))
 import Data.Maybe (fromMaybe)
-import Debug.Trace
 
 type ColI = (String, Int)
 
@@ -30,9 +29,7 @@ colprop =  mempty
 
 lookup2 :: (Ord a) => a -> Map a a -> a
 lookup2 tablename0 table =
-        case lookup tablename0 table  of
-            Nothing -> tablename0
-            Just t -> t
+        fromMaybe tablename0 (lookup tablename0 table)
 
 sqlToCypher :: PredTypeMap -> PredTableMap -> CypherPredTableMap
 sqlToCypher ptm mappings =

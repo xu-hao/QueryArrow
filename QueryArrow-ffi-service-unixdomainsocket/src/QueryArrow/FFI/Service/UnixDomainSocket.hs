@@ -8,7 +8,6 @@ import QueryArrow.DBMap
 import QueryArrow.Serialization
 import QueryArrow.Config
 import QueryArrow.FFI.Service
-import QueryArrow.Data.PredicatesGen
 import QueryArrow.RPC.Message
 
 import Data.Set (fromList)
@@ -20,11 +19,11 @@ import System.Log.Logger (infoM, errorM)
 import System.IO (Handle, IOMode(..))
 import Network.Socket
 
-data UnixDomainSocketServiceSession = UnixDomainSocketServiceSession Handle Predicates
+data UnixDomainSocketServiceSession = UnixDomainSocketServiceSession Handle
 
-unixDomainSocketService :: String -> QueryArrowService UnixDomainSocketServiceSession
-unixDomainSocketService path0 =
-  let   getAllResult0 = \(UnixDomainSocketServiceSession  handle _) vars form params -> do
+unixDomainSocketService :: QueryArrowService UnixDomainSocketServiceSession
+unixDomainSocketService  =
+  let   getAllResult0 = \(UnixDomainSocketServiceSession  handle) vars form params -> do
             let name = QuerySet {
                           qsquery = Static [Execute form],
                           qsheaders = fromList vars,
@@ -43,8 +42,7 @@ unixDomainSocketService path0 =
                     throwError (-1, "cannot parse response")
   in
           QueryArrowService {
-            getPredicates = \(UnixDomainSocketServiceSession _ pm) -> pm,
-            execQuery =  \(UnixDomainSocketServiceSession  handle _) form params -> do
+            execQuery =  \(UnixDomainSocketServiceSession  handle ) form params -> do
               let name = QuerySet {
                             qsquery = Static [Execute (form )],
                             qsheaders = mempty,
@@ -63,9 +61,6 @@ unixDomainSocketService path0 =
                       throwError (-1, "cannot parse response"),
             getAllResult = getAllResult0,
             qasConnect = \ path -> do
-              ps2 <- liftIO $ getConfig path0
-              (AbstractDatabase db) <- liftIO $ transDB "preds" ps2
-              let pm = predicates
               handle <- liftIO $ try (do
                   sock <- socket AF_UNIX Stream defaultProtocol
                   connect sock (SockAddrUnix path)
@@ -73,15 +68,15 @@ unixDomainSocketService path0 =
               case handle of
                 Left e -> throwError (-1, pack (show (e :: SomeException)))
                 Right handle ->
-                      return (UnixDomainSocketServiceSession  handle  pm),
-            qasDisconnect = \ (UnixDomainSocketServiceSession handle _) -> do
+                      return (UnixDomainSocketServiceSession  handle  ),
+            qasDisconnect = \ (UnixDomainSocketServiceSession handle ) -> do
               let name2 = QuerySet {
                             qsquery = Quit,
                             qsheaders = mempty,
                             qsparams = mempty
                             }
               liftIO $ sendMsg handle name2,
-            qasCommit = \ (UnixDomainSocketServiceSession handle _) -> do
+            qasCommit = \ (UnixDomainSocketServiceSession handle ) -> do
               let name2 = QuerySet {
                             qsquery = Static [Commit],
                             qsheaders = mempty,
@@ -99,7 +94,7 @@ unixDomainSocketService path0 =
                   Nothing ->
                       throwError (-1, "cannot parse response"),
 
-            qasRollback = \ (UnixDomainSocketServiceSession handle _) -> do
+            qasRollback = \ (UnixDomainSocketServiceSession handle ) -> do
               let name2 = QuerySet {
                             qsquery = Static [Rollback],
                             qsheaders = mempty,

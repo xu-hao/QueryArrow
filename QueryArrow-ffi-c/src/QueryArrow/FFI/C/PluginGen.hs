@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.PluginGen where
 
-import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
+import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), var, (@@), (@@+), (@@-))
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
 import QueryArrow.DB.ResultStream
@@ -32,7 +32,6 @@ import Foreign.Storable
 import Foreign.Marshal.Array
 import System.Log.Logger (errorM, infoM)
 import QueryArrow.Logging
-import QueryArrow.Data.PredicatesGen
 import QueryArrow.Gen
 
 $(functions configFilePath)

@@ -7,12 +7,10 @@ import QueryArrow.DB.DB
 
 import Data.Text (Text)
 import Control.Monad.Trans.Either (EitherT)
-import QueryArrow.Data.PredicatesGen
 
 type Error = (Int, Text)
 
 data QueryArrowService a = QueryArrowService {
-  getPredicates :: a -> Predicates,
   execQuery :: a -> Formula -> MapResultRow -> EitherT Error IO (),
   getAllResult :: a -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow],
   qasConnect :: String -> EitherT Error IO a,

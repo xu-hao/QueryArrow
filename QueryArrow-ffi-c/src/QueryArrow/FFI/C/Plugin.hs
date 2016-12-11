@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.Plugin where
 
-import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..))
+import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), var, (@@), (@@+), (@@-), (.*.), (.+.))
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
 import QueryArrow.DB.ResultStream
@@ -35,8 +35,6 @@ import Data.Maybe (fromMaybe)
 import Control.Monad (foldM)
 import QueryArrow.Logging
 import QueryArrow.FFI.Service
-import QueryArrow.Data.PredicatesGen
-import QueryArrow.Data.Abstract
 import QueryArrow.FFI.Auxiliary
 
 foreign export ccall hs_setup :: IO ()
@@ -119,21 +117,21 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
     let (wherecols, whereops) = unzip (map parse wherecolsandops)
     let wherepredicate wherecol0 = do
             case wherecol0 of
-                    "data_repl_num" -> _data_repl_num
-                    "data_type_name" -> _data_type_name
-                    "data_size" -> _data_size
-                    -- "resc_name" -> _data_resc_name
-                    "data_path" -> _data_path
-                    "data_owner_name" -> _data_owner_name
-                    "data_owner_zone" -> _data_owner_zone
-                    "data_is_dirty" -> _data_is_dirty
-                    "data_checksum" -> _data_checksum
-                    "data_expiry_ts" -> _data_expiry_ts
-                    "r_comment" -> _data_comment
-                    "create_ts" -> _data_create_ts
-                    "modify_ts" -> _data_modify_ts
-                    "data_mode" -> _data_mode
-                    "resc_hier" -> _data_resc_hier
+                    "data_repl_num" -> "DATA_REPL_NUM"
+                    "data_type_name" -> "DATA_TYPE_NAME"
+                    "data_size" -> "DATA_SIZE"
+                    -- "resc_name" ">" _data_resc_name
+                    "data_path" -> "DATA_PATH"
+                    "data_owner_name" -> "DATA_OWNER_NAME"
+                    "data_owner_zone" -> "DATA_OWNER_ZONE"
+                    "data_is_dirty" -> "DATA_IS_DIRTY"
+                    "data_checksum" -> "DATA_CHECKSUM"
+                    "data_expiry_ts" -> "DATA_EXPIRY_TS"
+                    "r_comment" -> "DATA_COMMENT"
+                    "create_ts" -> "DATA_CREATE_TS"
+                    "modify_ts" -> "DATA_MODIFY_TS"
+                    "data_mode" -> "DATA_MODE"
+                    "resc_hier" -> "DATA_RESC_HIER"
                     _ -> error ("unsupported column " ++ wherecol0)
     let whereatom pre wherecol0 =
           let wherecol = var (pre ++ wherecol0)
@@ -144,19 +142,19 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
               p = wherepredicate wherecol0 in
                   p @@+ [var "w_data_id", var "w_resc_id", wherecol]
     let whereform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = whereatom "w_" wherecol
-                           | otherwise = return FOne
+                           | otherwise = FOne
     let wherelit wherecol "!=" =
-            aggregate Not (whereform wherecol)
+            Aggregate Not (whereform wherecol)
         wherelit wherecol "=" =
             whereform wherecol
-    let cond = foldl (.*.) (return FOne) (zipWith wherelit wherecols whereops )
+    let cond = foldl (.*.) FOne (zipWith wherelit wherecols whereops )
     let updateform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = updateatom "u_" wherecol
                             | otherwise = error ("cannot update " ++ wherecol)
     let update = foldl (.*.) cond (map updateform updatecols)
     let whereparam col val = (Var ("w_" ++ col), StringValue (pack val))
     let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
     let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execAbstract svc session update params) (const (return ()))
+    processRes (execQuery svc session update params) (const (return ()))
 
 foreign export ccall hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
 hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
@@ -169,13 +167,13 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
     cupdatevals2 <- peekArray upcols cupdatevals
     updatevals <- mapM peekCString cupdatevals2
     cn <- peekCString ccn
-    let cond = _coll_name @@ [var "cid", var "w_coll_name"]
+    let cond = "COLL_NAME" @@ [var "cid", var "w_coll_name"]
     let wherepredicate wherecol0 =
             case wherecol0 of
-                    "coll_type" -> _coll_type
-                    "coll_info1" -> _coll_info1
-                    "coll_info2" -> _coll_info2
-                    "modify_ts" -> _coll_modify_ts
+                    "coll_type" -> "COLL_TYPE"
+                    "coll_info1" -> "COLL_INFO1"
+                    "coll_info2" -> "COLL_INFO2"
+                    "modify_ts" -> "COLL_MODIFY_TS"
     let updateatom wherecol0 =
           let wherecol = var ("u_" ++ wherecol0)
               p = wherepredicate wherecol0 in
@@ -184,7 +182,7 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
     let update = foldl (.*.) cond (map updateform updatecols)
     let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
     let params = Map.singleton (Var "w_coll_name") (StringValue (pack cn)) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execAbstract svc session update params) (const (return ()))
+    processRes (execQuery svc session update params) (const (return ()))
 
 mapResultRowToList :: [Var] -> MapResultRow -> [ResultValue]
 mapResultRowToList vars r =

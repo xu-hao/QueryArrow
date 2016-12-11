@@ -44,6 +44,7 @@ library
                    either,
                    QueryArrow-common,
                    QueryArrow-ffi-service,
+                   QueryArrow-sql-common,
                    QueryArrow-gen,
                    template-haskell
   ghc-options:     -Wall -fPIC -shared -dynamic

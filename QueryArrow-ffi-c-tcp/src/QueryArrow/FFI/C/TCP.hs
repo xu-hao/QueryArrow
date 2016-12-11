@@ -11,10 +11,9 @@ import System.Log.Logger (errorM, infoM)
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Service.TCP
 
-foreign export ccall hs_tcp :: CString -> Ptr (StablePtr (QueryArrowService TcpServiceSession)) -> IO Int
-hs_tcp :: CString -> Ptr (StablePtr (QueryArrowService TcpServiceSession)) -> IO Int
-hs_tcp cpath svcptrptr = do
-  path <- peekCString cpath
-  ptr <- newStablePtr (tcpService path)
+foreign export ccall hs_tcp ::  Ptr (StablePtr (QueryArrowService TcpServiceSession)) -> IO Int
+hs_tcp ::  Ptr (StablePtr (QueryArrowService TcpServiceSession)) -> IO Int
+hs_tcp  svcptrptr = do
+  ptr <- newStablePtr tcpService
   poke svcptrptr ptr
   return 0

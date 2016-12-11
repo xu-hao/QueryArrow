@@ -5,7 +5,12 @@ module QueryArrow.FFI.C.Template where
 import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..), constructPredTypeMap, CastType(..))
 import QueryArrow.DB.DB
 import QueryArrow.Rewriting
+import Data.Namespace.Namespace
 import Data.Namespace.Path
+import QueryArrow.Translation
+import QueryArrow.Config
+import QueryArrow.Utils
+import QueryArrow.SQL.ICAT
 
 import Prelude hiding (lookup)
 import Data.Text (Text)
@@ -26,10 +31,9 @@ import Control.Arrow ((***))
 import System.Log.Logger (infoM)
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
-import QueryArrow.Data.Abstract
-import QueryArrow.Data.Template
 import Data.Maybe (fromMaybe)
 import Data.Map.Strict (lookup)
+import Data.Char (toUpper)
 
 functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
@@ -81,7 +85,7 @@ arrayToAllocateBuffer buf lenbuf txt = do
 queryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryFunction name inputtypes outputtypes = do
     let fn = mkName ("get_" ++ name)
-    let pn = varE (mkName name)
+    let pn = stringE ("D_" ++ map toUpper name)
     s <- [p|svcptr|]
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
@@ -105,7 +109,7 @@ queryFunction name inputtypes outputtypes = do
 queryLongFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryLongFunction name inputtypes outputtypes = do
     let fn = mkName ("get_int_" ++ name)
-    let pn = varE (mkName name)
+    let pn = stringE ("D_" ++ map toUpper name)
     s <- [p|svcptr|]
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
@@ -130,7 +134,7 @@ queryLongFunction name inputtypes outputtypes = do
 querySomeFunction :: String -> [Type2] -> [Type2] -> DecsQ
 querySomeFunction name inputtypes outputtypes = do
     let fn = mkName ("get_some_" ++ name)
-    let pn = varE (mkName name)
+    let pn = stringE("D_" ++ map toUpper name)
     s <- [p|svcptr|]
     p <- [p|session|]
     let n = mkName ("a")
@@ -153,7 +157,7 @@ querySomeFunction name inputtypes outputtypes = do
 queryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryAllFunction name inputtypes outputtypes = do
     let fn = mkName ("get_all_" ++ name)
-    let pn = varE (mkName name)
+    let pn = stringE("D_" ++ map toUpper name)
     s <- [p|svcptr|]
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
@@ -178,7 +182,7 @@ queryAllFunction name inputtypes outputtypes = do
 queryAll2Function :: String -> [Type2] -> [Type2] -> DecsQ
 queryAll2Function name inputtypes outputtypes = do
     let fn = mkName ("get_all2_" ++ name)
-    let pn = varE (mkName name)
+    let pn = stringE("D_" ++ map toUpper name)
     let s = mkName "svcptr"
     let p = mkName "session"
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
@@ -398,7 +402,7 @@ hsQueryAll2Function n inputtypes outputtypes = do
 createFunction :: String -> Int -> DecQ
 createFunction n a = do
     let fn = mkName ("create_" ++ n)
-    let pn = varE (mkName n)
+    let pn = stringE("D_" ++ map toUpper n)
     s <- [p|svcptr|]
     p <- [p|session|]
     let args = map (\i -> "arg" ++ show i) [1..a]
@@ -406,7 +410,7 @@ createFunction n a = do
     let ps = s : p : map VarP argnames
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
-    let func = [|execAbstract|]
+    let func = [|execQuery|]
     b <- [|$(func) svcptr session ($(pn) @@+ $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
@@ -441,7 +445,7 @@ hsCreateFunction n a = do
 createFunctionArray :: String -> Int -> DecQ
 createFunctionArray n a = do
     let fn = mkName ("array_create_" ++ n)
-    let pn = varE (mkName n)
+    let pn = stringE("D_" ++ map toUpper n)
     s <- [p|svcptr|]
     p <- [p|session|]
     p2 <- [p|argarray|]
@@ -449,7 +453,7 @@ createFunctionArray n a = do
     let ps = [s, p , p2]
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
-    let func = [|execAbstract|]
+    let func = [|execQuery|]
     b <- [|$(func) svcptr session ($(pn) @@+ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
@@ -477,7 +481,7 @@ hsCreateFunctionArray n = do
 deleteFunction :: String -> Int -> DecQ
 deleteFunction n a = do
     let fn = mkName ("delete_" ++ n)
-    let pn = varE (mkName n)
+    let pn = stringE("D_" ++ map toUpper n)
 
     s <- [p|svcptr|]
     p <- [p|session|]
@@ -486,7 +490,7 @@ deleteFunction n a = do
     let ps = s : p : map VarP argnames
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
-    let func = [|execAbstract|]
+    let func = [|execQuery|]
     b <- [|$(func) svcptr session ($(pn) @@- $(argList2)) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
@@ -514,9 +518,21 @@ hsDeleteFunction n a = do
     b <- [|processRes $(b0) (const (return ()))|]
     funD fn2 [return (Clause ps (NormalB b) [])]
 
+getRewritingRules :: String -> IO (([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), [Pred])
+getRewritingRules path = do
+    transinfo <- getConfig path
+    let ps = db_info (head (db_plugins transinfo))
+    db <- makeICATSQLDBAdapter (db_namespace ps) (db_icat ps) (Just "nextid") ()
+    let predmap0 = constructDBPredMap db
+    putStrLn "predicates loaded "
+    print predmap0
+    -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
+    (rewriting, workspace, _) <- getRewriting predmap0 transinfo
+    return (rewriting, Map.elems (allObjects workspace))
+
 functions :: String -> DecsQ
 functions path = do
-    (qr, ir, dr, preds) <- runIO (getRewritingRules path)
+    ((qr, ir, dr), preds) <- runIO (getRewritingRules path)
     let ptm = constructPredTypeMap preds
     qr1 <- concat <$> mapM (\(InsertRewritingRule (Atom ( name@(ObjectPath _ n0)  ) _) _) ->
                         let n = map toLower (drop 2 n0)

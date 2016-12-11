@@ -554,7 +554,25 @@ layeredF (Aggregate _ form) = pureF form
 layeredF FOne = True
 layeredF FZero = True
 
-infixr 5 @@
+infixl 5 @@@
+infixl 5 @@
+infixl 5 @@+
+infixl 5 @@-
+infixl 4 .*.
+infixl 3 .+.
+infixl 3 .|.
+
+(@@@) :: PredName -> [Expr] -> Formula
+pred' @@@ args = FAtomic (Atom pred' args)
+
+(@@) :: String -> [Expr] -> Formula
+label @@ args = FAtomic (Atom (UQPredName label) args)
+
+(@@+) :: String -> [Expr] -> Formula
+label @@+ args = FInsert (Lit Pos (Atom (UQPredName label) args))
+
+(@@-) :: String -> [Expr] -> Formula
+label @@- args = FInsert (Lit Neg (Atom (UQPredName label) args))
 
 (.*.) :: Formula -> Formula -> Formula
 FOne .*. b = b
@@ -606,8 +624,16 @@ fchoice = foldl (.+.) FZero
 fpar :: [Formula] -> Formula
 fpar = foldl (.|.) FZero
 
-(@@) :: PredName -> [Expr] -> Formula
-pred' @@ args = FAtomic (Atom pred' args)
+notE :: Formula -> Formula
+notE a =
+    Aggregate Not a
+
+existsE :: Formula -> Formula
+existsE a =
+    Aggregate Exists a
+
+var :: String -> Expr
+var = VarExpr . Var
 
 {- class SubstPred a where
     substPred :: Map Pred Pred -> a -> a

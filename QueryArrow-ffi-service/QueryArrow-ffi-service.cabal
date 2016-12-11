@@ -6,8 +6,7 @@ author:         Hao Xu
 
 library
   hs-source-dirs:  src
-  exposed-modules: QueryArrow.Data.Abstract QueryArrow.Data.PredicatesGen QueryArrow.Data.Template
-                   QueryArrow.FFI.Auxiliary QueryArrow.FFI.Service
+  exposed-modules: QueryArrow.FFI.Auxiliary QueryArrow.FFI.Service
   build-depends:
                    base >= 4,
                    containers,
@@ -35,7 +34,6 @@ library
                    either,
                    QueryArrow-common,
                    QueryArrow-sql-common,
-                   QueryArrow-gen,
                    template-haskell
   ghc-options:     -Wall -fPIC
   other-modules:

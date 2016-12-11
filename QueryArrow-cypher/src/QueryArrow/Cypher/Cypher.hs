@@ -6,7 +6,7 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cwhere, creturn) where
 
-import QueryArrow.FO.Data hiding (Subst, subst, Unify,unify)
+import QueryArrow.FO.Data (Serialize(..), New(..), Sign(..), Var(..), PredName, PredTypeMap, NewEnv, Formula(..), Atom(..), Lit(..), Expr(..), CastType(..), registerVars, FreeVars(..), runNew, layeredF, StringWrapper(..))
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
 import QueryArrow.ListUtils
@@ -16,7 +16,7 @@ import Data.List (intercalate, (\\), union, intersect)
 import Control.Monad.Trans.State.Strict (State, StateT, get, put, runState, evalStateT)
 import Control.Monad (foldM)
 import Control.Arrow ((***))
-import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, elems, keys, fromList)
+import Data.Map.Strict (empty, Map, insert, member, foldlWithKey, lookup, elems)
 import qualified Data.Map.Strict as Map
 import Data.Convertible.Base
 import Data.Monoid
@@ -25,8 +25,6 @@ import Control.Applicative ((<$>))
 import Control.Monad.Trans.Class
 import qualified Data.Text as T
 import Data.Set (toAscList)
-import qualified Data.Set as Set
-import Algebra.Lattice
 
 -- basic definitions
 
