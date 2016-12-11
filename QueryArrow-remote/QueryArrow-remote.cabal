@@ -10,10 +10,6 @@ library
                    QueryArrow.Remote.Channel
                    QueryArrow.Remote.Definitions
                    QueryArrow.Remote.Serialization
-                   QueryArrow.Remote.Full.Definitions
-                   QueryArrow.Remote.Full.Serialization
-                   QueryArrow.Remote.Full.Server
-                   QueryArrow.Remote.Full.Client
                    QueryArrow.Remote.NoTranslation.Definitions
                    QueryArrow.Remote.NoTranslation.Serialization
                    QueryArrow.Remote.NoTranslation.Server
@@ -32,6 +28,7 @@ library
                    resourcet,
                    network,
                    hslogger,
+                   lifted-base,
                    constraints,
                    QueryArrow-common,
                    QueryArrow-rpc-common,

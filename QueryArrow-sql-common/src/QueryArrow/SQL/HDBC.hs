@@ -73,9 +73,8 @@ instance IDBConnection0 HDBCDBConnection  where
         dbBegin _ = return ()
         dbCommit (HDBCDBConnection conn) =  do
             commit conn
-            return True
         dbPrepare (HDBCDBConnection conn) =
-            return True
+            return ()
         dbRollback (HDBCDBConnection conn) = rollback conn
         dbClose (HDBCDBConnection conn) = disconnect conn
 

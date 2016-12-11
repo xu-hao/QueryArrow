@@ -92,8 +92,8 @@ instance (IResultRow row, HMapConstraint IDatabase l, HMapConstraint (IDatabaseU
 instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) => IDBConnection0 (ConnectionType (SumDB row l )) where
     dbClose (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbClose dbs
     dbBegin (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbBegin dbs
-    dbCommit (SumDBConnection dbs  ) = and <$> (hMapACUL' @(IDBConnection)  dbCommit dbs)
-    dbPrepare (SumDBConnection dbs  ) = and <$> (hMapACUL' @(IDBConnection) dbPrepare dbs)
+    dbCommit (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection)  dbCommit dbs
+    dbPrepare (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbPrepare dbs
     dbRollback (SumDBConnection dbs  ) = hMapACUL'_ @IDBConnection dbRollback dbs
 
 instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint

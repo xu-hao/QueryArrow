@@ -11,6 +11,7 @@ import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
 import QueryArrow.Remote.Definitions
 import QueryArrow.FO.Data
+import Control.Exception.Lifted (catch, SomeException)
 
 runQueryArrowServer :: forall db a. (Channel a, SendType a ~ RemoteResultSet, ReceiveType a ~ RemoteCommand,
         DBFormulaType db ~ Formula,
@@ -36,27 +37,37 @@ runQueryArrowServer chan db = do
           return UnitResult
         DBBegin connSP -> liftIO $ do
           (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
-          dbBegin conn
-          return UnitResult
-        DBPrepare connSP -> liftIO $ do
-          (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
-          b <- dbPrepare conn
-          return (BoolResult b)
-        DBCommit connSP -> liftIO $ do
-          (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
-          b <- dbCommit conn
-          return (BoolResult b)
-        DBRollback connSP -> liftIO $ do
-          (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
-          dbRollback conn
-          return UnitResult
-        DBStmtExec connSP (NTDBQuery vars2 form vars) rows -> do
-          (_, conn, _) <- liftIO $ deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
-          qu <- liftIO $ translateQuery db vars2 form vars
-          stmt <- liftIO $ prepareQuery conn qu
-          rows' <- getAllResultsInStream (dbStmtExec stmt (listResultStream rows))
-          liftIO $ dbStmtClose stmt
-          return (RowListResult rows')
+          catch (do
+            dbBegin conn
+            return UnitResult
+            ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
+        DBPrepare connSP -> liftIO $
+          catch (do
+              (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
+              dbPrepare conn
+              return UnitResult
+              ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
+        DBCommit connSP -> liftIO $
+          catch (do
+              (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
+              dbCommit conn
+              return UnitResult
+              ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
+        DBRollback connSP -> liftIO $
+          catch (do
+              (_, conn, _) <- deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
+              dbRollback conn
+              return UnitResult
+              ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
+        DBStmtExec connSP (NTDBQuery vars2 form vars) rows ->
+          catch (do
+            (_, conn, _) <- liftIO $ deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
+            qu <- liftIO $ translateQuery db vars2 form vars
+            stmt <- liftIO $ prepareQuery conn qu
+            rows' <- getAllResultsInStream (dbStmtExec stmt (listResultStream rows))
+            liftIO $ dbStmtClose stmt
+            return (RowListResult rows')
+            ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
         Quit -> error "error"
       liftIO $ send chan res
       runQueryArrowServer chan db

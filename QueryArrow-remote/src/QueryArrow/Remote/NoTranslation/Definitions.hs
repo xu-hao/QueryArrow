@@ -25,6 +25,7 @@ data RemoteResultSet = StringResult String
   | PredListResult [Pred]
   | PredIntListMapResult (Map PredName [Int])
   | BoolResult Bool
+  | ErrorResult (Int, String)
   | ConnectionResult (Ptr ())
   | UnitResult
-  | RowListResult [MapResultRow]
+  | RowListResult [MapResultRow] deriving (Show)

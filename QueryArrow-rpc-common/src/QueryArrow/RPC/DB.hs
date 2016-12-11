@@ -13,7 +13,6 @@ import Data.Map.Strict (keysSet)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
 import Control.Monad.Except
-import System.Log.Logger
 import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Monad.Trans.Either
 import Data.Set (Set)
@@ -27,19 +26,11 @@ run3 hdr commands params tdb conn = do
                                         liftIO $ dbBegin conn
                                         return []
                                     Prepare -> do
-                                        b <- liftIO $ dbPrepare conn
-                                        if b
-                                            then return []
-                                            else do
-                                                liftIO $ errorM "QA" "prepare failed, cannot commit"
-                                                error "prepare failed, cannot commit"
+                                        liftIO $ dbPrepare conn
+                                        return []
                                     Commit -> do
-                                        b <- liftIO $ dbCommit conn
-                                        if b
-                                            then return []
-                                            else do
-                                                liftIO $ errorM "QA" "commit failed"
-                                                error "commit failed"
+                                        liftIO $ dbCommit conn
+                                        return []
                                     Rollback -> do
                                         liftIO $ dbRollback conn
                                         return []

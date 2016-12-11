@@ -11,6 +11,7 @@ library
                    base >= 4,
                    hslogger,
                    QueryArrow-ffi-service,
-                   QueryArrow-ffi-service-unixdomainsocket
+                   QueryArrow-ffi-service-unixdomainsocket,
+                   QueryArrow-ffi-service-handle-common
   ghc-options:     -Wall -fPIC -shared -dynamic
   other-modules:

@@ -23,6 +23,7 @@ import Algebra.Lattice
 import Data.Set (Set, fromList, null, isSubsetOf, member)
 import Data.Ord (comparing, Down(..))
 import Data.Functor.Compose (Compose(..))
+import Control.Exception (catch, SomeException)
 -- import Debug.Trace
 
 type MSet a = Complemented (Set a)
@@ -560,23 +561,16 @@ execQueryPlan rs (QPPar3 qp1 qp2) = do
 execQueryPlan  rs (QPTransaction3 dbs) = do
     let (begin, prepare, commit, rollback) =
                 (mapM_ dbBegin dbs,
-                and <$> mapM dbPrepare dbs,
-                and <$> mapM dbCommit dbs,
+                mapM_ dbPrepare dbs,
+                mapM_ dbCommit dbs,
                 mapM_ dbRollback dbs)
     row <- rs
     let commitCleanup = do
-            b' <- prepare
-            if b'
-                then do
-                    b'' <- commit
-                    if b''
-                        then return ()
-                        else do
+            catch(do
+              prepare
+              commit) (\e -> do
                             rollback
-                            liftIO $ errorM "QA" ("execQueryPlan: commit failed " ++ show b'')
-                else do
-                    rollback
-                    liftIO $ errorM "QA" ("execQueryPlan: prepare failed rollback " ++ show b')
+                            liftIO $ errorM "QA" ("execQueryPlan: commit failed with exception " ++ show (e :: SomeException)))
     let rollbackCleanup = do
             rollback
             liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")

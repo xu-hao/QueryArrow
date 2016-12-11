@@ -15,6 +15,8 @@ data QueryArrowService a = QueryArrowService {
   getAllResult :: a -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow],
   qasConnect :: String -> EitherT Error IO a,
   qasDisconnect :: a -> EitherT Error IO (),
+  qasPrepare :: a -> EitherT Error IO (),
+  qasBegin :: a -> EitherT Error IO (),
   qasCommit :: a -> EitherT Error IO (),
   qasRollback :: a -> EitherT Error IO ()
 }

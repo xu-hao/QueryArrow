@@ -35,8 +35,8 @@ instance (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType d
 instance IDBConnection0 (ConnectionType (NoConnectionDatabase db)) where
     dbClose _ = return ()
     dbBegin _ = return ()
-    dbCommit _ = return True
-    dbPrepare _ = return True
+    dbCommit _ = return ()
+    dbPrepare _ = return ()
     dbRollback _ = return ()
 
 instance (INoConnectionDatabase2 db) => IDBConnection (ConnectionType (NoConnectionDatabase db)) where

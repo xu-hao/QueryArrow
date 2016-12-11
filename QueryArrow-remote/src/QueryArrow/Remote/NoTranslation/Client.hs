@@ -11,9 +11,6 @@ import Foreign.Ptr
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
 import QueryArrow.Remote.Definitions
-import Control.Applicative ((<|>))
-import System.IO.Unsafe (unsafePerformIO)
-import Data.Map.Strict
 
 data QueryArrowClient a where
   QueryArrowClient :: a -> String -> [Pred] -> QueryArrowClient a
@@ -30,22 +27,32 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
   ntGetPreds (QueryArrowClient _ _ ps) = ps
   ntSupported (QueryArrowClient chan _ _) form vars = True -- assuming that the server is running a TransDB
 
-instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBConnection0 (ConnectionType (QueryArrowClient  a)) where
+processRes :: RemoteResultSet -> IO ()
+processRes res =
+  case res of
+    UnitResult ->
+      return ()
+    ErrorResult (_, err) ->
+      fail err
+    _ ->
+      fail ("unsupported result type: " ++ show res)
+
+instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBConnection0 (ConnectionType (QueryArrowClient a)) where
   dbClose (QueryArrowClientDBConnection chan connSP) = do
-    UnitResult <- rpc chan (DBClose connSP)
-    return ()
+    res <- rpc chan (DBClose connSP)
+    processRes res
   dbBegin (QueryArrowClientDBConnection chan connSP) = do
-    UnitResult <- rpc chan (DBBegin connSP)
-    return ()
+    res <- rpc chan (DBBegin connSP)
+    processRes res
   dbPrepare (QueryArrowClientDBConnection chan connSP) = do
-    BoolResult b <- rpc chan (DBPrepare connSP)
-    return b
+    res <- rpc chan (DBPrepare connSP)
+    processRes res
   dbCommit (QueryArrowClientDBConnection chan connSP) = do
-    BoolResult b <- rpc chan (DBCommit connSP)
-    return b
+    res <- rpc chan (DBCommit connSP)
+    processRes res
   dbRollback (QueryArrowClientDBConnection chan connSP) = do
-    UnitResult <- rpc chan (DBRollback connSP)
-    return ()
+    res <- rpc chan (DBRollback connSP)
+    processRes res
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBStatement (ConnectionType (QueryArrowClient  a), NTDBQuery Formula) where
   type RowType (ConnectionType (QueryArrowClient  a), NTDBQuery Formula) = MapResultRow

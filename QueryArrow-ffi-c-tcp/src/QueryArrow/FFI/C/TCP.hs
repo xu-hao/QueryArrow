@@ -10,9 +10,10 @@ import Foreign.Storable
 import System.Log.Logger (errorM, infoM)
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Service.TCP
+import QueryArrow.FFI.Service.Handle
 
-foreign export ccall hs_tcp ::  Ptr (StablePtr (QueryArrowService TcpServiceSession)) -> IO Int
-hs_tcp ::  Ptr (StablePtr (QueryArrowService TcpServiceSession)) -> IO Int
+foreign export ccall hs_tcp ::  Ptr (StablePtr (QueryArrowService HandleSession)) -> IO Int
+hs_tcp ::  Ptr (StablePtr (QueryArrowService HandleSession)) -> IO Int
 hs_tcp  svcptrptr = do
   ptr <- newStablePtr tcpService
   poke svcptrptr ptr

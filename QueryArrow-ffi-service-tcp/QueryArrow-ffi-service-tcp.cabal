@@ -31,7 +31,8 @@ executable JSONSend
                    QueryArrow-rpc-common,
                    QueryArrow-common,
                    QueryArrow,
-                   QueryArrow-ffi-service
+                   QueryArrow-ffi-service,
+                   QueryArrow-ffi-service-handle-common
   ghc-options:     -Wall
   other-modules:
 library

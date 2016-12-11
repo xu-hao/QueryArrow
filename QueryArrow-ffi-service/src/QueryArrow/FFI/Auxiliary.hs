@@ -25,6 +25,10 @@ getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -
 getSomeResults svc session vars form params n =
   getAllResult svc session vars (Aggregate (Limit n) form) params
 
+execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
+execAbstract svc session form params =
+  execQuery svc session form params
+
 getResultValues :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [ResultValue]
 getResultValues svc session vars form params = do
   count <- getSomeResults svc session vars form params 1
