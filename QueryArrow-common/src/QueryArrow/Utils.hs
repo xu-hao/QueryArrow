@@ -67,16 +67,16 @@ dbCatch :: (MonadCatch m) => m a -> m (Either SomeException a)
 dbCatch action =
         try action
 
-pprint2 :: [String] -> [Map String String] -> String
-pprint2 vars rows =
-  pprint3 (vars, map (\row -> map (g row) vars) rows) where
+pprint2 :: Bool -> [String] -> [Map String String] -> String
+pprint2 showhdr vars rows =
+  pprint3 showhdr (vars, map (\row -> map (g row) vars) rows) where
     g::Map String String ->String->  String
     g row var  = case lookup var row of
         Nothing -> "null"
         Just e -> e
 
-pprint3 :: ([String], [[String]]) -> String
-pprint3 (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" where
+pprint3 :: Bool -> ([String], [[String]]) -> String
+pprint3 showhdr (vars, rows) = (if showhdr then join vars ++ "\n" else "") ++ intercalate "\n" rowstrs ++ "\n" where
             join = intercalate " " . map (uncurry pad) . zip collen
             rowstrs = map join m2
             m2 = transpose m
@@ -89,6 +89,6 @@ pprint3 (vars, rows) = join vars ++ "\n" ++ intercalate "\n" rowstrs ++ "\n" whe
                 | length s < n  = s ++ replicate (n - length s) ' '
                 | otherwise     = s
 
-pprint :: [Var] -> [MapResultRow] -> String
-pprint vars rows =
-    pprint2 (map unVar vars) (map (mapKeys unVar . M.map show) rows)
+pprint :: Bool -> [Var] -> [MapResultRow] -> String
+pprint showhdr vars rows =
+    pprint2 showhdr (map unVar vars) (map (mapKeys unVar . M.map show) rows)

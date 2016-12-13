@@ -6,7 +6,7 @@ import Prelude hiding (lookup)
 import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith)
 import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
-import Data.Set (Set, (\\), isSubsetOf)
+import Data.Set (Set, (\\), isSubsetOf, toAscList)
 import qualified Data.Set as Set
 import QueryArrow.FO.Data
 import QueryArrow.FO.Domain
@@ -16,8 +16,8 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Except
 import Control.Arrow ((***))
 import Control.Monad (zipWithM_)
-import Algebra.Lattice ((\/))
 import Data.Maybe (fromMaybe)
+import Algebra.Lattice
 
 type VarTypeMap = Map Var ParamType
 type TVarMap = Map String CastType
@@ -26,9 +26,10 @@ type TCMonad = EitherT String (StateT (VarTypeMap, TVarMap) (ReaderT PredTypeMap
 class Typecheck a where
   typecheck :: a -> TCMonad ()
 
-initTCMonad :: [ParamType] -> [Var] -> TCMonad ()
-initTCMonad = zipWithM_ (\pt var -> do
-      lift $ modify (insert var pt *** id))
+initTCMonad :: VarTypeMap -> TCMonad ()
+initTCMonad vtm = do
+      lift $ modify (unionWith const vtm *** id)
+      lift . lift . lift $ register (concatMap (Set.toAscList . freeTypeVars) (Map.elems vtm))
 
 class TCUnify a where
   tcunify :: a -> a -> TCMonad ()
@@ -199,10 +200,40 @@ instance Typecheck Formula where
     typecheck  (FPar a b) = typecheck  a >> typecheck  b
     typecheck  FZero = return ()
     typecheck  FOne = return ()
-    typecheck  FTransaction = return ()
     typecheck  (Aggregate agg form) = do
         (vtm, _) <- lift get
         typecheck form
         typecheck agg
         (vtm2, _) <- lift get
         lift $ modify (const (unionWith (const id) vtm vtm2) *** id)
+
+setToMap :: Set Var -> Set Var -> (VarTypeMap, VarTypeMap)
+setToMap vars vars2 =
+  let
+    varsi = vars \\ vars2
+    vars2i = vars2 /\ vars
+    vars2o = vars2 \\ vars
+    tvsi = map (ParamType False True False . TypeVar . show) [1..length varsi]
+    tvs2i = map (ParamType False True False . TypeVar. show) [length varsi + 1..length varsi + length vars2i]
+    tvs2o = map (ParamType False False True . TypeVar. show) [length vars + 1..length vars + length vars2o]
+    varsti = Map.fromList (zip (toAscList varsi) tvsi)
+    varst2i = Map.fromList (zip (toAscList vars2i) tvs2i)
+    varst2o = Map.fromList (zip (toAscList vars2o) tvs2o)
+    varstinp = Map.union varsti varst2i
+    varstout = Map.union varst2i varst2o
+  in
+    (varstinp, varstout)
+
+setToMap2 :: Map Var CastType -> Set Var -> (VarTypeMap, VarTypeMap)
+setToMap2 vars vars2 =
+  let
+    (vars2i, varsi) = Map.partitionWithKey (\k _ -> k `elem` vars2) vars
+    vars2o = vars2 \\ keysSet vars
+    tvs2o = map (ParamType False False True . TypeVar. show) [1..length vars2o]
+    varsti = Map.map (ParamType False True False) varsi
+    varst2i = Map.map (ParamType False True False) vars2i
+    varst2o = Map.fromList (zip (toAscList vars2o) tvs2o)
+    varstinp = Map.union varsti varst2i
+    varstout = Map.union varst2i varst2o
+  in
+    (varstinp, varstout)

@@ -97,7 +97,7 @@ postQueryR = selectRep $ do
 
 main :: IO ()
 main = do
-    setup
+    setup INFO
     args2 <- getArgs
     ps <- getConfig (head args2)
     warp (server_port ps) App {appParameters = ps}

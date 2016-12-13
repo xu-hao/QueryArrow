@@ -903,12 +903,12 @@ rewrite insert D_DATA_PATH(rn, old, new)
 predicate D_COLL_NAME_RECURSIVE property(key input text, key input text)
 rewrite insert D_COLL_NAME_RECURSIVE (oldcn, newcn)
     concat(oldcn, "/%", pattern) COLL_PARENT_COLL_NAME(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern)) COLL_NAME(cid, cn)
-    strlen(oldcn, oldl) strlen(cn, l) substr(oldcn, oldl, l, scn) concat(newcn, scn, newcn2) insert COLL_NAME(cid, newcn2)
+    strlen(oldcn, oldl) strlen(cn, l) add(oldl, 1, oldl1) sub(l, oldl, c) substr(cn, oldl1, c, scn) concat(newcn, scn, newcn2) insert COLL_NAME(cid, newcn2)
 
 predicate D_DATA_RESC_HIER_RECURSIVE property(key input text, key input text, input text)
 rewrite insert D_DATA_RESC_HIER_RECURSIVE (delim, oldcn, newcn)
     concat(oldcn, delim, pattern0) concat(pattern0, "%", pattern) DATA_RESC_HIER(id, rid, pcn) (eq(pcn, oldcn) | like(pcn, pattern))
-    strlen(oldcn, oldl) strlen(pcn, l) substr(oldcn, oldl, l, scn) concat(newcn, scn, newcn2) insert DATA_RESC_HIER(id, rid, newcn2)
+    strlen(oldcn, oldl) strlen(pcn, l) add(oldl, 1, oldl1) sub(l, oldl, c) substr(pcn, oldl1, c, scn) concat(newcn, scn, newcn2) insert DATA_RESC_HIER(id, rid, newcn2)
 
 predicate D_DATA_RESC_HIER property(key input text, key input text, input text)
 rewrite insert D_DATA_RESC_HIER (delim, oldcn, newcn)
@@ -919,7 +919,7 @@ rewrite insert D_DATA_RESC_HIER (delim, oldcn, newcn)
 predicate D_COLL_PARENT_COLL_NAME_RECURSIVE property(key input text, key input text)
 rewrite insert D_COLL_PARENT_COLL_NAME_RECURSIVE (oldcn, newcn)
     concat(oldcn, "/%", pattern) COLL_PARENT_COLL_NAME(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern))
-    strlen(oldcn, oldl) strlen(pcn, l) substr(oldcn, oldl, l, scn) concat(newcn, scn, newcn2) insert COLL_PARENT_COLL_NAME(cid, newcn2)
+    strlen(oldcn, oldl) strlen(pcn, l) add(oldl, 1, oldl1) sub(l, oldl, c) substr(pcn, oldl1, c, scn) concat(newcn, scn, newcn2) insert COLL_PARENT_COLL_NAME(cid, newcn2)
 
 
 // simple query

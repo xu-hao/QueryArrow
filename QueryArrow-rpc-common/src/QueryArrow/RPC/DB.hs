@@ -5,11 +5,12 @@ module QueryArrow.RPC.DB where
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.Utils
 import QueryArrow.Parser
 
-import Prelude hiding (lookup, length)
-import Data.Map.Strict (keysSet)
+import Prelude hiding (lookup, length, map)
+import Data.Map.Strict (keysSet, map)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
 import Control.Monad.Except
@@ -34,8 +35,9 @@ run3 hdr commands params tdb conn = do
                                     Rollback -> do
                                         liftIO $ dbRollback conn
                                         return []
-                                    Execute qu ->
-                                        getAllResultsInStream ( doQueryWithConn tdb conn hdr qu (keysSet params) (pure params))) commands
+                                    Execute qu -> do
+                                        let (varstinp, varstout) = setToMap2 (map typeOf params) hdr
+                                        getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb
                             --     if b

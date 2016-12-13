@@ -389,7 +389,6 @@ instance Serialize SQLQuery where
 translateQueryToSQL :: [Var] -> Formula -> TransMonad SQLQuery
 translateQueryToSQL vars formula = do
     ts <- get
-    trace ("************\n" ++ intercalate "," (map serialize vars) ++ "\n" ++ intercalate "," (map (\(k, v)-> serialize k ++ "->" ++ show v) (toList (repmap ts))) ++ "\ntranslating " ++ serialize formula++ "\n******************") $ return ()
     let nextid1 = nextid ts
     let repmap1 = repmap ts
     case formula of
@@ -828,37 +827,29 @@ data SQLState = SQLState {
 pureOrExecF :: SQLTrans -> Set Var -> Formula -> StateT SQLState Maybe ()
 pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomic (Atom n@(PredName _ pn) args)) = do
     ks <- get
-    if pn == "eq"
-      then case args of
-        [VarExpr v, VarExpr v2] ->
-          if v `elem` env ks && not (v2 `elem` dvars)
-            then error ("pureOrExecF: the first argument of eq " ++ show v ++ " is a parameter and the second argument is unbounded")
-            else return ()
-        _ -> return ()
-      else if Just n == (predName <$> nextid)
+    if Just n == (predName <$> nextid)
         then lift Nothing
         else if isJust (updateKey ks)
-          then lift Nothing
-          else if n `member` builtin
-            then return ()
-            else case lookup n predtablemap of
-                  Nothing -> do
-                      trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $ return ()
-                  Just (OneTable tablename _, _) ->
-                    case lookup n ptm of
-                      Nothing ->
-                        error ("pureOrExecF: cannot find predicate " ++ show n ++ " available predicates: " ++ show ptm)
-                      Just pt -> do
-                        let key = keyComponents pt args
-                        put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
-pureOrExecF  trans _ (FTransaction ) =  lift Nothing
+            then lift Nothing
+            else if n `member` builtin
+                then return ()
+                else case lookup n predtablemap of
+                    Nothing ->
+                        trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $ return ()
+                    Just (OneTable tablename _, _) ->
+                        case lookup n ptm of
+                            Nothing ->
+                                error ("pureOrExecF: cannot find predicate " ++ show n ++ " available predicates: " ++ show ptm)
+                            Just pt -> do
+                                let key = keyComponents pt args
+                                put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
 
-pureOrExecF  trans@(SQLTrans _ _ _ ptm) dvars (FSequencing form1 form2) = do
+pureOrExecF  trans@(SQLTrans _ _ _ ptm) dvars form@(FSequencing form1 form2) = do
     pureOrExecF  trans dvars form1
     let dvars2 = determinedVars (toDSP ptm) dvars form1
     pureOrExecF  trans dvars2 form2
 
-pureOrExecF  trans dvars (FPar form1 form2) =
+pureOrExecF  trans dvars form@(FPar form1 form2) =
     -- only works if all vars are determined
     if freeVars form1 `Set.isSubsetOf` dvars && freeVars form2 `Set.isSubsetOf` dvars
         then do
@@ -866,12 +857,12 @@ pureOrExecF  trans dvars (FPar form1 form2) =
             if isJust (updateKey ks)
                 then lift Nothing
                 else do
-                    put ks {ksQuery = True}
+                    trace ("#############b" ++ serialize form) $ put ks {ksQuery = True}
                     pureOrExecF  trans dvars form1
                     pureOrExecF  trans dvars form2
         else
             lift Nothing
-pureOrExecF  trans dvars (FChoice form1 form2) =
+pureOrExecF  trans dvars form@(FChoice form1 form2) =
     -- only works if all vars are determined
     if freeVars form1 `Set.isSubsetOf` dvars && freeVars form2 `Set.isSubsetOf` dvars
         then do
@@ -879,17 +870,17 @@ pureOrExecF  trans dvars (FChoice form1 form2) =
             if isJust (updateKey ks)
                 then lift Nothing
                 else do
-                    put ks {ksQuery = True}
+                    trace ("#############a" ++ serialize form) $ put ks {ksQuery = True}
                     pureOrExecF  trans dvars form1
                     pureOrExecF  trans dvars form2
         else
             lift Nothing
-pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ (FInsert (Lit sign0 (Atom pred0 args))) = do
+pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsert (Lit sign0 (Atom pred0 args))) = do
             ks <- get
-            if ksQuery ks || deleteConditional ks
+            trace ("#############1" ++ show (ksQuery ks) ++ "," ++ serialize form) $ if ksQuery ks || deleteConditional ks
                 then lift Nothing
-                else do
-                  case lookup pred0 ptm of
+                else
+                  trace "#############2" $ case lookup pred0 ptm of
                     Nothing -> error ("pureOrExecF: cannot find predicate " ++ show pred0 ++ " available predicates: " ++ show ptm)
                     Just pt -> do
                       let key = keyComponents pt args
@@ -902,7 +893,7 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ (FInsert (Lit sign0 (Atom 
                               Neg -> True
                       ks' <- case updateKey ks of
                           Nothing ->
-                              if isObject
+                              trace "#############3" $ if isObject
                                   then if isDelete
                                       then if not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
@@ -914,17 +905,17 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ (FInsert (Lit sign0 (Atom 
                                           else return ks{updateKey = Just (tablename, key), ksDeleteProp = [pred0]}
                                       else return ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
                           Just key' ->
-                              if isObject
-                                  then if isDelete
+                              trace "#############4" $ if isObject
+                                  then trace "#############6" $ if isDelete
                                       then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
                                           else return ks{ksDeleteObj = True}
                                       else lift Nothing
-                                  else if isDelete
+                                  else trace "#############5" $ if isDelete
                                       then if not (null (ksInsertProp ks)) || ksInsertObj ks || ksDeleteObj ks || pred0 `elem` (ksDeleteProp ks) || (tablename, key) /= key' || not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
                                           else return ks{ksDeleteProp = ksDeleteProp ks ++ [pred0]}
-                                      else if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || (tablename, key) /= key'
+                                      else trace "#############" $ if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || (tablename, key) /= key'
                                           then lift Nothing
                                           else return ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
                       let isDeleteConditional = isDelete && not (all isVar (propComponents pt args)) -- || (not isDelete && not (all isVar (keyComponents pt args)))
@@ -932,19 +923,19 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ (FInsert (Lit sign0 (Atom 
 
 pureOrExecF  _ _ FOne = return ()
 pureOrExecF  _ _ FZero = return ()
-pureOrExecF trans dvars (Aggregate Not form) = do
+pureOrExecF trans dvars for@(Aggregate Not form) = do
     ks <- get
     if isJust (updateKey ks)
         then lift Nothing
         else do
-            put ks {ksQuery = True}
+            trace ("#############d" ++ serialize for) $ put ks {ksQuery = True}
             pureOrExecF trans dvars form
-pureOrExecF trans dvars (Aggregate Exists form) = do
+pureOrExecF trans dvars for@(Aggregate Exists form) = do
   ks <- get
   if isJust (updateKey ks)
       then lift Nothing
       else do
-          put ks {ksQuery = True}
+          trace ("#############c" ++ serialize for) $ put ks {ksQuery = True}
           pureOrExecF trans dvars form
 pureOrExecF _ _ (Aggregate _ _) =
   lift Nothing
@@ -959,21 +950,21 @@ sequenceF _ _ = lift Nothing
 limitF :: SQLTrans -> Set Var -> Formula -> StateT SQLState Maybe ()
 limitF trans dvars (Aggregate (Limit _) form) = do
   ks <- get
-  put ks {ksQuery = True}
+  trace ("#############" ++ serialize form) $ put ks {ksQuery = True}
   limitF trans dvars form
 limitF trans dvars form = orderByF trans dvars form
 
 orderByF :: SQLTrans -> Set Var -> Formula -> StateT SQLState Maybe ()
 orderByF trans dvars (Aggregate (OrderByAsc _) form) = do
   ks <- get
-  put ks {ksQuery = True}
+  trace ("#############ord" ++ serialize form) $ put ks {ksQuery = True}
   orderByF trans dvars form
 orderByF trans dvars form = summarizeF trans dvars form
 
 summarizeF :: SQLTrans -> Set Var -> Formula -> StateT SQLState Maybe ()
 summarizeF trans dvars (Aggregate (Summarize _ _) form) = do
   ks <- get
-  put ks {ksQuery = True}
+  trace ("#############sum" ++ serialize form) $ put ks {ksQuery = True}
   pureOrExecF trans dvars form
 summarizeF trans dvars form = pureOrExecF trans dvars form
 
@@ -984,15 +975,15 @@ instance IGenericDatabase01 SQLTrans where
     type GDBFormulaType SQLTrans = Formula
     gTranslateQuery trans ret query env =
         let (SQLTrans builtin predtablemap nextid ptm) = trans
-            env2 = trace ("******************** \nenv =" ++ show env ++ "\n**************") $ foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
-            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm})) in
+            env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty (keys env)
+            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (keys ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm})) in
             return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, serialize sqlquery, params sql)
 
-    gSupported trans form vars =
+    gSupported trans ret form env =
         let
-            initstate = SQLState [] Nothing [] False [] False (not (null vars)) vars False
+            initstate = SQLState [] Nothing [] False [] False (not (null ret)) env False
         in
-            layeredF form && (isJust (evalStateT (limitF  trans vars form) initstate )
+            layeredF form && (isJust (evalStateT (limitF  trans env form) initstate )
                 || isJust (evalStateT (sequenceF trans form) initstate))

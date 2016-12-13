@@ -13,7 +13,7 @@ import QueryArrow.ListUtils
 
 import Prelude hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)
-import Data.Map.Strict (foldrWithKey, elems, lookup)
+import Data.Map.Strict (foldrWithKey, elems, lookup, unionWithKey, keysSet)
 import Control.Monad.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Either
@@ -69,22 +69,20 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
     type DBFormulaType (TransDB db) = Formula
     getName (TransDB name _ _ _ ) = name
     getPreds (TransDB _ _ predmap _ ) = predmap
-    supported _ _ _ = True
+    supported _ _ _ _ = True
 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db preds (qr, ir, dr) ) vars2 qu vars =
       let ptm = constructPredTypeMap preds
           effective = runNew (runReaderT (evalStateT (runEitherT (do
-                                          let varsl = toAscList vars
-                                          tvars <- lift . lift . lift $ new (map (StringWrapper . ("tv" ++) . show) [1..length varsl])
-                                          initTCMonad (map (\v -> ParamType False True False (TypeVar v)) tvars) varsl
+                                          initTCMonad (unionWithKey (\k l r -> if l == r then l else error ("translateQuery: input output var has different types" ++ show k)) vars2 vars)
                                           typecheck qu
                                           )) (mempty, mempty)) ptm) in
           case effective of
               Left errmsg -> error (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu)
               Right _ ->
-                  let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
+                  let qu' = rewriteQuery qr ir dr (Include (keysSet vars2)) qu (keysSet vars) in
                       translateQuery db vars2 qu' vars
 
 

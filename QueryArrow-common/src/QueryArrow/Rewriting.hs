@@ -42,7 +42,7 @@ instance Typecheck InsertRewritingRule where
             Just pt -> do
               pt'@(PredType _ pts) <- instantiatePredType pt
               unless (length args == length pts) $ throwError ("typecheck: parameter count mismatch " ++ show r)
-              initTCMonad pts (map extractVar args)
+              initTCMonad (fromList (zip (map extractVar args) pts))
               typecheck form
               (vtm, _) <- lift get
               let ovars = outputComponents pt' args
@@ -113,8 +113,6 @@ rewrite1 ext  qr  ir dr form0 =
             return (case res of
                         Nothing -> FInsert lit
                         Just form -> form)
-        (FTransaction ) ->
-            return FTransaction
         (Aggregate agg form) ->
             (Aggregate agg <$> rewrite1 ext  qr ir dr form)
 

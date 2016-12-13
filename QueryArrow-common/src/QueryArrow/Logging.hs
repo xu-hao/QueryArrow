@@ -9,14 +9,15 @@ import System.Log.Handler.Simple (fileHandler, streamHandler, GenericHandler)
 import System.Log.Handler (setFormatter)
 import System.Log.Formatter
 
-setup = do
+setup :: Priority -> IO ()
+setup pri = do
     -- let logPath = "/tmp/foo.log"
-    myStreamHandler <- streamHandler stderr INFO
+    myStreamHandler <- streamHandler stderr pri
     -- myFileHandler <- fileHandler logPath WARNING
     -- let myFileHandler' = withFormatter myFileHandler
     let myStreamHandler' = withFormatter myStreamHandler
     let log = rootLoggerName
-    updateGlobalLogger log (setLevel INFO)
+    updateGlobalLogger log (setLevel pri)
     updateGlobalLogger log (setHandlers [myStreamHandler'])
 
 withFormatter :: GenericHandler Handle -> GenericHandler Handle

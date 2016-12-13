@@ -15,7 +15,10 @@ executable QueryArrow
                    text,
                    resourcet,
                    hslogger,
+                   optparse-applicative,
+                   network,
                    either,
+                   QueryArrow-rpc-common,
                    QueryArrow-common,
                    QueryArrow-rpc-common,
                    QueryArrow

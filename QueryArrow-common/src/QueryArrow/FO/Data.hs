@@ -4,27 +4,20 @@
 module QueryArrow.FO.Data where
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, delete)
-import Data.List ((\\), intercalate, union, unwords)
+import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList)
+import Data.List (intercalate, union, unwords)
 import Control.Monad.Trans.State.Strict (evalState,get, put, State)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe
 import qualified Data.Map as Map
-import Data.Convertible
-import Control.Monad.Trans.Reader
-import Control.Monad.Except (throwError)
 import qualified Data.Text as T
 import Data.Namespace.Path
 import Data.Namespace.Namespace
 import Algebra.Lattice
-import Algebra.SemiBoundedLattice
-import Control.Monad.Trans.Class (lift)
 import Control.Monad (foldM)
 
--- variable types
-type Type = String
-
+-- predicate kinds
 data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
 
 -- predicate types
@@ -37,7 +30,6 @@ type PredName = ObjectPath String
 
 deriving instance (Key a, Read a) => Read (ObjectPath a)
 deriving instance (Key a, Read a) => Read (NamespacePath a)
-
 
 data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Ord, Show, Read)
 
@@ -62,8 +54,7 @@ data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord, Show, Read)
 data Summary = Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
 data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists deriving (Eq, Ord, Show, Read)
 
-data Formula = FTransaction
-             | FReturn [Var]
+data Formula = FReturn [Var]
              | FAtomic Atom
              | FInsert Lit
              | FChoice Formula Formula
@@ -73,14 +64,12 @@ data Formula = FTransaction
              | FZero
              | Aggregate Aggregator Formula deriving (Eq, Ord, Show, Read)
 
-unique :: [a] -> a
-unique as = if length as /= 1
-        then error "More than one primary parameters and nonzero secondary parameters"
-        else head as
-
+{-
 isConst :: Expr -> Bool
-isConst (VarExpr _) = False
-isConst _ = True
+isConst (IntExpr _) = True
+isConst (StringExpr _) = True
+isConst _ = False
+-}
 -- free variables
 
 
@@ -88,13 +77,15 @@ class FreeVars a where
     freeVars :: a -> Set Var
 
 instance FreeVars Expr where
+    freeVars (CastExpr _ e) = freeVars e
     freeVars (VarExpr var) = Set.singleton var
-    freeVars _ = bottom
+    freeVars (IntExpr _) = bottom
+    freeVars (StringExpr _) = bottom
+    freeVars (PatternExpr _) = bottom
+    freeVars NullExpr = bottom
 
 instance FreeVars Atom where
     freeVars (Atom _ theargs) = freeVars theargs
-
-
 
 instance FreeVars Lit where
     freeVars (Lit _ theatom) = freeVars theatom
@@ -106,8 +97,6 @@ instance FreeVars Formula where
         freeVars atom1
     freeVars (FInsert lits) =
         freeVars lits
-    freeVars (FTransaction ) =
-        bottom
     freeVars (FSequencing form1 form2) =
         freeVars form1 \/ freeVars form2
     freeVars (FChoice form1 form2) =
@@ -122,11 +111,14 @@ instance FreeVars Formula where
         freeVars form
     freeVars (Aggregate (Limit _) form) =
         freeVars form
+    freeVars (Aggregate Distinct form) =
+        freeVars form
     freeVars (Aggregate (OrderByAsc _) form) =
         freeVars form
     freeVars (Aggregate (OrderByDesc _) form) =
         freeVars form
-    freeVars _ = bottom
+    freeVars FZero = bottom
+    freeVars FOne = bottom
 
 instance FreeVars a => FreeVars [a] where
     freeVars = Set.unions . map freeVars
@@ -321,12 +313,13 @@ instance Serialize Expr where
     serialize (IntExpr i) = show i
     serialize (StringExpr s) = show s
     serialize (PatternExpr p) = show p
-    serialize (NullExpr) = "null"
+    serialize NullExpr = "null"
     serialize (CastExpr t v) = serialize v ++ " " ++ serialize t
 
 instance Serialize CastType where
-    serialize (TextType) = "text"
-    serialize (NumberType) = "integer"
+    serialize TextType = "text"
+    serialize NumberType = "integer"
+    serialize (TypeVar v) = v
 
 instance Serialize Var where
     serialize (Var s) = s
@@ -339,7 +332,7 @@ instance Serialize Lit where
 instance Serialize Summary where
     serialize (Max v) = "max " ++ serialize v
     serialize (Min v) = "min " ++ serialize v
-    serialize (Count) = "count"
+    serialize Count = "count"
     serialize (Sum v) = "sum " ++ serialize v
     serialize (Average v) = "average " ++ serialize v
     serialize (CountDistinct v) = "count distinct(" ++ serialize v ++ ")"
@@ -348,12 +341,11 @@ instance Serialize Formula where
     serialize (FReturn vars) = "(return " ++ unwords (map serialize vars) ++ ")"
     serialize (FAtomic a) = serialize a
     serialize (FInsert lits) = "(insert " ++ serialize lits ++ ")"
-    serialize (FTransaction ) = "transactional"
     serialize form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map serialize (getFsequencings' form)) ++ ")"
     serialize form@(FChoice _ _) = "(" ++ intercalate " ⊕ " (map serialize (getFchoices' form)) ++ ")"
     serialize form@(FPar _ _) = "(" ++ intercalate " ‖ " (map serialize (getFpars' form)) ++ ")"
-    serialize (FOne) = "𝟏"
-    serialize (FZero) = "𝟎"
+    serialize FOne = "𝟏"
+    serialize FZero = "𝟎"
     serialize (Aggregate Exists form) = "∃" ++ serialize form
     serialize (Aggregate Not form) = "¬" ++ serialize form
     serialize (Aggregate Distinct form) = "(distinct " ++ serialize form ++ ")"
@@ -462,13 +454,15 @@ instance Subst Var where
 instance Subst Summary where
     subst s (Max v) = Max (subst s v)
     subst s (Min v) = Min (subst s v)
-    subst _ (Count) = Count
+    subst _ Count = Count
+    subst s (Average v) = Average (subst s v)
+    subst s (Sum v) = Sum (subst s v)
+    subst s (CountDistinct v) = CountDistinct (subst s v)
 
 instance Subst Formula where
     subst s (FReturn vars) = FReturn (subst s vars)
     subst s (FAtomic a) = FAtomic (subst s a)
     subst s (FInsert lits) = FInsert (subst s lits)
-    subst _ (FTransaction ) = FTransaction
     subst s (FSequencing form1 form2) = FSequencing (subst s form1) (subst s form2)
     subst s (FChoice form1 form2) = FChoice (subst s form1) (subst s form2)
     subst s (FPar form1 form2) = FPar (subst s form1) (subst s form2)
@@ -476,9 +470,11 @@ instance Subst Formula where
     subst s (Aggregate Exists a) = Aggregate Exists (subst s a)
     subst s (Aggregate (Summarize funcs groupby) a) = Aggregate (Summarize (subst s funcs) (map (\var1 -> extractVar (subst s (VarExpr var1))) groupby)) (subst s a)
     subst s (Aggregate (Limit n) a) = Aggregate (Limit n) (subst s a)
+    subst s (Aggregate Distinct a) = Aggregate Distinct (subst s a)
     subst s (Aggregate (OrderByAsc var1) a) = Aggregate (OrderByAsc (extractVar (subst s (VarExpr var1)))) (subst s a)
     subst s (Aggregate (OrderByDesc var1) a) = Aggregate (OrderByAsc (extractVar (subst s (VarExpr var1)))) (subst s a)
-    subst _ form = form
+    subst _ FZero = FZero
+    subst _ FOne = FOne
 
 instance Subst a => Subst [a] where
     subst s = map (subst s)
@@ -533,7 +529,6 @@ instance FreeVars a => FreeVars (Set a) where
 pureF :: Formula -> Bool
 pureF (FReturn _) = True
 pureF (FAtomic _) = True
-pureF (FTransaction ) = False
 pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
 pureF (FPar form1 form2) = pureF form1 && pureF form2
@@ -545,7 +540,6 @@ pureF FZero = True
 layeredF :: Formula -> Bool
 layeredF (FReturn _) = True
 layeredF (FAtomic _) = True
-layeredF (FTransaction ) = True
 layeredF (FSequencing form1 form2) =  layeredF form1 &&  layeredF form2
 layeredF (FChoice form1 form2) = layeredF form1 && layeredF form2
 layeredF (FPar form1 form2) = layeredF form1 && layeredF form2

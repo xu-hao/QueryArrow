@@ -24,8 +24,8 @@ runQueryArrowServer chan db = do
       res <- case cmd of
         GetName -> return (StringResult (getName db))
         GetPreds -> return (PredListResult (getPreds db))
-        Supported form vars ->
-            return (BoolResult (supported db form vars))
+        Supported ret form vars ->
+            return (BoolResult (supported db ret form vars))
         DBOpen -> do
           (conn, key) <- allocate (dbOpen db) dbClose
           liftIO $ ConnectionResult . castStablePtrToPtr <$> newStablePtr (db, conn, key)

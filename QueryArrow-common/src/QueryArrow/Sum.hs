@@ -11,7 +11,7 @@ import QueryArrow.ListUtils
 import QueryArrow.Data.Heterogeneous.List
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete, singleton, keys, filterWithKey)
+import Data.Map.Strict (Map, (!), empty, member, insert, foldrWithKey, foldlWithKey, alter, lookup, fromList, toList, unionWith, unionsWith, intersectionWith, elems, delete, singleton, keys, filterWithKey, keysSet)
 import Control.Applicative ((<$>))
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Reader
@@ -21,6 +21,7 @@ import System.Log.Logger
 import Data.Tree
 import Algebra.SemiBoundedLattice
 import Data.Set (Set, intersection)
+import Debug.Trace
 -- exec query from dbname
 
 -- getAllResults2 :: (MonadIO m, MonadBaseControl IO m, IResultRow row, Num (ElemType row), Ord (ElemType row)) => [AbstractDatabase row Formula] -> MSet Var -> Formula -> m [row]
@@ -53,7 +54,8 @@ translate' :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l, HMapConstra
 translate' dbs rvars qu0 vars =
     let insp = queryPlan dbs qu0
         qp2 = calculateVars vars rvars insp
-        qp3 = optimizeQueryPlan dbs qp2 in
+        t = toTree qp2
+        qp3 = trace (drawTree t) $ optimizeQueryPlan dbs qp2 in
     -- let qp3' = addTransaction' qp3
     -- liftIO $ printQueryPlan qp3
     -- qp4 <- prepareTransaction dbs [] qp3'
@@ -75,10 +77,10 @@ instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need
     type DBFormulaType (SumDB row l) = Formula
     getName (SumDB name _ ) = name
     getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
-    supported _ _ _ = True
+    supported _ _ _ _ = True
 instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula Formula) l) => IDatabase1 (SumDB row l) where
     type DBQueryType (SumDB row l) = QueryPlanT l
-    translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include retvars) form vars
+    translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include (keysSet retvars)) form (keysSet vars)
 
 instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDatabase2 (SumDB row l) where

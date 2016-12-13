@@ -4,14 +4,18 @@ if [ "$1" == "" ]; then
 fi
 
 ROOT=$1
-rm -rf lib include
+rm -rf lib include bin etc
 mkdir lib
 mkdir include
+mkdir bin
+mkdir etc
 cp $ROOT/CPackConfig.cmake $ROOT/LICENSE.txt .
 
 ROOTS=$(find $ROOT -name "*libHSQueryArrow-ffi-c*.so" | grep "install")
-LIBS1=$(ldd -v $ROOTS | grep "=>" | grep libHS | awk '/=>/{print $(NF-1)}' | sort -u | grep "install")
-LIBS3=$(ldd -v $ROOTS | grep "=>" | grep libHS | awk '/=>/{print $(NF-1)}' | sort -u | grep "snapshots")
+ROOT0=$ROOT/.stack-work/install/x86_64-linux/lts-7.9/8.0.1/bin/QueryArrow
+ROOTS2="$ROOTS $ROOT0"
+LIBS1=$(ldd -v $ROOTS2 | grep "=>" | grep libHS | awk '/=>/{print $(NF-1)}' | sort -u | grep "install")
+LIBS3=$(ldd -v $ROOTS2 | grep "=>" | grep libHS | awk '/=>/{print $(NF-1)}' | sort -u | grep "snapshots")
 for i in $ROOTS; do
     i2=$(basename $i)
     i3=${i2##*-}
@@ -21,6 +25,8 @@ for i in $ROOTS; do
     cp $i lib
     ln -s $i2 lib/$i6
 done
+cp $ROOT0 bin
+cp -r $ROOT/QueryArrow-gen/etc/* etc
 for i in $LIBS1; do
     i2=$(basename $i)
     i3=${i2##*-}

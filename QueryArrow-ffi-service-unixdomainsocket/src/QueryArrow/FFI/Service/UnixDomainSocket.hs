@@ -2,15 +2,8 @@
 
 module QueryArrow.FFI.Service.UnixDomainSocket where
 
-import QueryArrow.FO.Data
-import QueryArrow.DB.DB
-import QueryArrow.DBMap
-import QueryArrow.Serialization
-import QueryArrow.Config
 import QueryArrow.FFI.Service
-import QueryArrow.RPC.Message
 
-import Data.Set (fromList)
 import Data.Text (pack)
 import Control.Exception (SomeException, try)
 import Control.Monad.Error.Class (throwError)

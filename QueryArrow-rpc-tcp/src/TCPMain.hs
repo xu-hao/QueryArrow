@@ -44,7 +44,7 @@ main = do
 
 mainArgs :: [String] -> IO ()
 mainArgs args = do
-    setup
+    setup INFO
     case args of
       [arg]-> do
           ps <- getConfig arg

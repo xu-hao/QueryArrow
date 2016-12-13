@@ -81,7 +81,6 @@ instance DeterminedVars Formula where
     determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
     determinedVars _ vars (FReturn vars2) = fromList vars2 /\ vars
     determinedVars _ vars (FInsert _) = vars
-    determinedVars _ vars (FTransaction ) = vars
     determinedVars dsp vars (FSequencing form1 form2) =
         let map1 = determinedVars dsp vars form1 in
             determinedVars dsp map1 form2
@@ -131,7 +130,6 @@ instance OutputVars Formula where
     outputVars dsp vars (FAtomic atom0) = outputVars dsp vars atom0
     outputVars _ vars (FReturn vars2) = return (fromList vars2 /\ vars)
     outputVars _ vars (FInsert _) = return vars
-    outputVars _ vars (FTransaction ) = return vars
     outputVars dsp vars (FSequencing form1 form2) = do
         map1 <- outputVars dsp vars form1
         outputVars dsp map1 form2

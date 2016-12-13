@@ -16,9 +16,10 @@ import Data.Set (Set)
 import System.Log.Logger (errorM, noticeM)
 import Control.Applicative ((<|>))
 import Control.Exception (catch, SomeException)
+import QueryArrow.FO.Types
 
 -- result value
-data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show)
+data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show, Read)
 
 instance Num ResultValue where
     IntValue a + IntValue b = IntValue (a + b)
@@ -37,6 +38,11 @@ instance Convertible Expr ResultValue where
     safeConvert (StringExpr s) = Right (StringValue s)
     safeConvert (IntExpr i) = Right (IntValue i)
     safeConvert v = Left (ConvertError (show v) "Expr" "ResultValue" "")
+
+typeOf :: ResultValue -> CastType
+typeOf (IntValue _) = NumberType
+typeOf (StringValue _) = TextType
+typeOf (Null) = error "typeOf: null value"
 
 -- result row
 type MapResultRow = Map Var ResultValue
@@ -116,11 +122,11 @@ class IDatabase0 db where
     type DBFormulaType db
     getName :: db -> String
     getPreds :: db -> [Pred]
-    supported :: db -> DBFormulaType db -> Set Var -> Bool
+    supported :: db -> Set Var -> DBFormulaType db -> Set Var -> Bool
 
 class IDatabase0 db => IDatabase1 db where
     type DBQueryType db
-    translateQuery :: db -> Set Var -> DBFormulaType db -> Set Var -> IO (DBQueryType db)
+    translateQuery :: db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> IO (DBQueryType db)
 
 class (IDBConnection (ConnectionType db)) => IDatabase2 db where
     data ConnectionType db
@@ -137,11 +143,11 @@ instance IDatabase0 (AbstractDatabase row form) where
     getPreds (AbstractDatabase db) = getPreds db
     supported (AbstractDatabase db) = supported db
 
-doQuery :: (IDatabase db) => db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+doQuery :: (IDatabase db) => db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQuery db vars2 qu vars rs =
         bracketPStream (dbOpen db) dbClose (\conn -> doQueryWithConn db conn vars2 qu vars rs)
 
-doQueryWithConn :: (IDatabase db) => db -> ConnectionType db -> Set Var -> DBFormulaType db -> Set Var -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+doQueryWithConn :: (IDatabase db) => db -> ConnectionType db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQueryWithConn db conn vars2 qu vars rs = do
   qu' <- liftIO $ translateQuery db vars2 qu vars
   stmt <- liftIO $ prepareQuery conn qu'

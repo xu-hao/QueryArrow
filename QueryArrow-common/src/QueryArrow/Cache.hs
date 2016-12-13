@@ -10,6 +10,7 @@ import Control.Applicative ((<$>))
 import Data.Set (Set)
 import Data.Cache.LRU.IO
 import System.Log.Logger
+import Data.Map.Strict (keysSet)
 
 type TransCache query = AtomicLRU (Set Var, Formula, Set Var) query
 
@@ -25,7 +26,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) 
     type DBQueryType (CacheTransDB db) = DBQueryType db
     translateQuery (CacheTransDB _ db cache ) vars2 qu vars = do
         infoM "TransCache" ("looking up " ++ show qu)
-        qu' <- lookup (vars2, qu, vars) cache
+        qu' <- lookup (keysSet vars2, qu, keysSet vars) cache
         case qu' of
             Just qu2 -> do
                 infoM "TransCache" ("found translated query")
@@ -33,7 +34,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) 
             Nothing -> do
                 infoM "TransCache" ("did not find translated query")
                 qu' <- translateQuery db vars2 qu vars
-                insert (vars2, qu, vars) qu' cache
+                insert (keysSet vars2, qu, keysSet vars) qu' cache
                 return qu'
 
 instance (IDatabase db) => IDatabase2 (CacheTransDB db) where

@@ -5,17 +5,18 @@ module QueryArrow.DB.NoTranslation where
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import Data.Map.Strict
+import QueryArrow.FO.Types
 
 import Data.Set
 
 data NoTranslationDatabase db = NoTranslationDatabase db
-data NTDBQuery form = NTDBQuery (Set Var) form (Set Var)
+data NTDBQuery form = NTDBQuery VarTypeMap form VarTypeMap
 
 class INoTranslationDatabase01 db where
   type NTDBFormulaType db
   ntGetName :: db -> String
   ntGetPreds :: db -> [Pred]
-  ntSupported :: db -> NTDBFormulaType db -> Set Var -> Bool
+  ntSupported :: db -> Set Var -> NTDBFormulaType db -> Set Var -> Bool
 
 instance (INoTranslationDatabase01 db) => IDatabase0 (NoTranslationDatabase db) where
   type DBFormulaType (NoTranslationDatabase db) = NTDBFormulaType db

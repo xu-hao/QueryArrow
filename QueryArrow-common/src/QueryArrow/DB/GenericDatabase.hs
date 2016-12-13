@@ -4,17 +4,17 @@ module QueryArrow.DB.GenericDatabase where
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
+import QueryArrow.FO.Types
 
 import Data.Set
-import Data.Map.Strict
 
 data GenericDatabase db a = GenericDatabase db a String [Pred]
 
 class IGenericDatabase01 db where
   type GDBQueryType db
   type GDBFormulaType db
-  gSupported :: db -> GDBFormulaType db -> Set Var -> Bool
-  gTranslateQuery :: db -> Set Var -> GDBFormulaType db -> Set Var -> IO (GDBQueryType db)
+  gSupported :: db -> Set Var -> GDBFormulaType db -> Set Var -> Bool
+  gTranslateQuery :: db ->  VarTypeMap -> GDBFormulaType db ->  VarTypeMap -> IO (GDBQueryType db)
 
 instance (IGenericDatabase01 db) => IDatabase0 (GenericDatabase db a) where
   type DBFormulaType (GenericDatabase db a) = GDBFormulaType db

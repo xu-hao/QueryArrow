@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.GenQuery.Translate where
 
-import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), (.+.), (.*.), (@@))
+import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), (.+.), (.*.), (@@), CastType(..))
 
 import Prelude hiding (lookup)
 import Data.Text (Text, pack)
@@ -153,9 +153,9 @@ toCondPredicate2  cols cond@(Cond col _) =
 
 toCondPredicate :: Cond ->  Formula
 toCondPredicate  (Cond col (EqString str)) =
-  "eq" @@ [VarExpr (toVariable col), StringExpr (pack str)]
+  "eq" @@ [CastExpr TextType (VarExpr (toVariable col)), StringExpr (pack str)]
 toCondPredicate  (Cond col (EqInteger str)) =
-  "eq" @@ [VarExpr (toVariable col), IntExpr (fromIntegral str)]
+  "eq" @@ [CastExpr NumberType (VarExpr (toVariable col)), IntExpr (fromIntegral str)]
 toCondPredicate  (Cond col (NotEqString str)) =
   Aggregate Not ("eq" @@ [VarExpr (toVariable col), StringExpr (pack str)])
 toCondPredicate  (Cond col (NotEqInteger str)) =
@@ -178,7 +178,7 @@ toJoinPredicate  cols conds =
     let
         tables = nub (map extractPrefix (cols ++ map (\(Cond col _) -> col) conds))
     in
-        trace ("toJoinPredicate: tables = " ++ show tables) [
+        [
           if "COLL" `elem` tables && "DATA" `elem` tables
             then "DATA_COLL_ID" @@ [VarExpr (Var "xDATA_ID"), VarExpr (Var "xDATA_RESC_ID"), VarExpr (Var "xCOLL_ID")]
             else FOne,

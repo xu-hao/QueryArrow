@@ -7,6 +7,7 @@ import GHC.Generics
 import Data.Map.Strict (toList, fromList)
 import Data.Namespace.Path
 import Data.Set (Set)
+import Data.Map.Strict (Map)
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
@@ -41,11 +42,11 @@ deriving instance Generic Aggregator
 deriving instance Generic Summary
 deriving instance Show Command
 
-instance FromJSON MapResultRow where
-  parseJSON str = fromList <$> (parseJSON str)
+instance (ToJSON a, ToJSON b) => ToJSON (Map b a) where
+    toJSON pm = toJSON (toList pm)
 
-instance ToJSON MapResultRow where
-  toJSON row = toJSON (toList row)
+instance (FromJSON a, FromJSON b, Ord b) => FromJSON (Map b a) where
+    parseJSON js = fromList <$> parseJSON js
 
 instance FromJSON (ObjectPath String) where
     parseJSON str = do

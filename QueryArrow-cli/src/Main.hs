@@ -31,55 +31,134 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.DBMap
-import QueryArrow.Parser
--- import Plugins
-import QueryArrow.FO.Data
 import QueryArrow.Config
-import QueryArrow.Utils
 
 import Prelude hiding (lookup)
-import Data.Set (fromList)
-import Data.Map.Strict (singleton, keys, toList, Map)
-import Text.Parsec (runParser)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Resource
-import System.Environment
-import Control.Monad.Except
-import qualified Data.Text as T
+import qualified Data.Map.Strict as Map
 import System.Log.Logger
 import QueryArrow.Logging
 import Control.Monad.Trans.Either
--- import Data.Serialize
-import qualified Data.Set as Set
 import QueryArrow.RPC.DB
+import Options.Applicative
+import Data.Maybe (fromMaybe, isJust, fromJust)
+import System.IO
+import QueryArrow.Serialization
+import Network.Socket
+import Network
+import QueryArrow.RPC.Message
+import QueryArrow.FO.Data
+import Data.Set (fromList)
+import Control.Arrow ((***))
+
+import QueryArrow.Utils
 
 main::IO()
-main = do
-    args2 <- getArgs
-    mainArgs args2
+main = execParser opts >>= mainArgs where
+  opts = info (helper <*> input) (fullDesc <> progDesc "QueryArrow description" <> header "QueryArrow header")
 
-mainArgs :: [String] -> IO ()
-mainArgs args2 = do
-    setup
-    if null args2
+data Input = Input {
+  query:: String,
+  headers::  String,
+  configFile:: Maybe String,
+  verbose :: Bool,
+  showHeaders :: Bool,
+  tcpAddr :: Maybe String,
+  tcpPort :: Maybe Int,
+  udsAddr :: Maybe String,
+  params ::  [(String, ResultValue)]
+}
+input :: Parser Input
+input = Input <$>
+            strArgument (metavar "QUERY" <> help "query") <*>
+            strArgument (metavar "HEADERS" <> help "headers") <*>
+            optional (strOption (long "config" <> short 'c' <> metavar "CONFIG" <> help "config file")) <*>
+            switch (long "verbose" <> short 'v' <> help "verbose") <*>
+            switch (long "show-headers" <> short 's' <> help "show headers") <*>
+            optional (strOption (long "tcpaddr" <> metavar "TCPADDR" <> help "tcp address")) <*>
+            optional (option auto (long "tcpport" <> metavar "TCPPORT" <> help "tcp port")) <*>
+            optional (strOption (long "udsaddr" <> metavar "UDSADDR" <> help "unix domain socket address")) <*>
+            many (option auto (long "params" <> short 'p' <> metavar "PARAMS" <> help "parameters"))
+
+mainArgs :: Input -> IO ()
+mainArgs input = do
+    setup (if verbose input then INFO else WARNING)
+    ps <- getConfig (fromMaybe "/etc/QueryArrow/tdb-plugin-gen-abs.json" (configFile input))
+    let hdr = words (headers input)
+    let qu = query input
+    let showhdr = showHeaders input
+    let pars = Map.fromList (map (Var *** id) (params input))
+    if isJust (tcpAddr input) && isJust (tcpPort input)
+      then
+        runTCP (fromJust (tcpAddr input)) (fromJust (tcpPort input)) showhdr hdr qu pars
+      else if isJust (udsAddr input)
         then
-            putStrLn "usage: <command> <config file> <query> <headers>"
+          runUDS (fromJust (udsAddr input)) showhdr hdr qu pars
+        else
+          run2 showhdr hdr qu pars ps
 
-        else do
-            ps <- getConfig (head args2)
-            run2 (words (args2 !! 2)) (args2 !! 1) ps
+runTCP :: String -> Int -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runTCP  addr port showhdr hdr qu params = do
+  handle <- connectTo addr (PortNumber (fromIntegral port))
+  let name = QuerySet {
+                qsquery = Dynamic qu,
+                qsheaders = fromList (map Var hdr),
+                qsparams = params
+                }
+  sendMsg handle name
+  rep <- receiveMsg handle
+  case rep of
+      Just (ResultSet err results) ->
+          if null err
+            then
+                putStrLn (pprint showhdr (map Var hdr) results)
+            else
+                putStrLn ("error: " ++ err)
+      Nothing ->
+          putStrLn ("cannot parse response: " ++ show rep)
+  let name2 = QuerySet {
+                qsquery = Quit,
+                qsheaders = mempty,
+                qsparams = mempty
+                }
+  sendMsg handle name2
 
+runUDS :: String -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runUDS addr showhdr hdr qu params = do
+  sock <- socket AF_UNIX Stream defaultProtocol
+  connect sock (SockAddrUnix addr)
+  handle <- socketToHandle sock ReadWriteMode
+  let name = QuerySet {
+                qsquery = Dynamic qu,
+                qsheaders = fromList (map Var hdr),
+                qsparams = params
+                }
+  sendMsg handle name
+  rep <- receiveMsg handle
+  case rep of
+      Just (ResultSet err results) ->
+          if null err
+            then
+                putStrLn (pprint showhdr (map Var hdr) results)
+            else
+                putStrLn ("error: " ++ err)
+      Nothing ->
+          putStrLn ("cannot parse response: " ++ show rep)
+  let name2 = QuerySet {
+                qsquery = Quit,
+                qsheaders = mempty,
+                qsparams = mempty
+                }
+  sendMsg handle name2
 
-run2 :: [String] -> String -> TranslationInfo -> IO ()
-run2 hdr query ps = do
+run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
+run2 showhdr hdr query params ps = do
     let vars = map Var hdr
     AbstractDatabase tdb <- transDB "tdb" ps
     conn <- dbOpen tdb
-    ret <- runEitherT $ run (fromList vars) query mempty tdb conn
+    ret <- runEitherT $ run (fromList vars) query params tdb conn
     case ret of
       Left e -> putStrLn ("error: " ++ e)
-      Right pp -> putStr (pprint vars pp)
+      Right pp -> putStr (pprint showhdr vars pp)
     dbClose conn

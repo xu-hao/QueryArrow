@@ -530,7 +530,6 @@ cypherDeterminedVars builtin (FSequencing form1 form2) =
     cypherDeterminedVars builtin form1 `union` cypherDeterminedVars builtin form2
 cypherDeterminedVars builtin (FChoice form1 form2) =
     cypherDeterminedVars builtin form1 `intersect` cypherDeterminedVars builtin form2
-cypherDeterminedVars builtin FTransaction = []
 cypherDeterminedVars builtin FOne = []
 cypherDeterminedVars builtin FZero = []
 cypherDeterminedVars builtin (FInsert _) = []
@@ -713,7 +712,6 @@ translateableCypher _ (FInsert lit) = do
         else do
             put cs{csUpdate = True}
             return ()
-translateableCypher trans (FTransaction) = lift $ Nothing
 translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
 translateableCypher trans (Aggregate _ _)  = lift $ Nothing
@@ -725,8 +723,8 @@ instance IGenericDatabase01 CypherTrans where
 
     gTranslateQuery trans vars query env =
         let (CypherTrans builtin predtablemap ptm) = trans in
-            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, toAscList vars, toAscList env, ptm)))
-    gSupported trans form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList vars)))
+            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, Map.keys vars, Map.keys env, ptm)))
+    gSupported trans ret form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList ret)))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

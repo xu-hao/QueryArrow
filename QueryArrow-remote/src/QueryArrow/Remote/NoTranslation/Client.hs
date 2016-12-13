@@ -25,7 +25,7 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
   type NTDBFormulaType (QueryArrowClient chan) = Formula
   ntGetName (QueryArrowClient _ n _) = n
   ntGetPreds (QueryArrowClient _ _ ps) = ps
-  ntSupported (QueryArrowClient chan _ _) form vars = True -- assuming that the server is running a TransDB
+  ntSupported (QueryArrowClient chan _ _) ret form vars = True -- assuming that the server is running a TransDB
 
 processRes :: RemoteResultSet -> IO ()
 processRes res =

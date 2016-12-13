@@ -11,7 +11,7 @@ import Data.Map.Strict
 
 data RemoteCommand  = GetName
   | GetPreds
-  | Supported Formula (Set Var)
+  | Supported (Set Var) Formula (Set Var)
   | DBOpen
   | DBClose (Ptr ())
   | DBBegin (Ptr ())

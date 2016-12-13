@@ -5,10 +5,8 @@ module QueryArrow.ElasticSearch.ESQL where
 -- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (lookup, fromList, Map)
+import Data.Map.Strict (lookup, fromList, Map, keys)
 import Data.Text (Text)
-import Data.Set (toAscList, unions, singleton)
-import Algebra.Lattice
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.GenericDatabase
@@ -97,14 +95,14 @@ instance IGenericDatabase01 ESTrans where
     type GDBQueryType ESTrans = (ElasticSearchQuery, [Var])
     type GDBFormulaType ESTrans = Formula
     gTranslateQuery trans vars (FAtomic (Atom pred1 args)) env =
-        return (translateQueryToElasticSearch trans (toAscList vars) pred1 args (toAscList env))
+        return (translateQueryToElasticSearch trans (keys vars) pred1 args (keys env))
     gTranslateQuery trans vars (FInsert (Lit Pos (Atom pred1 args))) env =
-        return (translateInsertToElasticSearch trans pred1 args (toAscList env))
+        return (translateInsertToElasticSearch trans pred1 args (keys env))
     gTranslateQuery trans vars (FInsert (Lit Neg (Atom pred1 args))) env =
-        return (translateDeleteToElasticSearch trans pred1 args (toAscList env))
+        return (translateDeleteToElasticSearch trans pred1 args (keys env))
     gTranslateQuery _ _ _ _ =
         error "unsupported"
 
-    gSupported _ (FAtomic _) _ = True
-    gSupported _ (FInsert _) _ = True
-    gSupported _ _ _ = False
+    gSupported _ _ (FAtomic _) _ = True
+    gSupported _ _ (FInsert _) _ = True
+    gSupported _ _ _ _ = False

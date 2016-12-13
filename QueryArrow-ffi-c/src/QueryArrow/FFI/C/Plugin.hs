@@ -30,7 +30,7 @@ import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
 import Foreign.Marshal.Array
-import System.Log.Logger (errorM, infoM)
+import System.Log.Logger (errorM, infoM, Priority(..))
 import Data.Maybe (fromMaybe)
 import Control.Monad (foldM)
 import QueryArrow.Logging
@@ -39,7 +39,7 @@ import QueryArrow.FFI.Auxiliary
 
 foreign export ccall hs_setup :: IO ()
 hs_setup :: IO ()
-hs_setup = setup
+hs_setup = setup INFO
 
 foreign export ccall hs_connect :: StablePtr (QueryArrowService b) -> CString -> Ptr (StablePtr b) -> IO Int
 hs_connect :: StablePtr (QueryArrowService b) -> CString -> Ptr (StablePtr b) -> IO Int

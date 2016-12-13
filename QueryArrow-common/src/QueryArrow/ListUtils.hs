@@ -42,3 +42,8 @@ findRepeats (a : l) =
         if a `elem` l
             then a : findRepeats (l \\ [a])
             else findRepeats l
+
+unique :: [a] -> a
+unique as = if length as /= 1
+        then error "More than one primary parameters and nonzero secondary parameters"
+        else head as

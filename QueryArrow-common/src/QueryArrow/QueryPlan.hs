@@ -3,13 +3,14 @@ module QueryArrow.QueryPlan where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.FO.Domain
 import Algebra.SemiBoundedLattice
 import QueryArrow.DB.DB
 import QueryArrow.Data.Heterogeneous.List
 
 import Prelude  hiding (lookup, null)
-import Data.List (elem, union, sortBy, groupBy, nub)
+import Data.List (elem, union, sortBy, groupBy, nub, intercalate)
 import qualified Data.List as List
 import Control.Monad.Except
 import Control.Applicative ((<|>))
@@ -20,17 +21,17 @@ import Data.Conduit
 import Control.Concurrent.Async.Lifted
 import System.Log.Logger
 import Algebra.Lattice
-import Data.Set (Set, fromList, null, isSubsetOf, member)
+import Data.Set (Set, fromList, null, isSubsetOf, member, toAscList, (\\))
 import Data.Ord (comparing, Down(..))
 import Data.Functor.Compose (Compose(..))
 import Control.Exception (catch, SomeException)
--- import Debug.Trace
+import qualified Data.Map.Strict as Map
+import Debug.Trace
 
 type MSet a = Complemented (Set a)
 
 data QueryPlan = Exec Formula Int
                 | QPReturn [Var]
-                | QPTransaction
                 | QPPar QueryPlan QueryPlan
                 | QPChoice QueryPlan QueryPlan
                 | QPSequencing QueryPlan QueryPlan
@@ -56,7 +57,6 @@ dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom bottom
 
 data QueryPlanNode2   = Exec2 Formula Int
                 | QPReturn2 [Var]
-                | QPTransaction2 [Int]
                 | QPChoice2 QueryPlan2 QueryPlan2
                 | QPPar2 QueryPlan2 QueryPlan2
                 | QPSequencing2 QueryPlan2 QueryPlan2
@@ -66,17 +66,32 @@ data QueryPlanNode2   = Exec2 Formula Int
 
 type QueryPlan2  =  (QueryPlanData , QueryPlanNode2 )
 
+showSet :: Set Var -> String
+showSet s = "[" ++ List.intercalate "," (map serialize (toAscList s)) ++ "]"
+showSet2 :: Complemented (Set Var) -> String
+showSet2 (Include s) = "Include[" ++ List.intercalate "," (map serialize (toAscList s)) ++ "]"
+showSet2 (Exclude s) = "Exclude[" ++ List.intercalate "," (map serialize (toAscList s)) ++ "]"
+
+getQPSequencing2 :: QueryPlan2 -> [QueryPlan2]
+getQPSequencing2 (_, QPSequencing2 qp1 qp2) = getQPSequencing2 qp1 ++ getQPSequencing2 qp2
+getQPSequencing2 qp = [qp]
+
+getQPChoice2 :: QueryPlan2 -> [QueryPlan2]
+getQPChoice2 (_, QPChoice2 qp1 qp2) = getQPChoice2 qp1 ++ getQPChoice2 qp2
+getQPChoice2 qp = [qp]
+
 class ToTree a where
     toTree :: a -> Tree String
 instance Show QueryPlanData where
-    show qp = "[available=" ++ show (availablevs qp) ++ "|linscope=" ++ show (linscopevs qp) ++ "|param=" ++ show (paramvs qp) ++ "|free=" ++ show (freevs qp) ++ "|determine=" ++ show (determinevs qp) ++ "|return="++ show (returnvs qp) ++ "|combined=" ++ show (combinedvs qp) ++ "|rinscope=" ++ show (rinscopevs qp) ++ "]"
+    show qp = "[available=" ++ showSet (availablevs qp) ++ "|linscope=" ++ showSet2 (linscopevs qp) ++ "|param=" ++ showSet (paramvs qp) ++ "|free="
+              ++ showSet (freevs qp) ++ "|determine=" ++ showSet (determinevs qp) ++ "|return="++ showSet (returnvs qp) ++ "|combined=" ++ showSet (combinedvs qp)
+              ++ "|rinscope=" ++ showSet2 (rinscopevs qp) ++ "]"
 instance ToTree QueryPlan2 where
     toTree (qpd, Exec2 f dbs) = Node ("exec " ++ serialize f ++ " at " ++ show dbs ++ show qpd ) []
     toTree (qpd, QPReturn2 vars) = Node ("return "++ unwords (map show vars) ) []
-    toTree (qpd, QPSequencing2 qp1 qp2) = Node ("sequencing"++ show qpd ) [toTree qp1, toTree qp2]
-    toTree (qpd, QPChoice2 qp1 qp2) = Node ("choice"++ show qpd ) [toTree qp1, toTree qp2]
+    toTree qp@(qpd, QPSequencing2 qp1 qp2) = let qps = getQPSequencing2 qp in Node ("sequencing"++ show qpd ) (map toTree qps)
+    toTree qp@(qpd, QPChoice2 qp1 qp2) = let qps = getQPChoice2 qp in Node ("choice"++ show qpd ) (map toTree qps)
     toTree (qpd, QPPar2 qp1 qp2) = Node ("parallel"++ show qpd ) [toTree qp1, toTree qp2]
-    toTree (qpd, QPTransaction2 _) = Node ("transaction" ++ show qpd) []
     toTree (qpd, QPZero2) = Node ("zero"++ show qpd ) []
     toTree (qpd, QPOne2) = Node ("one"++ show qpd ) []
     toTree (qpd, QPAggregate2 agg qp1) = Node ("aggregate " ++ show agg ++ " " ++ show qpd) [toTree qp1]
@@ -84,7 +99,6 @@ instance ToTree QueryPlan2 where
 
 data QueryPlan3 row = Exec3 (Set Var) (AbstractDBStatement row) String
                 | QPReturn3 [Var]
-                | QPTransaction3 [AbstractDBConnection]
                 | QPChoice3 (QueryPlan3 row) (QueryPlan3 row)
                 | QPPar3 (QueryPlan3 row) (QueryPlan3 row)
                 | QPSequencing3 (QueryPlan3 row) (QueryPlan3 row)
@@ -94,7 +108,6 @@ data QueryPlan3 row = Exec3 (Set Var) (AbstractDBStatement row) String
 
 data QueryPlanT l = ExecT (Set Var) (HVariant' DBQueryTypeIso l) String
                 | QPReturnT [Var]
-                | QPTransactionT [Int]
                 | QPChoiceT (QueryPlanT l) (QueryPlanT l)
                 | QPParT (QueryPlanT l) (QueryPlanT l)
                 | QPSequencingT (QueryPlanT l) (QueryPlanT l)
@@ -120,7 +133,6 @@ formulaToQueryPlan _  (FReturn vars) =
     QPReturn vars
 formulaToQueryPlan _ FOne = QPOne
 formulaToQueryPlan _ FZero = QPZero
-formulaToQueryPlan dbs  FTransaction = QPTransaction
 formulaToQueryPlan dbs  (FChoice form1 form2) = QPChoice (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (FPar form1 form2) = QPPar (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (FSequencing form1 form2) = QPSequencing (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
@@ -167,8 +179,6 @@ simplifyQueryPlan  (QPAggregate Not qp1) =
 simplifyQueryPlan  (QPAggregate agg qp1) =
     let qp1' = simplifyQueryPlan  qp1 in
         QPAggregate agg qp1'
-simplifyQueryPlan  QPTransaction =
-    QPTransaction
 simplifyQueryPlan qp@(QPReturn _) = qp
 simplifyQueryPlan  qp = qp
 
@@ -211,8 +221,8 @@ combineQPParData qp1 qp2 =
         combinedvs = combinedvs qp2 \/ combinedvs qp2
     }
 
-supportedDB :: IDatabaseUniformDBFormula Formula db => Formula -> Set Var -> db -> Bool
-supportedDB form vars db = supported db form vars
+supportedDB :: IDatabaseUniformDBFormula Formula db => Set Var -> Formula -> Set Var -> db -> Bool
+supportedDB ret form vars db = supported db ret form vars
 
 optimizeQueryPlan :: HMapConstraint (IDatabaseUniformDBFormula Formula) l => HList l -> QueryPlan2 -> QueryPlan2
 optimizeQueryPlan _ qp@(_, Exec2 _ _) = qp
@@ -226,7 +236,7 @@ optimizeQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
             ((_, Exec2 form1 x1), (_, Exec2 form2 x2)) ->
                 let dbs = x1 == x2
                     fse = fsequencing [form1, form2]
-                    dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB fse (returnvs qpd)) x1 dbsx) in
+                    dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB (returnvs qpd) fse (paramvs qpd)) x1 dbsx) in
                     if dbs && dbs'
                             then (qpd, Exec2 fse x1)
                             else (qpd, QPSequencing2 qp1' qp2')
@@ -244,7 +254,7 @@ optimizeQueryPlan dbsx (qpd, QPChoice2 qp1 qp2) =
             ((_, Exec2 formula1 x1), (_, Exec2 formula2 x2)) ->
                 let dbs = x1 == x2
                     fch = fchoice [formula1, formula2]
-                    dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB (fch) (returnvs qpd)) x1 dbsx) in
+                    dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB (returnvs qpd) (fch) (paramvs qpd)) x1 dbsx) in
                     if dbs && dbs' then
                       (qpd, Exec2 fch x1)
                     else
@@ -263,7 +273,7 @@ optimizeQueryPlan dbsx (qpd, QPPar2 qp1 qp2) =
             ((_, Exec2 formula1 x1), (_, Exec2 formula2 x2)) ->
                 let dbs = x1 == x2
                     fch = fchoice [formula1, formula2]
-                    dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB (fch) (returnvs qpd)) x1 dbsx) in
+                    dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB (returnvs qpd) (fch) (paramvs qpd)) x1 dbsx) in
                     if dbs && dbs' then
                       (qpd, Exec2 fch x1)
                     else
@@ -275,8 +285,6 @@ optimizeQueryPlan dbsx (qpd, QPPar2 qp1 qp2) =
             ((qpd1, QPPar2 qp11 qp12@(qpd3, _)), (_, QPPar2 qp21@(qpd4, _) qp22)) ->
                 (qpd, QPPar2 (combineQPParData qpd1 qpd4, QPPar2 qp11 (optimizeQueryPlan dbsx (combineQPParData qpd3 qpd4, QPPar2 qp12 qp21))) qp22)
             _ -> (qpd, QPPar2 qp1' qp2')
-optimizeQueryPlan _ qp@(_, QPTransaction2 _) =
-    qp
 optimizeQueryPlan _ qp@(_, QPOne2) = qp
 optimizeQueryPlan _ qp@(_, QPZero2) = qp
 optimizeQueryPlan dbsx (qpd, QPAggregate2 agg qp1) =
@@ -284,7 +292,7 @@ optimizeQueryPlan dbsx (qpd, QPAggregate2 agg qp1) =
         case qp1' of
             (_, Exec2 formula1 x) ->
                         let exi = Aggregate agg formula1
-                            dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB exi (returnvs qpd)) x dbsx)  in
+                            dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula Formula) @Bool (supportedDB (returnvs qpd) exi (paramvs qpd)) x dbsx)  in
                             if dbs' then
                               (qpd, Exec2 exi  x)
                             else
@@ -359,8 +367,6 @@ calculateVars1 rvars  (QPReturn vars) =
         linscopevs = rvars /\ Include (fromList vars),
         rinscopevs = rvars /\ Include (fromList vars)
         } , QPReturn2 vars)
-calculateVars1 rvars  (QPTransaction) =
-        (dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars} , QPTransaction2 [])
 
 
 
@@ -386,8 +392,6 @@ calculateVars2 lvars  (qpd, QPAggregate2 agg qp1) =
             let qp1' = calculateVars2 lvars qp1 in
                 ( qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} , (QPAggregate2 agg qp1'))
 calculateVars2 lvars  (qpd, QPReturn2 vars) = (dqdb{availablevs = lvars, paramvs = lvars /\ fromList vars, returnvs = rinscopevs qpd //\ (lvars /\ fromList vars), combinedvs = rinscopevs qpd //\ (lvars /\ fromList vars)} , QPReturn2 vars)
-calculateVars2 lvars  (qpd, QPTransaction2 a) =
-    (qpd{availablevs = lvars, paramvs = bottom, returnvs = bottom,combinedvs = rinscopevs qpd //\ lvars} , QPTransaction2 a)
 
 
 
@@ -449,17 +453,17 @@ prepareTransaction rdbxs qp@(_, QPZero2) =  (rdbxs, qp)
 prepareTransaction rdbxs (qpd, QPAggregate2 agg qp1) =
     let (dbxs, qp1') = prepareTransaction rdbxs qp1 in
         (dbxs, (qpd, QPAggregate2 agg qp1'))
-prepareTransaction rdbxs qp@(qpd, QPTransaction2 _) =
-    (rdbxs, (qpd, QPTransaction2 rdbxs))
 prepareTransaction rdbxs qp@(_, QPReturn2 _) =  (rdbxs, qp)
+
 
 translateQueryPlan :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l) => HList l -> QueryPlan2 -> IO (QueryPlanT l)
 
 translateQueryPlan dbs (qpd, (Exec2  form x)) = do
         let vars = paramvs qpd
             vars2 = returnvs qpd
+            (varstinp, varstout) = setToMap vars vars2
             trans :: (IDatabaseUniformDBFormula Formula db) => db ->  IO (DBQueryTypeIso db)
-            trans db =  DBQueryTypeIso <$> (translateQuery db vars2 form vars)
+            trans db =  DBQueryTypeIso <$> (translateQuery db varstout form varstinp)
         qu <-  fromMaybe (error "index out of range") <$> (hApplyACULV @(IDatabaseUniformDBFormula Formula) @(DBQueryTypeIso) trans x dbs)
         return (ExecT (combinedvs qpd) qu (serialize form))
 translateQueryPlan dbs  (_, QPChoice2 qp1 qp2) = do
@@ -480,7 +484,6 @@ translateQueryPlan dbs  (qpd, QPAggregate2 agg qp1) = do
         qp1' <- translateQueryPlan dbs  qp1
         return (QPAggregateT (combinedvs qpd) agg qp1')
 translateQueryPlan _ (_, QPReturn2 vars) = return (QPReturnT vars)
-translateQueryPlan _ (_, QPTransaction2 dbxs) = return (QPTransactionT dbxs)
 
 hDbOpen :: (HMapConstraint IDatabase l) => HList l -> IO (HList' ConnectionType l)
 hDbOpen dbs =
@@ -522,8 +525,6 @@ prepareQueryPlan dbs  (QPAggregateT combinedvs agg qp1) = do
     qp1' <- prepareQueryPlan dbs  qp1
     return (QPAggregate3 combinedvs agg qp1')
 prepareQueryPlan _ (QPReturnT vars) = return (QPReturn3 vars)
-prepareQueryPlan dbs (QPTransactionT dbxs) =
-    return (QPTransaction3 (map (\x -> fromMaybe (error "index out of range") (hApplyCUL @IDBConnection @AbstractDBConnection AbstractDBConnection x  (toHList dbs))) dbxs))
 
 addCleanupRS :: Monad m => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
@@ -557,27 +558,6 @@ execQueryPlan rs (QPPar3 qp1 qp2) = do
         rs2 = execQueryPlan  (pure row) qp2
     (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
     listResultStream rs1' <|> listResultStream rs2'
-
-execQueryPlan  rs (QPTransaction3 dbs) = do
-    let (begin, prepare, commit, rollback) =
-                (mapM_ dbBegin dbs,
-                mapM_ dbPrepare dbs,
-                mapM_ dbCommit dbs,
-                mapM_ dbRollback dbs)
-    row <- rs
-    let commitCleanup = do
-            catch(do
-              prepare
-              commit) (\e -> do
-                            rollback
-                            liftIO $ errorM "QA" ("execQueryPlan: commit failed with exception " ++ show (e :: SomeException)))
-    let rollbackCleanup = do
-            rollback
-            liftIO $ errorM "QA" ("execQueryPlan: stream terminated rollback ")
-    liftIO begin
-    ResultStream (do
-        yieldOr row (liftIO rollbackCleanup)
-        liftIO commitCleanup)
 
 execQueryPlan r QPOne3 = r
 execQueryPlan rs (QPReturn3 vars) = rs
@@ -666,8 +646,6 @@ closeQueryPlan (QPChoice3 qp1 qp2) = do
 closeQueryPlan (QPPar3 qp1 qp2) = do
     closeQueryPlan qp1
     closeQueryPlan qp2
-
-closeQueryPlan (QPTransaction3 dbs) = return ()
 
 closeQueryPlan QPOne3 = return ()
 closeQueryPlan (QPReturn3 vars) = return ()
