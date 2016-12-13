@@ -147,6 +147,13 @@ instance Typecheck Lit where
     typecheck  (Lit _ a) = typecheck  a
 
 instance Typecheck Aggregator where
+  typecheck  (FReturn vars) = do
+    (vtm, _) <- lift get
+    let rvars = Set.fromList vars
+    let ub = unbounded vtm rvars
+    unless (null ub) $ throwError ("typecheck: return unbounded vars " ++ intercalate ", " (map serialize (Set.toAscList ub)) ++ " dvars = " ++ show vtm )
+    let vtm' = foldl' (\vtm' var -> delete var vtm') vtm vars
+    lift $ modify (const vtm' *** id)
   typecheck  (Summarize cols _) = do
     vtml <- mapM (\(v, s) ->
       case s of
@@ -186,13 +193,6 @@ instance Typecheck Formula where
       let ub = unbounded vtm vars
       unless (null ub) $ throwError ("typecheck: insert unbounded vars " ++ intercalate ", " (map serialize (Set.toAscList ub)) ++ " dvars = " ++ show vtm )
       typecheck  l
-    typecheck  (FReturn vars) = do
-      (vtm, _) <- lift get
-      let rvars = Set.fromList vars
-      let ub = unbounded vtm rvars
-      unless (null ub) $ throwError ("typecheck: return unbounded vars " ++ intercalate ", " (map serialize (Set.toAscList ub)) ++ " dvars = " ++ show vtm )
-      let vtm' = foldl' (\vtm' var -> delete var vtm') vtm vars
-      lift $ modify (const vtm' *** id)
     typecheck  (FSequencing a b) = do
         typecheck  a
         typecheck  b

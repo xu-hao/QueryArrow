@@ -52,10 +52,9 @@ data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
 data Lit = Lit { sign :: Sign,  atom :: Atom } deriving (Eq, Ord, Show, Read)
 
 data Summary = Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
-data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists deriving (Eq, Ord, Show, Read)
+data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists | FReturn [Var] deriving (Eq, Ord, Show, Read)
 
-data Formula = FReturn [Var]
-             | FAtomic Atom
+data Formula = FAtomic Atom
              | FInsert Lit
              | FChoice Formula Formula
              | FSequencing Formula Formula
@@ -91,8 +90,6 @@ instance FreeVars Lit where
     freeVars (Lit _ theatom) = freeVars theatom
 
 instance FreeVars Formula where
-    freeVars (FReturn _) =
-        bottom
     freeVars (FAtomic atom1) =
         freeVars atom1
     freeVars (FInsert lits) =
@@ -103,6 +100,8 @@ instance FreeVars Formula where
         freeVars form1 \/ freeVars form2
     freeVars (FPar form1 form2) =
         freeVars form1 \/ freeVars form2
+    freeVars (Aggregate (FReturn _) formula1) =
+        freeVars formula1
     freeVars (Aggregate Not formula1) =
         freeVars formula1
     freeVars (Aggregate Exists formula1) =
@@ -338,7 +337,6 @@ instance Serialize Summary where
     serialize (CountDistinct v) = "count distinct(" ++ serialize v ++ ")"
 
 instance Serialize Formula where
-    serialize (FReturn vars) = "(return " ++ unwords (map serialize vars) ++ ")"
     serialize (FAtomic a) = serialize a
     serialize (FInsert lits) = "(insert " ++ serialize lits ++ ")"
     serialize form@(FSequencing _ _) = "(" ++ intercalate " ⊗ " (map serialize (getFsequencings' form)) ++ ")"
@@ -346,6 +344,7 @@ instance Serialize Formula where
     serialize form@(FPar _ _) = "(" ++ intercalate " ‖ " (map serialize (getFpars' form)) ++ ")"
     serialize FOne = "𝟏"
     serialize FZero = "𝟎"
+    serialize (Aggregate (FReturn vars) form) = "(" ++ serialize form ++ " return " ++ unwords (map serialize vars) ++ ")"
     serialize (Aggregate Exists form) = "∃" ++ serialize form
     serialize (Aggregate Not form) = "¬" ++ serialize form
     serialize (Aggregate Distinct form) = "(distinct " ++ serialize form ++ ")"
@@ -460,12 +459,12 @@ instance Subst Summary where
     subst s (CountDistinct v) = CountDistinct (subst s v)
 
 instance Subst Formula where
-    subst s (FReturn vars) = FReturn (subst s vars)
     subst s (FAtomic a) = FAtomic (subst s a)
     subst s (FInsert lits) = FInsert (subst s lits)
     subst s (FSequencing form1 form2) = FSequencing (subst s form1) (subst s form2)
     subst s (FChoice form1 form2) = FChoice (subst s form1) (subst s form2)
     subst s (FPar form1 form2) = FPar (subst s form1) (subst s form2)
+    subst s (Aggregate (FReturn vars) form) = Aggregate (FReturn (subst s vars)) (subst s form)
     subst s (Aggregate Not a) = Aggregate Not (subst s a)
     subst s (Aggregate Exists a) = Aggregate Exists (subst s a)
     subst s (Aggregate (Summarize funcs groupby) a) = Aggregate (Summarize (subst s funcs) (map (\var1 -> extractVar (subst s (VarExpr var1))) groupby)) (subst s a)
@@ -527,7 +526,6 @@ instance FreeVars a => FreeVars (Set a) where
     freeVars sa = Set.unions (map freeVars (Set.toAscList sa))
 
 pureF :: Formula -> Bool
-pureF (FReturn _) = True
 pureF (FAtomic _) = True
 pureF (FSequencing form1 form2) =  pureF form1 &&  pureF form2
 pureF (FChoice form1 form2) = pureF form1 && pureF form2
@@ -538,7 +536,6 @@ pureF FOne = True
 pureF FZero = True
 
 layeredF :: Formula -> Bool
-layeredF (FReturn _) = True
 layeredF (FAtomic _) = True
 layeredF (FSequencing form1 form2) =  layeredF form1 &&  layeredF form2
 layeredF (FChoice form1 form2) = layeredF form1 && layeredF form2

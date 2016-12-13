@@ -210,7 +210,7 @@ translateGenQueryToQAL  (GenQuery sels conds) =
           let
               cols = map (\(Sel col _) -> col) sels
               vars = map toVariable cols
-              form0 = foldr (.*.) (FReturn vars) (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds)
+              form0 = Aggregate (FReturn vars) (foldr (.*.) FOne (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds))
               orders = map (\(Sel col _) -> col) (filter (\(Sel _ sel) -> case sel of
                                                                               Order -> True
                                                                               _ -> False) sels)

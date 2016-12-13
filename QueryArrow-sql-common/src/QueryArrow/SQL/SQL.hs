@@ -939,8 +939,6 @@ pureOrExecF trans dvars for@(Aggregate Exists form) = do
           pureOrExecF trans dvars form
 pureOrExecF _ _ (Aggregate _ _) =
   lift Nothing
-pureOrExecF trans _ (FReturn _) = lift Nothing
-
 
 sequenceF :: SQLTrans -> Formula -> StateT SQLState Maybe ()
 sequenceF (SQLTrans _ _ (Just nextid1) _) (FAtomic (Atom p [_])) | predName nextid1 == p =

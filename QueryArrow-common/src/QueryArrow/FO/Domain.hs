@@ -79,7 +79,9 @@ instance DeterminedVars Atom where
 
 instance DeterminedVars Formula where
     determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
-    determinedVars _ vars (FReturn vars2) = fromList vars2 /\ vars
+    determinedVars dsp vars (Aggregate (FReturn vars2) form) =
+        let vars1 = determinedVars dsp vars form in
+        fromList vars2 /\ vars1
     determinedVars _ vars (FInsert _) = vars
     determinedVars dsp vars (FSequencing form1 form2) =
         let map1 = determinedVars dsp vars form1 in
@@ -128,7 +130,6 @@ instance OutputVars Atom where
 
 instance OutputVars Formula where
     outputVars dsp vars (FAtomic atom0) = outputVars dsp vars atom0
-    outputVars _ vars (FReturn vars2) = return (fromList vars2 /\ vars)
     outputVars _ vars (FInsert _) = return vars
     outputVars dsp vars (FSequencing form1 form2) = do
         map1 <- outputVars dsp vars form1
@@ -141,10 +142,13 @@ instance OutputVars Formula where
         map1 <- outputVars dsp vars form1
         map2 <- outputVars dsp vars form2
         return (map1 \/ map2)
+    outputVars dsp vars (Aggregate (FReturn vars2) form) =  do
+        vars1 <- outputVars dsp vars form
+        return (fromList vars2 /\ vars1)
     outputVars _ vars (Aggregate Not _) = return vars
     outputVars dsp vars (Aggregate Distinct form) = outputVars dsp vars form
     outputVars _ vars (Aggregate Exists _) = return vars
-    outputVars _ vars (Aggregate (Summarize funcs groupby) _) = return ((fromList (fst (unzip funcs))) \/ vars)
+    outputVars _ vars (Aggregate (Summarize funcs groupby) _) = return (fromList (fst (unzip funcs)) \/ vars)
     outputVars dsp vars (Aggregate (Limit _) form) = outputVars dsp vars form
     outputVars dsp vars (Aggregate (OrderByAsc _) form) = outputVars dsp vars form
     outputVars dsp vars (Aggregate (OrderByDesc _) form) = outputVars dsp vars form

@@ -132,7 +132,6 @@ letp = do
 
 formula1p :: FOParser Formula
 formula1p = try (parens formulap)
-       <|> (FReturn <$> returnp)
        <|> (FAtomic <$> try atomp)
        <|> (Aggregate Not <$> (negp >> formula1p))
        <|> (Aggregate Exists <$> (existsp >> formula1p))
@@ -148,7 +147,9 @@ formula1p = try (parens formulap)
 formulap :: FOParser Formula
 formulap = do
   formula1s <- sepBy1 formulaChoicep parp
-  return (fpar formula1s)
+  let formula1 = fpar formula1s
+  (Aggregate . FReturn <$> returnp <*> pure formula1)
+    <|> return formula1
 
 formulaChoicep :: FOParser Formula
 formulaChoicep = do

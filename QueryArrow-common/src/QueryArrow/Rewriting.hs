@@ -90,7 +90,6 @@ rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
 rewrite1 :: Set Var ->[InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrite1 ext  qr  ir dr form0 =
     case form0 of
-        (FReturn _) -> return form0
         (FAtomic a2) -> do
             res <- rewriteAtomic1 ext a2 qr
             return (case res of

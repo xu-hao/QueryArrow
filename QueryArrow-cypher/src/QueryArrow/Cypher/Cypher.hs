@@ -6,7 +6,7 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cwhere, creturn) where
 
-import QueryArrow.FO.Data (Serialize(..), New(..), Sign(..), Var(..), PredName, PredTypeMap, NewEnv, Formula(..), Atom(..), Lit(..), Expr(..), CastType(..), registerVars, FreeVars(..), runNew, layeredF, StringWrapper(..))
+import QueryArrow.FO.Data (Serialize(..), New(..), Sign(..), Var(..), PredName, PredTypeMap, NewEnv, Formula(..), Atom(..), Lit(..), Expr(..), CastType(..), Aggregator(..), registerVars, FreeVars(..), runNew, layeredF, StringWrapper(..))
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
 import QueryArrow.ListUtils
@@ -533,7 +533,8 @@ cypherDeterminedVars builtin (FChoice form1 form2) =
 cypherDeterminedVars builtin FOne = []
 cypherDeterminedVars builtin FZero = []
 cypherDeterminedVars builtin (FInsert _) = []
-cypherDeterminedVars builtin (FReturn vars) = []
+cypherDeterminedVars builtin (Aggregate (FReturn vars) form1) =
+    cypherDeterminedVars builtin form1 `intersect` vars
 cypherDeterminedVars builtin _ = error "unsupported"
 
 translateFormulaToCypher :: Formula -> TransMonad [Cypher]
@@ -559,8 +560,8 @@ translateFormulaToCypher  (FInsert lits@(Lit sign0 a))  = do
         Pos -> translateInsertAtomToCypher  a
         Neg -> translateDeleteAtomToCypher  a
     return [cypher]
-translateFormulaToCypher  (FReturn vars)  =
-    return []
+translateFormulaToCypher  (Aggregate (FReturn vars) a)  =
+    translateFormulaToCypher a
 
 translateFormulaToCypher _ = do
     error "translateFormulaToCypher: unsupported"
@@ -715,7 +716,6 @@ translateableCypher _ (FInsert lit) = do
 translateableCypher trans (FOne) = return ()
 translateableCypher trans (FZero) = lift $ Nothing
 translateableCypher trans (Aggregate _ _)  = lift $ Nothing
-translateableCypher trans (FReturn _)  = lift $ Nothing
 
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
