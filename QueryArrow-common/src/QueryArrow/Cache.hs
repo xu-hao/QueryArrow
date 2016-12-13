@@ -3,6 +3,7 @@ module QueryArrow.Cache where
 
 import QueryArrow.DB.DB
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.QueryPlan
 
 import Prelude  hiding (lookup)
@@ -10,9 +11,8 @@ import Control.Applicative ((<$>))
 import Data.Set (Set)
 import Data.Cache.LRU.IO
 import System.Log.Logger
-import Data.Map.Strict (keysSet)
 
-type TransCache query = AtomicLRU (Set Var, Formula, Set Var) query
+type TransCache query = (AtomicLRU (Set Var, Formula, Set Var) query, AtomicLRU (VarTypeMap, Formula, VarTypeMap) (Either String ()))
 
 data CacheTransDB db = CacheTransDB String db (TransCache (DBQueryType db))
 
@@ -21,12 +21,24 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (CacheTransDB db) 
     getName (CacheTransDB name _ _ ) = name
     getPreds (CacheTransDB _ db _ ) = getPreds db
     supported (CacheTransDB _ db _) = supported db
+    checkQuery (CacheTransDB _ db (_, cache)) vars2 qu vars = do
+        infoM "TransCache" ("looking up " ++ show qu)
+        qu' <- lookup (vars2, qu, vars) cache
+        case qu' of
+            Just qu2 -> do
+                infoM "TransCache" ("found checked query")
+                return qu2
+            Nothing -> do
+                infoM "TransCache" ("did not find checked query")
+                qu' <- checkQuery db vars2 qu vars
+                insert (vars2, qu, vars) qu' cache
+                return qu'
 
 instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) where
     type DBQueryType (CacheTransDB db) = DBQueryType db
-    translateQuery (CacheTransDB _ db cache ) vars2 qu vars = do
+    translateQuery (CacheTransDB _ db (cache, _) ) vars2 qu vars = do
         infoM "TransCache" ("looking up " ++ show qu)
-        qu' <- lookup (keysSet vars2, qu, keysSet vars) cache
+        qu' <- lookup (vars2, qu, vars) cache
         case qu' of
             Just qu2 -> do
                 infoM "TransCache" ("found translated query")
@@ -34,7 +46,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (CacheTransDB db) 
             Nothing -> do
                 infoM "TransCache" ("did not find translated query")
                 qu' <- translateQuery db vars2 qu vars
-                insert (keysSet vars2, qu, keysSet vars) qu' cache
+                insert (vars2, qu, vars) qu' cache
                 return qu'
 
 instance (IDatabase db) => IDatabase2 (CacheTransDB db) where
@@ -59,4 +71,5 @@ instance (IDatabase db) => IDBConnection (ConnectionType (CacheTransDB db)) wher
 cacheDB :: IDatabase db => String -> db -> Maybe Integer -> IO (CacheTransDB db)
 cacheDB name db capacity = do
   cache <- newAtomicLRU capacity
-  return (CacheTransDB name db cache)
+  cache2 <- newAtomicLRU capacity
+  return (CacheTransDB name db (cache, cache2))

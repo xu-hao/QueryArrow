@@ -7,6 +7,7 @@ import QueryArrow.DB.NoTranslation
 import QueryArrow.DB.NoPreparedStatement
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import Foreign.Ptr
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
@@ -26,6 +27,12 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
   ntGetName (QueryArrowClient _ n _) = n
   ntGetPreds (QueryArrowClient _ _ ps) = ps
   ntSupported (QueryArrowClient chan _ _) ret form vars = True -- assuming that the server is running a TransDB
+  ntCheckQuery (QueryArrowClient chan _ _) ret form vars = do
+    res <- rpc chan (CheckQuery ret form vars)
+    case res of
+      UnitResult -> return (Right ())
+      ErrorResult (_, err) -> return (Left err)
+      _ -> fail ("ntCheckQuery: unsupported result type: " ++ show res)
 
 processRes :: RemoteResultSet -> IO ()
 processRes res =
@@ -35,7 +42,7 @@ processRes res =
     ErrorResult (_, err) ->
       fail err
     _ ->
-      fail ("unsupported result type: " ++ show res)
+      fail ("processRes: unsupported result type: " ++ show res)
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBConnection0 (ConnectionType (QueryArrowClient a)) where
   dbClose (QueryArrowClientDBConnection chan connSP) = do
@@ -58,7 +65,7 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
   type RowType (ConnectionType (QueryArrowClient  a), NTDBQuery Formula) = MapResultRow
   dbStmtExec (QueryArrowClientDBConnection chan connSP, qu) rows = do
       row <- rows
-      RowListResult rows' <- liftIO $ rpc chan (DBStmtExec connSP qu [row])
+      RowListResult rows' <- liftIO $ rpc chan (DBStmtExec connSP  qu  [row])
       listResultStream rows'
   dbStmtClose _ = return ()
 

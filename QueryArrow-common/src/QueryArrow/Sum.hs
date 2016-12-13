@@ -78,9 +78,10 @@ instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need
     getName (SumDB name _ ) = name
     getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
     supported _ _ _ _ = True
+    checkQuery _ _ _ _ = return (Right ())
 instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula Formula) l) => IDatabase1 (SumDB row l) where
     type DBQueryType (SumDB row l) = QueryPlanT l
-    translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include (keysSet retvars)) form (keysSet vars)
+    translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include retvars) form vars
 
 instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDatabase2 (SumDB row l) where

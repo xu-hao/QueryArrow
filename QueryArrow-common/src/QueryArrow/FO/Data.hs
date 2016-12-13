@@ -246,6 +246,12 @@ pattern PredName ks n = ObjectPath (NamespacePath ks) n
 pattern QPredName k ks n = ObjectPath (NamespacePath (k : ks)) n
 pattern UQPredName n = ObjectPath (NamespacePath []) n
 
+instance Serialize PredName where
+  serialize = predNameToString
+
+instance Serialize ParamType where
+  serialize (ParamType key input output t) = (if key then "key " else ""  ) ++ (if input then "input " else "") ++ (if output then "output " else "") ++ serialize t
+  
 predNameToString :: PredName -> String
 predNameToString (PredName mns n)= intercalate "." (mns ++ [n])
 

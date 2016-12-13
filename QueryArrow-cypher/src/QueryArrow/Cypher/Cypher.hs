@@ -721,9 +721,10 @@ instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
     type GDBFormulaType CypherTrans = Formula
 
+    gCheckQuery trans vars query env = return (Right ())
     gTranslateQuery trans vars query env =
         let (CypherTrans builtin predtablemap ptm) = trans in
-            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, Map.keys vars, Map.keys env, ptm)))
+            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, toAscList vars, toAscList env, ptm)))
     gSupported trans ret form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList ret)))
 
 instance New CypherVar CypherExpr where

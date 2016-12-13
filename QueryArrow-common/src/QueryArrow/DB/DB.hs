@@ -5,7 +5,7 @@ import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
 
 import Prelude  hiding (lookup, null)
-import Data.Map.Strict (Map, empty, insert, lookup, singleton)
+import Data.Map.Strict (Map, empty, insert, lookup, singleton, keysSet)
 import Control.Monad.Except
 import Data.Convertible.Base
 import Data.Maybe
@@ -123,10 +123,11 @@ class IDatabase0 db where
     getName :: db -> String
     getPreds :: db -> [Pred]
     supported :: db -> Set Var -> DBFormulaType db -> Set Var -> Bool
+    checkQuery :: db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> IO (Either String ())
 
 class IDatabase0 db => IDatabase1 db where
     type DBQueryType db
-    translateQuery :: db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> IO (DBQueryType db)
+    translateQuery :: db -> Set Var -> DBFormulaType db -> Set Var -> IO (DBQueryType db)
 
 class (IDBConnection (ConnectionType db)) => IDatabase2 db where
     data ConnectionType db
@@ -142,6 +143,7 @@ instance IDatabase0 (AbstractDatabase row form) where
     getName (AbstractDatabase db) = getName db
     getPreds (AbstractDatabase db) = getPreds db
     supported (AbstractDatabase db) = supported db
+    checkQuery (AbstractDatabase db) = checkQuery db
 
 doQuery :: (IDatabase db) => db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQuery db vars2 qu vars rs =
@@ -149,13 +151,17 @@ doQuery db vars2 qu vars rs =
 
 doQueryWithConn :: (IDatabase db) => db -> ConnectionType db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQueryWithConn db conn vars2 qu vars rs = do
-  qu' <- liftIO $ translateQuery db vars2 qu vars
-  stmt <- liftIO $ prepareQuery conn qu'
-  dbStmtExec stmt rs <|> do
-      liftIO $ catch (do
-                    dbCommit conn
-                    noticeM "QA" "doQuery: commit succeeded") (\e -> errorM "QA" ("doQuery: commit failed with exception " ++ show (e :: SomeException)))
-      emptyResultStream
+  res <- liftIO $ checkQuery db vars2 qu vars
+  case res of
+    Left err -> error ("doQueryWithConn: " ++ err)
+    Right () -> do
+      qu' <- liftIO $ translateQuery db (keysSet vars2) qu (keysSet vars)
+      stmt <- liftIO $ prepareQuery conn qu'
+      dbStmtExec stmt rs <|> do
+          liftIO $ catch (do
+                        dbCommit conn
+                        noticeM "QA" "doQuery: commit succeeded") (\e -> errorM "QA" ("doQuery: commit failed with exception " ++ show (e :: SomeException)))
+          emptyResultStream
 
 newtype QueryTypeIso conn = QueryTypeIso (QueryType conn)
 newtype DBQueryTypeIso db = DBQueryTypeIso (DBQueryType db)

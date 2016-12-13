@@ -451,9 +451,8 @@ translateQueryPlan :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l) => 
 translateQueryPlan dbs (qpd, (Exec2  form x)) = do
         let vars = paramvs qpd
             vars2 = returnvs qpd
-            (varstinp, varstout) = setToMap vars vars2
             trans :: (IDatabaseUniformDBFormula Formula db) => db ->  IO (DBQueryTypeIso db)
-            trans db =  DBQueryTypeIso <$> (translateQuery db varstout form varstinp)
+            trans db =  DBQueryTypeIso <$> (translateQuery db vars2 form vars)
         qu <-  fromMaybe (error "index out of range") <$> (hApplyACULV @(IDatabaseUniformDBFormula Formula) @(DBQueryTypeIso) trans x dbs)
         return (ExecT (combinedvs qpd) qu (serialize form))
 translateQueryPlan dbs  (_, QPChoice2 qp1 qp2) = do

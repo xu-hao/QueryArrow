@@ -12,6 +12,7 @@ import QueryArrow.Remote.NoTranslation.Definitions
 import QueryArrow.Remote.Definitions
 import QueryArrow.FO.Data
 import Control.Exception.Lifted (catch, SomeException)
+import Data.Map.Strict (keysSet)
 
 runQueryArrowServer :: forall db a. (Channel a, SendType a ~ RemoteResultSet, ReceiveType a ~ RemoteCommand,
         DBFormulaType db ~ Formula,
@@ -59,6 +60,13 @@ runQueryArrowServer chan db = do
               dbRollback conn
               return UnitResult
               ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
+        CheckQuery vars2 form vars ->
+          catch (do
+            res <- liftIO $ checkQuery db vars2 form vars
+            case res of
+              Left err -> return (ErrorResult (-1, err))
+              Right () -> return UnitResult
+                ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
         DBStmtExec connSP (NTDBQuery vars2 form vars) rows ->
           catch (do
             (_, conn, _) <- liftIO $ deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))

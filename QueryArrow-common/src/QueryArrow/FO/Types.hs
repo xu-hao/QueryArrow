@@ -117,16 +117,16 @@ instance Typecheck Atom where
       (vtm, _) <- lift get
       predtypemap <- lift . lift $ ask
       case lookup pn predtypemap of
-          Nothing -> throwError ("typecheck: cannot find predicate " ++ show pn)
+          Nothing -> throwError ("typecheck: cannot find predicate " ++ serialize pn)
           Just pt -> do
               (PredType _ pts) <- instantiatePredType pt
               if length pts /= length args
-                  then throwError ("typecheck: argument count mismatch " ++ show a)
+                  then throwError ("typecheck: argument count mismatch " ++ serialize a)
                   else
                       zipWithM_ (\paramtype arg -> do
                           let free = freeVars arg
                           let ub = unbounded vtm free
-                          when (not (isVar arg) && not (null ub)) $ throwError ("typecheck: unbounded nested vars: " ++ show ub ++ ", the formula is " ++ show a)
+                          when (not (isVar arg) && not (null ub)) $ throwError ("typecheck: unbounded nested vars: " ++ show ub ++ ", the formula is " ++ serialize a)
                           (_, tvm) <- lift get
                           let pt'@(ParamType _ _ _ t') = tcsubst tvm paramtype
                           case arg of
@@ -139,7 +139,7 @@ instance Typecheck Atom where
                               PatternExpr _ ->
                                   context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' TextType
                               CastExpr t2 _ ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg ++ " paramtype " ++ show paramtype) $ tcunify t' t2
+                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg ++ " paramtype " ++ serialize paramtype) $ tcunify t' t2
                               NullExpr ->
                                   return ()) pts args
 

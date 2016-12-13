@@ -8,6 +8,7 @@ import QueryArrow.FO.Data
 import Data.Set
 import Foreign.Ptr
 import Data.Map.Strict
+import QueryArrow.FO.Types
 
 data RemoteCommand  = GetName
   | GetPreds
@@ -19,6 +20,7 @@ data RemoteCommand  = GetName
   | DBCommit (Ptr ())
   | DBRollback (Ptr ())
   | DBStmtExec (Ptr ()) (NTDBQuery Formula) [MapResultRow]
+  | CheckQuery VarTypeMap Formula VarTypeMap
   | Quit
 
 data RemoteResultSet = StringResult String

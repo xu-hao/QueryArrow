@@ -973,8 +973,8 @@ instance IGenericDatabase01 SQLTrans where
     type GDBFormulaType SQLTrans = Formula
     gTranslateQuery trans ret query env =
         let (SQLTrans builtin predtablemap nextid ptm) = trans
-            env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty (keys env)
-            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (keys ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm})) in
+            env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
+            (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) query) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm})) in
             return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, serialize sqlquery, params sql)

@@ -33,18 +33,19 @@ instance IDatabase0 MapDB where
     getPreds (MapDB name predname _) = [ Pred (QPredName name [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType]) ]
     supported (MapDB name predname _) _ (FAtomic (Atom p _)) _ | predNameMatches (QPredName name [] predname) p = True
     supported _ _ _ _ = False
+    checkQuery _ _ _ _ = return (Right ())
 
 instance IDatabase1 MapDB where
-    type DBQueryType MapDB = ( VarTypeMap, Formula,  VarTypeMap)
+    type DBQueryType MapDB = ( Set Var, Formula,  Set Var)
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 
 instance INoConnectionDatabase2 MapDB where
-    type NoConnectionQueryType MapDB = (VarTypeMap, Formula, VarTypeMap)
+    type NoConnectionQueryType MapDB = (Set Var, Formula, Set Var)
     type NoConnectionRowType MapDB = MapResultRow
     noConnectionDBStmtExec (MapDB _ _ rows) (vars, ( (FAtomic (Atom _ args))), _) stream  = do
         row2 <- mapDBFilterResults rows stream args
-        return (transform (keysSet vars) row2)
+        return (transform vars row2)
     noConnectionDBStmtExec _ qu _ = error ("dqdb: unsupported Formula " ++ show qu)
 
 -- update mapdb
@@ -62,18 +63,19 @@ instance IDatabase0 StateMapDB where
     supported _ _ (FAtomic _) _ = True
     supported _ _ (FInsert _) _ = True
     supported _ _ _ _ = False
+    checkQuery _ _ _ _ = return (Right ())
 
 instance IDatabase1 StateMapDB where
-    type DBQueryType StateMapDB = ( VarTypeMap, Formula,  VarTypeMap)
+    type DBQueryType StateMapDB = ( Set Var, Formula,  Set Var)
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 instance INoConnectionDatabase2 StateMapDB where
-    type NoConnectionQueryType StateMapDB = (VarTypeMap, Formula, VarTypeMap)
+    type NoConnectionQueryType StateMapDB = (Set Var, Formula, Set Var)
     type NoConnectionRowType StateMapDB = MapResultRow
     noConnectionDBStmtExec (StateMapDB name _ map1) (vars,  FAtomic (Atom _ args), _) stream  = do
         rows <- liftIO $ readIORef map1
         row2 <- mapDBFilterResults rows stream args
-        return (transform (keysSet vars) row2)
+        return (transform vars row2)
     noConnectionDBStmtExec (StateMapDB name _ map1) (_, FInsert lit@(Lit thesign _), _) stream = do
         rows <- liftIO $ readIORef map1
         let freevars = freeVars lit
@@ -140,8 +142,9 @@ instance IDatabase0 RegexDB where
     getPreds db = [ RegexPred (getName db)]
     supported _ _ (FAtomic (Atom (RegexPredName _) _)) _ = True
     supported _ _ _ _ = False
+    checkQuery _ _ _ _ = return (Right ())
 instance IDatabase1 RegexDB where
-    type DBQueryType RegexDB = ( VarTypeMap, Formula,  VarTypeMap)
+    type DBQueryType RegexDB = ( Set Var, Formula,  Set Var)
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 extractStringFromExpr :: ResultValue -> String
@@ -149,7 +152,7 @@ extractStringFromExpr (StringValue s) = unpack s
 extractStringFromExpr a = error "cannot extract string from nonstring"
 
 instance INoConnectionDatabase2 RegexDB where
-    type NoConnectionQueryType RegexDB = (VarTypeMap, Formula, VarTypeMap)
+    type NoConnectionQueryType RegexDB = (Set Var, Formula, Set Var)
     type NoConnectionRowType RegexDB = MapResultRow
     noConnectionDBStmtExec (RegexDB _) (_,  (FAtomic (Atom _ [a, b])), _) stream = do
         row <- stream
@@ -172,9 +175,10 @@ instance IDatabase0 EqDB where
     getPreds db = [ EqPred (getName db)]
     supported _ _ (FAtomic (Atom (EqPredName _) _)) _ = True
     supported _ _ _ _ = False
+    checkQuery _ _ _ _ = return (Right ())
 
 instance IDatabase1 EqDB where
-    type DBQueryType EqDB = ( VarTypeMap, Formula,  VarTypeMap)
+    type DBQueryType EqDB = ( Set Var, Formula,  Set Var)
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 evalExpr :: MapResultRow -> Expr -> ResultValue
@@ -186,7 +190,7 @@ evalExpr row (VarExpr v) = case lookup v row of
 evalExpr row expr = error ("evalExpr: unsupported expr " ++ show expr)
 
 instance INoConnectionDatabase2 EqDB where
-    type NoConnectionQueryType EqDB = (VarTypeMap, Formula, VarTypeMap)
+    type NoConnectionQueryType EqDB = (Set Var, Formula, Set Var)
     type NoConnectionRowType EqDB = MapResultRow
     noConnectionDBStmtExec (EqDB _) (_,  (FAtomic (Atom _ [a, b])), _) stream = do
         row <- stream
@@ -209,12 +213,13 @@ instance IDatabase0 UtilsDB where
     getPreds db = [ SleepPred (getName db)]
     supported _ _ (FAtomic (Atom (SleepPredName _) [_])) _ = True
     supported _ _ _ _ = False
+    checkQuery _ _ _ _ = return (Right ())
 instance IDatabase1 UtilsDB where
-    type DBQueryType UtilsDB = (VarTypeMap, Formula, VarTypeMap)
+    type DBQueryType UtilsDB = (Set Var, Formula, Set Var)
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 instance INoConnectionDatabase2 UtilsDB where
-    type NoConnectionQueryType UtilsDB = (VarTypeMap, Formula, VarTypeMap)
+    type NoConnectionQueryType UtilsDB = (Set Var, Formula, Set Var)
     type NoConnectionRowType UtilsDB = MapResultRow
     noConnectionDBStmtExec (UtilsDB _) (_,  (FAtomic (Atom (SleepPredName _) [qu])), _) stream = do
         row <- stream
