@@ -264,33 +264,29 @@ main = hspec $ do
             formula <- parseStandardQuery "DATA_NAME(x, y, z) return x y z"
             standardPredMap <- standardPredMap
             formula `shouldBe`
-              FSequencing
+              Aggregate (FReturn [Var "x", Var "y", Var "z"])
                 (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")]))
-                (FReturn [Var "x", Var "y", Var "z"])
 
         it "test parse query 1" $ do
             formula <- parseStandardQuery "let a = count (DATA_NAME(x, y, z)) return a"
             standardPredMap <- standardPredMap
             formula `shouldBe`
-              FSequencing
+              Aggregate (FReturn [Var "a"])
                 (Aggregate (Summarize [(Var "a", Count)] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
-                (FReturn [Var "a"])
 
         it "test parse query 1.2" $ do
             formula <- parseStandardQuery "let a = count distinct b (DATA_NAME(x, y, z)) return a"
             standardPredMap <- standardPredMap
             formula `shouldBe`
-              FSequencing
+              Aggregate (FReturn [Var "a"])
                 (Aggregate (Summarize [(Var "a", CountDistinct (Var "b"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
-                (FReturn [Var "a"])
 
         it "test parse query 1.1" $ do
             formula <- parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
             standardPredMap <- standardPredMap
             formula `shouldBe`
-              FSequencing
+              Aggregate (FReturn [Var "a"])
                 (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
-                (FReturn [Var "a"])
 
         it "test translate sql query 0.1" $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
@@ -387,18 +383,18 @@ main = hspec $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\")" "UPDATE r_data_main SET data_name = NULL WHERE (resc_id = 'bar' AND data_name = 'foo1')"
         it "test translate sql insert 21 no insert and delete" $ do
             form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") cat.DATA_SIZE(x, \"bar\", 1000)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
+            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
             sql `shouldBe` False
             -- length sql `shouldBe` 2
             -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
             -- show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 22 no delete conditional and other delete" $ do
             form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") ~cat.DATA_SIZE(x, \"bar\", 1000)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
+            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
             sql `shouldBe` False
         it "test translate sql insert 23 delete and other delete" $ do
             form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", w) ~cat.DATA_SIZE(x, \"bar\", z)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure form <*> pure Set.empty
+            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
             sql `shouldBe` True
         it "test translate sql insert 8" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar1\", \"bar\") insert cat.DATA_NAME(x, \"bar1\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (resc_id = 'bar1' AND data_name = 'bar')"
@@ -430,19 +426,19 @@ main = hspec $ do
             (serialize ((\(_,x,_) -> x)sql)) `shouldBe` "SELECT (?+1) AS \"z\""
         it "test translate sql insert 18" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y)"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure qu <*> pure Set.empty
+                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
                 sql `shouldBe` False
         it "test translate sql insert 19" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) (cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y))"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure qu <*> pure Set.empty
+                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
                 sql `shouldBe` True
         it "test translate sql insert 20" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y)"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure qu <*> pure (Set.fromList [Var "x", Var "y"])
+                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure (Set.fromList [Var "x", Var "y"])
                 sql `shouldBe` True
         it "test sql query supported" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, n) cat.DATA_SIZE(x, y, s)"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure qu <*> pure Set.empty
+                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
                 sql `shouldBe` True
         it "test translate cypher query 0" $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z) return x y"

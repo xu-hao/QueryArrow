@@ -64,6 +64,7 @@ Test-Suite Test
                      utf8-string,
                      directory,
                      lattices,
+                     QuickCheck,
                      QueryArrow-common,
                      template-haskell
     ghc-options:
