@@ -39,7 +39,7 @@ packages:
     - QueryArrow/
     - QueryArrow-rpc-common
     - QueryArrow-rpc-http/
-    - QueryArrow-rpc-tcp/
+    - QueryArrow-rpc-socket
     - QueryArrow-ffi-c/
     - QueryArrow-ffi-c-local
     - QueryArrow-ffi-c-tcp
