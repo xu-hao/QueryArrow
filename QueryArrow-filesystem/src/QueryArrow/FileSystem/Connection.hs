@@ -3,15 +3,13 @@
 module QueryArrow.FileSystem.Connection where
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, fromList, empty, foldrWithKey, insert, lookup)
-import Data.Text (unpack, Text, pack)
-import Data.Convertible
-import Control.Monad.IO.Class (liftIO, MonadIO)
+import Data.Map.Strict (insert, lookup)
+import Data.Text (unpack, pack)
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString.Char8 as BL
 import Control.Monad.Free
-import Control.Monad.Trans.Class
 import System.FilePath((</>))
-import Control.Applicative((<$>), (<|>))
+import Control.Applicative((<$>))
 import Control.Exception(throw)
 import Control.Monad
 
@@ -24,7 +22,6 @@ import QueryArrow.Utils ()
 import System.IO
 import System.Directory
 import QueryArrow.FileSystem.Query
-import Control.Monad.Trans.State
 
 instance INoConnectionDatabase2 (GenericDatabase FileSystemTrans FileSystemConnInfo) where
     type NoConnectionQueryType (GenericDatabase FileSystemTrans FileSystemConnInfo) = FSProgram ()
@@ -108,9 +105,9 @@ interpret row (Free (SetText a b next)) =
 interpret row (Free (SetInteger a b next)) =
   interpret (insert a (IntValue (fromIntegral b)) row) $ next
 
-interpret row (Free Stop) =
+interpret _ (Free Stop) =
   emptyResultStream
-interpret row (Pure a) = return row
+interpret row (Pure ()) = return row
 
 evalExpr :: MapResultRow -> Expr -> ResultValue
 evalExpr row (StringExpr s) = StringValue s
