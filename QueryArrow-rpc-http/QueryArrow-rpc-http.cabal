@@ -46,6 +46,7 @@ executable QueryArrowHttp
                    conduit-extra,
                    monad-logger,
                    fast-logger,
+                   optparse-applicative,
                    constraints,
                    yesod,
                    either,

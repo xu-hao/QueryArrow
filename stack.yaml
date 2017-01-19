@@ -61,6 +61,7 @@ packages:
     - QueryArrow-ffi-service-unixdomainsocket
     - QueryArrow-ffi-genquery
     - QueryArrow-cli
+    - QueryArrow-filesystem
     - QueryArrow-gen
     - heterogeneous-list
     - log-adapter

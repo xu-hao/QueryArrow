@@ -30,7 +30,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "integer", "text", "null"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "integer", "text", "ref", "null"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -60,7 +60,7 @@ dot = T.dot lexer
 type FOParser = GenParser Char ()
 
 casttypep :: FOParser CastType
-casttypep = (reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType)
+casttypep = (reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType) <|> (reserved "ref" >> return RefType)
 
 argp :: FOParser Expr
 argp =

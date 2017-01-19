@@ -32,6 +32,8 @@ import QueryArrow.Logging
 import           Yesod
 import QueryArrow.RPC.DB
 import Control.Monad.Trans.Either
+import Options.Applicative
+
 
 data App = App {
     appParameters :: TranslationInfo
@@ -95,9 +97,15 @@ postQueryR = selectRep $ do
         runQuery "post" (appParameters app)
 
 
-main :: IO ()
-main = do
+main::IO()
+main = execParser opts >>= mainArgs where
+  opts = info (helper <*> input) (fullDesc <> progDesc "QueryArrow description" <> header "QueryArrow header")
+
+input :: Parser String
+input = strArgument (metavar "CONFIG FILE" <> help "config file")
+
+mainArgs :: String -> IO ()
+mainArgs arg = do
     setup INFO
-    args2 <- getArgs
-    ps <- getConfig (head args2)
+    ps <- getConfig arg
     warp (server_port ps) App {appParameters = ps}

@@ -23,6 +23,7 @@ library
                    QueryArrow-cypher,
                    QueryArrow-elastic,
                    QueryArrow-remote,
+                   QueryArrow-filesystem,
                    heterogeneous-list
   ghc-options:     -Wall -fPIC
   other-modules:

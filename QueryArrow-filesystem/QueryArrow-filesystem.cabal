@@ -1,0 +1,32 @@
+name:           QueryArrow-filesystem
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   QueryArrow.FileSystem.FileSystem
+                   QueryArrow.FileSystem.Query
+                   QueryArrow.FileSystem.Connection
+                   QueryArrow.FileSystem.ICAT
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   HDBC,
+                   convertible,
+                   text >= 1.2.1.1,
+                   hslogger,
+                   free,
+                   bytestring,
+                   directory,
+                   filepath,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   QueryArrow-common
+  ghc-options:     -Wall -fPIC
+  other-modules:
