@@ -39,27 +39,27 @@ interpret row (Free (FileExists a next)) = do
   interpret row $ next b
 interpret row (Free (CopyFile a b next)) = do
   liftIO $ copyFile a b
-  interpret row $ next
+  interpret row next
 interpret row (Free (CopyDir a b next)) = do
   liftIO $ copyDirectory a b
-  interpret row $ next
+  interpret row next
 interpret row (Free (UnlinkFile a next)) = do
   liftIO $ removeFile a
-  interpret row $ next
+  interpret row next
 interpret row (Free (RemoveDir a next)) = do
   liftIO $ removeDirectoryRecursive a
-  interpret row $ next
+  interpret row next
 interpret row (Free (MakeFile a next)) = do
   liftIO $ appendFile a ""
-  interpret row $ next
+  interpret row next
 interpret row (Free (MakeDir a next)) = do
   liftIO $ createDirectory a
-  interpret row $ next
+  interpret row next
 interpret row (Free (Write a b c next)) = do
   liftIO $ withFile a WriteMode $ \h -> do
       hSeek h AbsoluteSeek b
       hPutStr h (unpack c)
-  interpret row $ next
+  interpret row next
 
 interpret row (Free (Read a b d next)) = do
   c <- liftIO $ withFile a ReadMode $ \h -> do
@@ -83,11 +83,11 @@ interpret row (Free (Stat a next)) = do
 
 interpret row (Free (MoveFile a b next)) = do
   liftIO $ renameFile b a
-  interpret row $ next
+  interpret row next
 
 interpret row (Free (MoveDir a b next)) = do
   liftIO $ renameDirectory b a
-  interpret row $ next
+  interpret row next
 
 interpret row (Free (EvalText a next)) =
   case evalExpr row a of
@@ -100,10 +100,10 @@ interpret row (Free (EvalInteger a next)) =
     _ -> error ("FileSystem: not an integer")
 
 interpret row (Free (SetText a b next)) =
-  interpret (insert a (StringValue b) row) $ next
+  interpret (insert a (StringValue b) row) next
 
 interpret row (Free (SetInteger a b next)) =
-  interpret (insert a (IntValue (fromIntegral b)) row) $ next
+  interpret (insert a (IntValue (fromIntegral b)) row) next
 
 interpret _ (Free Stop) =
   emptyResultStream
