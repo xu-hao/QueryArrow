@@ -66,15 +66,15 @@ data FSCommand x = DirExists String (Bool -> x)
                | CopyFile String String x
                | CopyDir String String x
                | UnlinkFile String x
-               | UnlinkDir String x
+               | RemoveDir String x
                | MakeFile String x
                | MakeDir String x
                | Write String Integer Text x
                | Read String Integer Integer (Text -> x)
                | ListDir String (String -> x)
                | Stat String (Maybe Stats -> x)
-               | LinkFile String String x
-               | LinkDir String String x
+               | MoveFile String String x
+               | MoveDir String String x
                | EvalText Expr (Text -> x)
                | EvalInteger Expr (Integer -> x)
                | SetText Var Text x
@@ -99,8 +99,8 @@ fscopyDir a b = liftF (CopyDir a b ())
 unlinkFile :: String -> FSProgram ()
 unlinkFile a = liftF (UnlinkFile a ())
 
-unlinkDir :: String -> FSProgram ()
-unlinkDir a = liftF (UnlinkDir a ())
+removeDir :: String -> FSProgram ()
+removeDir a = liftF (RemoveDir a ())
 
 makeFile :: String -> FSProgram ()
 makeFile a = liftF (MakeFile a ())
@@ -120,11 +120,11 @@ listDir a = liftF (ListDir a id)
 stat :: String -> FSProgram (Maybe Stats)
 stat a = liftF (Stat a id)
 
-linkFile :: String -> String -> FSProgram ()
-linkFile a b = liftF (LinkFile a b ())
+moveFile :: String -> String -> FSProgram ()
+moveFile a b = liftF (MoveFile a b ())
 
-linkDir :: String -> String -> FSProgram ()
-linkDir a b = liftF (LinkDir a b ())
+moveDir :: String -> String -> FSProgram ()
+moveDir a b = liftF (MoveDir a b ())
 
 stop :: FSProgram ()
 stop = liftF Stop
@@ -218,9 +218,9 @@ fsTranslateQuery trans@(FileSystemTrans root ns) ret (FInsert (Lit Pos (Atom (Di
     Just stats ->
       if isDir stats
         then
-          linkFile (root </> p) ap2
+          fscopyFile ap2 (root </> p)
         else
-          linkDir (root </> p) ap2
+          fscopyDir ap2 (root </> p)
 fsTranslateQuery trans@(FileSystemTrans root ns) ret (FInsert (Lit Pos (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4]))) env = do
   p <- T.unpack <$> evalText arg1
   a <- evalInteger arg2
@@ -236,7 +236,7 @@ fsTranslateQuery trans@(FileSystemTrans root ns) ret (FInsert (Lit Neg (Atom (Fi
 
 fsTranslateQuery trans@(FileSystemTrans root ns) ret (FInsert (Lit Neg (Atom (DirPredName _) [arg]))) env = do
   p <- T.unpack <$> evalText arg
-  unlinkDir (root </> p)
+  removeDir (root </> p)
 
 fsTranslateQuery trans@(FileSystemTrans root ns) ret (FInsert (Lit Neg (Atom (DirContentPredName _) [arg1, arg2]))) env = do
   p <- T.unpack <$> evalText arg1
@@ -251,7 +251,7 @@ fsTranslateQuery trans@(FileSystemTrans root ns) ret (FInsert (Lit Neg (Atom (Di
         then
           unlinkFile ap2
         else
-          unlinkDir ap2
+          removeDir ap2
 
 
 fsTranslateQuery _ _ query _ = error ("fsTranslateQuery: cannot translate query" ++ show query)

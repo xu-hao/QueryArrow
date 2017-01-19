@@ -51,7 +51,7 @@ interpret row (Free (CopyDir a b next)) = do
 interpret row (Free (UnlinkFile a next)) = do
   liftIO $ removeFile a
   interpret row $ next
-interpret row (Free (UnlinkDir a next)) = do
+interpret row (Free (RemoveDir a next)) = do
   liftIO $ removeDirectoryRecursive a
   interpret row $ next
 interpret row (Free (MakeFile a next)) = do
@@ -86,12 +86,12 @@ interpret row (Free (Stat a next)) = do
         else return Nothing
   interpret row $ next stats
 
-interpret row (Free (LinkFile a b next)) = do
-  liftIO $ copyFile b a
+interpret row (Free (MoveFile a b next)) = do
+  liftIO $ renameFile b a
   interpret row $ next
 
-interpret row (Free (LinkDir a b next)) = do
-  liftIO $ copyDirectory b a
+interpret row (Free (MoveDir a b next)) = do
+  liftIO $ renameDirectory b a
   interpret row $ next
 
 interpret row (Free (EvalText a next)) =
