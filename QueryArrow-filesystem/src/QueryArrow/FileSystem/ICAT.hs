@@ -9,4 +9,4 @@ import QueryArrow.DB.NoConnection
 
 makeFileSystemDBAdapter :: String -> [String] -> FileSystemConnInfo -> IO (NoConnectionDatabase (GenericDatabase FileSystemTrans FileSystemConnInfo))
 makeFileSystemDBAdapter ns [rootDir] conn = return (NoConnectionDatabase (GenericDatabase (FileSystemTrans  rootDir ns) conn ns
-  [FileContentPred ns, DirContentPred ns, FilePred ns, DirPred ns, FileContentPred ns]))
+  [FileContentPred ns, DirContentPred ns, FilePred ns, DirPred ns, FileObjectPred ns, DirObjectPred ns, FileContentPred ns]))

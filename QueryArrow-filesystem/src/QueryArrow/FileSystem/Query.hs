@@ -38,9 +38,13 @@ pattern PTPropO a = ParamType False False True a
 
 data FileSystemConnInfo = FileSystemConnInfo
 
-pattern FilePredName ns = QPredName ns [] "FILE_OBJ"
+pattern FilePredName ns = QPredName ns [] "FILE"
 
-pattern DirPredName ns = QPredName ns [] "DIR_OBJ"
+pattern DirPredName ns = QPredName ns [] "DIR"
+
+pattern FileObjectPredName ns = QPredName ns [] "FILE_OBJECT"
+
+pattern DirObjectPredName ns = QPredName ns [] "DIR_OBJECT"
 
 pattern FileContentPredName ns = QPredName ns [] "FILE_CONTENT"
 
@@ -52,9 +56,13 @@ pattern FilePred ns = Pred (FilePredName ns) (PredType ObjectPred [PTKeyI TextTy
 
 pattern DirPred ns = Pred (DirPredName ns) (PredType ObjectPred [PTKeyI TextType])
 
+pattern FileObjectPred ns = Pred (FileObjectPredName ns) (PredType ObjectPred [PTKeyI TextType, PTKeyO RefType])
+
+pattern DirObjectPred ns = Pred (DirObjectPredName ns) (PredType ObjectPred [PTKeyI TextType, PTKeyO RefType])
+
 pattern FileContentPred ns = Pred (FileContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO RefType])
 
-pattern DirContentPred ns = Pred (DirContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropIO TextType])
+pattern DirContentPred ns = Pred (DirContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropIO RefType])
 
 pattern FileContentRangePred ns = Pred (FileContentPredName ns) (PredType ObjectPred [PTKeyIO TextType, PTPropI NumberType, PTPropI NumberType, PTPropO TextType])
 
@@ -146,6 +154,8 @@ data FileSystemTrans = FileSystemTrans {rootDir :: String, predNS :: String}
 fsSupported :: String -> Formula -> Bool
 fsSupported _ (FAtomic (Atom (FilePredName _) _)) = True
 fsSupported _ (FAtomic (Atom (DirPredName _) _)) = True
+fsSupported _ (FAtomic (Atom (FileObjectPredName _) _)) = True
+fsSupported _ (FAtomic (Atom (DirObjectPredName _) _)) = True
 fsSupported _ (FAtomic (Atom (FileContentPredName _) _)) = True
 fsSupported _ (FAtomic (Atom (DirContentPredName _) _)) = True
 fsSupported _ (FAtomic (Atom (FileContentRangePredName _) _)) = True
@@ -169,6 +179,14 @@ fsTranslateQuery trans@(FileSystemTrans root ns) ret (FAtomic (Atom (DirPredName
   p <- T.unpack <$> evalText arg
   b <- dirExists (root </>  p)
   unless b stop
+
+fsTranslateQuery trans@(FileSystemTrans root ns) ret (FAtomic (Atom (FileObjectPredName _) [arg1, VarExpr var])) env = do
+  p <- evalText arg1
+  setText var p
+
+fsTranslateQuery trans@(FileSystemTrans root ns) ret (FAtomic (Atom (DirObjectPredName _) [arg1, VarExpr var])) env = do
+  p <- evalText arg1
+  setText var p
 
 fsTranslateQuery trans@(FileSystemTrans root ns) ret (FAtomic (Atom (FileContentPredName _) [arg1, VarExpr var])) env = do
   p <- evalText arg1
