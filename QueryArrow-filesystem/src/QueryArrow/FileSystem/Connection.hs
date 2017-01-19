@@ -2,8 +2,6 @@
 
 module QueryArrow.FileSystem.Connection where
 
--- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
-
 import Prelude hiding (lookup)
 import Data.Map.Strict (Map, fromList, empty, foldrWithKey, insert, lookup)
 import Data.Text (unpack, Text, pack)
