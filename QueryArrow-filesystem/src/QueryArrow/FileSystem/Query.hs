@@ -56,13 +56,13 @@ pattern FilePred ns = Pred (FilePredName ns) (PredType ObjectPred [PTKeyI TextTy
 
 pattern DirPred ns = Pred (DirPredName ns) (PredType ObjectPred [PTKeyI TextType])
 
-pattern FileObjectPred ns = Pred (FileObjectPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO RefType])
+pattern FileObjectPred ns = Pred (FileObjectPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO (RefType "Object")])
 
-pattern DirObjectPred ns = Pred (DirObjectPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO RefType])
+pattern DirObjectPred ns = Pred (DirObjectPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO (RefType "Object")])
 
-pattern FileContentPred ns = Pred (FileContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO RefType])
+pattern FileContentPred ns = Pred (FileContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropO (RefType "FileContnet")])
 
-pattern DirContentPred ns = Pred (DirContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropIO RefType])
+pattern DirContentPred ns = Pred (DirContentPredName ns) (PredType ObjectPred [PTKeyI TextType, PTPropIO (RefType "Object")])
 
 pattern FileContentRangePred ns = Pred (FileContentPredName ns) (PredType ObjectPred [PTKeyIO TextType, PTPropI NumberType, PTPropI NumberType, PTPropO TextType])
 

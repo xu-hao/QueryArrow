@@ -60,7 +60,7 @@ dot = T.dot lexer
 type FOParser = GenParser Char ()
 
 casttypep :: FOParser CastType
-casttypep = (reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType) <|> (reserved "ref" >> return RefType)
+casttypep = (reserved "text" >> return TextType) <|> (reserved "integer" >> return NumberType) <|> (reserved "ref" >> RefType <$> identifier)
 
 argp :: FOParser Expr
 argp =

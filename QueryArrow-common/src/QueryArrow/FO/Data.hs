@@ -37,7 +37,7 @@ data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Or
 newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
 -- types
-data CastType = TextType | NumberType | RefType | TypeVar String deriving (Eq, Ord, Show, Read)
+data CastType = TextType | NumberType | RefType String | TypeVar String deriving (Eq, Ord, Show, Read)
 
 -- expression
 data Expr = VarExpr Var | IntExpr Int | StringExpr T.Text | PatternExpr T.Text | NullExpr | CastExpr CastType Expr deriving (Eq, Ord, Show, Read)
