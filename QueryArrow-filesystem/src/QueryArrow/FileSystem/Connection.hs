@@ -66,9 +66,15 @@ interpret row (Free (Read a b d next)) = do
       hSeek h AbsoluteSeek b
       BL.hGet h (fromInteger (d - b))
   interpret row $ next (pack (BL.unpack c))
-interpret row (Free (ListDir a next)) = do
+interpret row (Free (ListDirDir a next)) = do
   ps <- liftIO $ listDirectory a
-  p <- listResultStream ps
+  ps2 <- liftIO $ filterM doesDirectoryExist ps
+  p <- listResultStream ps2
+  interpret row $ next p
+interpret row (Free (ListDirFile a next)) = do
+  ps <- liftIO $ listDirectory a
+  ps2 <- liftIO $ filterM doesFileExist ps
+  p <- listResultStream ps2
   interpret row $ next p
 interpret row (Free (Stat a next)) = do
   b <- liftIO $ doesFileExist a
