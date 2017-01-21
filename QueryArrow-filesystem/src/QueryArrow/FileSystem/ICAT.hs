@@ -1,6 +1,7 @@
 module QueryArrow.FileSystem.ICAT where
 
 import QueryArrow.FileSystem.Query
+import QueryArrow.FileSystem.Builtin
 
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.NoConnection

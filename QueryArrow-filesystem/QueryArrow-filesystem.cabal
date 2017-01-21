@@ -11,6 +11,9 @@ library
                    QueryArrow.FileSystem.Query
                    QueryArrow.FileSystem.Connection
                    QueryArrow.FileSystem.ICAT
+                   QueryArrow.FileSystem.Builtin
+                   QueryArrow.FileSystem.Commands
+                   QueryArrow.FileSystem.Utils
   build-depends:
                    base >= 4,
                    containers,
