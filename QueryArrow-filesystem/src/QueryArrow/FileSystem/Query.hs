@@ -1,7 +1,7 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, DeriveFunctor, OverloadedStrings #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, OverloadedStrings #-}
 module QueryArrow.FileSystem.Query where
 
-import QueryArrow.FO.Data hiding (Subst, subst)
+import QueryArrow.FO.Data
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FileSystem.Builtin
 import QueryArrow.FileSystem.Commands
@@ -15,7 +15,6 @@ import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
 import System.FilePath
-import Debug.Trace
 
 data FileSystemConnInfo = FileSystemConnInfo
 
