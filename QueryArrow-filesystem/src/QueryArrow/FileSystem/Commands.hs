@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, DeriveFunctor, OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 module QueryArrow.FileSystem.Commands where
 
 import QueryArrow.FO.Data

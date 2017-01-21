@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeFamilies #-}
 module QueryArrow.FileSystem.Query where
 
 import QueryArrow.FO.Data
