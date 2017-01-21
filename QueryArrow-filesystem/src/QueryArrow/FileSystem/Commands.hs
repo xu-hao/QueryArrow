@@ -18,6 +18,7 @@ import Control.Monad.Trans.State (StateT, get, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (insert)
 import System.FilePath ((</>))
+import Data.Time.Clock
 
 data Stats = Stats {isDir :: Bool}
 
@@ -34,6 +35,8 @@ data FSCommand x = DirExists String (Bool -> x)
                  | ListDirDir String (String -> x)
                  | ListDirFile String (String -> x)
                  | Stat String (Maybe Stats -> x)
+                 | Size String (Integer -> x)
+                 | ModificationTime String (UTCTime -> x)
                  | MoveFile String String x
                  | MoveDir String String x
                  | EvalText Expr (Text -> x)
@@ -83,13 +86,19 @@ listDirFile a = liftF (ListDirFile a id)
 stat :: String -> FSProgram (Maybe Stats)
 stat a = liftF (Stat a id)
 
+size :: String -> FSProgram Integer
+size a = liftF (Size a id)
+
+modificationTime :: String -> FSProgram UTCTime
+modificationTime a = liftF (ModificationTime a id)
+
 moveFile :: String -> String -> FSProgram ()
 moveFile a b = liftF (MoveFile a b ())
 
 moveDir :: String -> String -> FSProgram ()
 moveDir a b = liftF (MoveDir a b ())
 
-stop :: FSProgram ()
+stop :: FSProgram a
 stop = liftF Stop
 
 setText :: Var -> Text -> FSProgram ()
@@ -168,6 +177,14 @@ interpret (Stat a next) = do
         then return (Just (Stats True))
         else return Nothing
   next stats
+
+interpret (Size fn next) = do
+  s <- liftIO $ getFileSize fn
+  next s
+
+interpret (ModificationTime fn next) = do
+  mt <- liftIO $ getModificationTime fn
+  next mt
 
 interpret (MoveFile a b next) = do
   liftIO $ renameFile b a

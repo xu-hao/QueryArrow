@@ -12,6 +12,16 @@ pattern FileNamePredName ns = QPredName ns [] "FILE_NAME"
 
 pattern DirNamePredName ns = QPredName ns [] "DIR_NAME"
 
+pattern FileSizePredName ns = QPredName ns [] "FILE_SIZE"
+
+-- pattern FileCreateTimePredName ns = QPredName ns [] "FILE_CREATE_TIME"
+
+-- pattern DirCreateTimePredName ns = QPredName ns [] "DIR_CREATE_TIME"
+
+pattern FileModifyTimePredName ns = QPredName ns [] "FILE_MODIFY_TIME"
+
+pattern DirModifyTimePredName ns = QPredName ns [] "DIR_MODIFY_TIME"
+
 pattern FileObjectPredName ns = QPredName ns [] "FILE_OBJ"
 
 pattern DirObjectPredName ns = QPredName ns [] "DIR_OBJ"
@@ -37,6 +47,16 @@ pattern DirPathPred ns = Pred (DirPathPredName ns) (PredType PropertyPred [PTKey
 pattern FileNamePred ns = Pred (FileNamePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO TextType])
 
 pattern DirNamePred ns = Pred (DirNamePredName ns) (PredType PropertyPred [PTKeyI (RefType "DirObject"), PTPropIO TextType])
+
+pattern FileSizePred ns = Pred (FileSizePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO NumberType])
+
+-- pattern FileCreateTimePred ns = Pred (FileCreateTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO NumberType])
+
+-- pattern DirCreateTimePred ns = Pred (DirCreateTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "DirObject"), PTPropIO NumberType])
+
+pattern FileModifyTimePred ns = Pred (FileModifyTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO NumberType])
+
+pattern DirModifyTimePred ns = Pred (DirModifyTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "DirObject"), PTPropIO NumberType])
 
 pattern FileObjectPred ns = Pred (FileObjectPredName ns) (PredType ObjectPred [PTKeyI (RefType "FileObject")])
 

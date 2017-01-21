@@ -12,6 +12,8 @@ makeFileSystemDBAdapter ns [rootDir] conn = return (NoConnectionDatabase (Generi
     FileContentPred ns, DirContentPred ns,
     FilePathPred ns, DirPathPred ns,
     FileNamePred ns, DirNamePred ns,
+    FileSizePred ns,
+    FileModifyTimePred ns, DirModifyTimePred ns,
     FileObjectPred ns, DirObjectPred ns,
     NewFileObjectPred ns, NewDirObjectPred ns,
     FileDirPred ns, DirDirPred ns,

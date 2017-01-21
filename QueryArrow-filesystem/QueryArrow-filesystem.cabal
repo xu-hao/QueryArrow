@@ -27,6 +27,7 @@ library
                    bytestring,
                    directory,
                    filepath,
+                   time,
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,

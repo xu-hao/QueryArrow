@@ -15,6 +15,7 @@ import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
 import System.FilePath
+import Data.Time.Clock.POSIX
 
 data FileSystemConnInfo = FileSystemConnInfo
 
@@ -25,6 +26,11 @@ fsSupported _ (FAtomic (Atom (FilePathPredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (DirPathPredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (FileNamePredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (DirNamePredName _) _)) env = True
+fsSupported _ (FAtomic (Atom (FileSizePredName _) _)) env = True
+-- fsSupported _ (FAtomic (Atom (FileCreateTimePredName _) _)) env = True
+-- fsSupported _ (FAtomic (Atom (DirCreateTimePredName _) _)) env = True
+fsSupported _ (FAtomic (Atom (FileModifyTimePredName _) _)) env = True
+fsSupported _ (FAtomic (Atom (DirModifyTimePredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (NewFileObjectPredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (NewDirObjectPredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (DirContentPredName _) _)) env = True
@@ -88,6 +94,22 @@ instance Convertible Text DirContent where
   safeConvert t =
     Right (DirContent (T.unpack t))
 
+dirObjectPath :: DirObject -> FSProgram String
+dirObjectPath o =
+  case o of
+    NewDirObject _ ->
+      stop
+    ExistingDirObject ap ->
+      return ap
+
+fileObjectPath :: FileObject -> FSProgram String
+fileObjectPath o =
+  case o of
+    NewFileObject _ ->
+      stop
+    ExistingFileObject ap ->
+      return ap
+
 fsTranslateQuery :: FileSystemTrans -> Set Var -> Formula -> Set Var -> FSProgram ()
 fsTranslateQuery  _ ret (FAtomic (Atom (NewFileObjectPredName _) [arg1, VarExpr var])) env = do
   n <- T.unpack <$> evalText arg1
@@ -96,6 +118,46 @@ fsTranslateQuery  _ ret (FAtomic (Atom (NewFileObjectPredName _) [arg1, VarExpr 
 fsTranslateQuery  _ ret (FAtomic (Atom (NewDirObjectPredName _) [arg1, VarExpr var])) env = do
   n <- T.unpack <$> evalText arg1
   setText var (convert (NewDirObject n))
+
+fsTranslateQuery  _ ret (FAtomic (Atom (FileNamePredName _) [arg1, arg2])) env = do
+  o <- convert <$> evalText arg1
+  ap <- fileObjectPath o
+  let fn = takeFileName ap
+  case arg2 of
+    VarExpr var ->
+      setText var (T.pack fn)
+    _ -> do
+      n2 <- T.unpack <$> evalText arg2
+      unless (fn == n2) stop
+
+fsTranslateQuery  _ ret (FAtomic (Atom (DirNamePredName _) [arg1, arg2])) env = do
+  o <- convert <$> evalText arg1
+  ap <- dirObjectPath o
+  let fn = takeFileName ap
+  case arg2 of
+    VarExpr var ->
+      setText var (T.pack fn)
+    _ -> do
+      n2 <- T.unpack <$> evalText arg2
+      unless (fn == n2) stop
+
+fsTranslateQuery  _ ret (FAtomic (Atom (FileSizePredName _) [arg1, VarExpr var])) env = do
+  o <- convert <$> evalText arg1
+  ap <- fileObjectPath o
+  s <- size ap
+  setInteger var s
+
+fsTranslateQuery  _ ret (FAtomic (Atom (FileModifyTimePredName _) [arg1, VarExpr var])) env = do
+  o <- convert <$> evalText arg1
+  ap <- fileObjectPath o
+  mt <- modificationTime ap
+  setInteger var (floor (utcTimeToPOSIXSeconds mt))
+
+fsTranslateQuery  _ ret (FAtomic (Atom (DirModifyTimePredName _) [arg1, VarExpr var])) env = do
+  o <- convert <$> evalText arg1
+  ap <- dirObjectPath o
+  mt <- modificationTime ap
+  setInteger var (floor (utcTimeToPOSIXSeconds mt))
 
 fsTranslateQuery  (FileSystemTrans root _) ret (FAtomic (Atom (FilePathPredName _) [VarExpr var, arg1])) env = do
   p <- T.unpack <$> evalText arg1
@@ -135,16 +197,13 @@ fsTranslateQuery  _ ret (FAtomic (Atom (DirContentPredName _) [arg1, VarExpr var
 
 fsTranslateQuery  _ ret (FAtomic (Atom (DirDirPredName _) [arg1, VarExpr var])) env | not (var `Set.member` env) = do
   o <- convert <$> evalText arg1
-  case o of
-    NewDirObject _ ->
+  ap <- dirObjectPath o
+  let ap2 = takeDirectory ap
+  if ap2 == ap
+    then
       stop
-    ExistingDirObject ap -> do
-      let ap2 = takeDirectory ap
-      if ap2 == ap
-        then
-          stop
-        else
-          setText var (convert (ExistingDirObject ap2))
+    else
+        setText var (convert (ExistingDirObject ap2))
 
 fsTranslateQuery  _ ret (FAtomic (Atom (DirDirPredName _) [VarExpr var, arg1])) env = do
   o <- convert <$> evalText arg1
