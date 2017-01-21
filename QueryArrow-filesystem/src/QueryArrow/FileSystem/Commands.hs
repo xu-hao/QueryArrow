@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, DeriveFunctor, OverloadedStrings #-}
 module QueryArrow.FileSystem.Commands where
 
-import QueryArrow.FO.Data hiding (Subst, subst)
+import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import QueryArrow.FileSystem.Utils
 import Control.Monad.IO.Class (liftIO)
@@ -12,16 +12,14 @@ import System.IO
 import Data.Text (Text, unpack, pack)
 import QueryArrow.DB.ResultStream
 
-import Prelude hiding (lookup)
 import Control.Monad.Free
 import Control.Monad
 import Control.Monad.Trans.State (StateT, get, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (insert)
-
+import System.FilePath ((</>))
 
 data Stats = Stats {isDir :: Bool}
-
 
 data FSCommand x = DirExists String (Bool -> x)
                  | FileExists String (Bool -> x)
@@ -150,12 +148,14 @@ interpret (Read a b d next) = do
   next (pack (BL.unpack c))
 interpret (ListDirDir a next) = do
   ps <- liftIO $ listDirectory a
-  ps2 <- liftIO $ filterM doesDirectoryExist ps
+  let ps5 = map (a </>) ps
+  ps2 <- liftIO $ filterM doesDirectoryExist ps5
   p <- lift $ listResultStream ps2
   next p
 interpret (ListDirFile a next) = do
   ps <- liftIO $ listDirectory a
-  ps2 <- liftIO $ filterM doesFileExist ps
+  let ps5 = map (a </>) ps
+  ps2 <- liftIO $ filterM doesFileExist ps5
   p <- lift $ listResultStream ps2
   next p
 interpret (Stat a next) = do

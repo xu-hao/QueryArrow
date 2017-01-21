@@ -54,8 +54,9 @@ translate' :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l, HMapConstra
 translate' dbs rvars qu0 vars =
     let insp = queryPlan dbs qu0
         qp2 = calculateVars vars rvars insp
-        t = toTree qp2
-        qp3 = trace (drawTree t) $ optimizeQueryPlan dbs qp2 in
+        qp25 = findDBQueryPlan dbs qp2
+        t = toTree qp25
+        qp3 = trace (drawTree t) $ optimizeQueryPlan dbs qp25 in
     -- let qp3' = addTransaction' qp3
     -- liftIO $ printQueryPlan qp3
     -- qp4 <- prepareTransaction dbs [] qp3'

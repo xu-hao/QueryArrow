@@ -6,7 +6,7 @@ import Prelude hiding (lookup)
 import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith)
 import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
-import Data.Set (Set, (\\), isSubsetOf, toAscList)
+import Data.Set (Set, (\\), toAscList)
 import qualified Data.Set as Set
 import QueryArrow.FO.Data
 import QueryArrow.FO.Domain
@@ -59,6 +59,7 @@ class TCSubst a where
 instance TCSubst CastType where
   tcsubst _ NumberType = NumberType
   tcsubst _ TextType = TextType
+  tcsubst _ ty@(RefType _) = ty
   tcsubst m tv@(TypeVar v) = fromMaybe tv (lookup v m)
 
 instance TCSubst PredType where
@@ -76,6 +77,7 @@ class FreeTypeVars a where
 instance FreeTypeVars CastType where
   freeTypeVars NumberType = mempty
   freeTypeVars TextType = mempty
+  freeTypeVars (RefType _) = mempty
   freeTypeVars (TypeVar v) = Set.singleton v
 
 instance FreeTypeVars PredType where

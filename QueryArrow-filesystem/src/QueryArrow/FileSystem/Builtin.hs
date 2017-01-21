@@ -20,9 +20,9 @@ pattern FileContentPredName ns = QPredName ns [] "FILE_CONTENT"
 
 pattern DirContentPredName ns = QPredName ns [] "DIR_CONTENT"
 
-pattern FileDirPredName ns = QPredName ns [] "DIR_DIR"
+pattern FileDirPredName ns = QPredName ns [] "FILE_DIR"
 
-pattern DirDirPredName ns = QPredName ns [] "FILE_DIR"
+pattern DirDirPredName ns = QPredName ns [] "DIR_DIR"
 
 pattern NewFileObjectPredName ns = QPredName ns [] "NEW_FILE_OBJ"
 

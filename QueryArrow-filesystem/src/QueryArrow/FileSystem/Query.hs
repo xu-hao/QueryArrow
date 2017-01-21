@@ -15,6 +15,7 @@ import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
 import System.FilePath
+import Debug.Trace
 
 data FileSystemConnInfo = FileSystemConnInfo
 

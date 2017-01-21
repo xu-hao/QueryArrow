@@ -30,7 +30,7 @@ import Debug.Trace
 
 type MSet a = Complemented (Set a)
 
-data QueryPlan = Exec Formula Int
+data QueryPlan = Exec Formula
                 | QPPar QueryPlan QueryPlan
                 | QPChoice QueryPlan QueryPlan
                 | QPSequencing QueryPlan QueryPlan
@@ -112,18 +112,23 @@ data QueryPlanT l = ExecT (Set Var) (HVariant' DBQueryTypeIso l) String
 
 
 
-findDB :: forall  (l :: [*]) . (HMapConstraint (IDatabase) l) => PredName -> HList l -> Int
-findDB pred0 dbs =
+findDB :: forall  (l :: [*]) . (HMapConstraint (IDatabaseUniformDBFormula Formula) l) => Set Var -> Formula -> Set Var -> HList l -> Int
+findDB ret form env dbs =
+  let pred0 = case form of
+                  FAtomic (Atom pred0 _) -> pred0
+                  FInsert (Lit _ (Atom pred0 _)) -> pred0
+                  _ -> error ("findDB: cannot find database for " ++ show form)
+  in
     toIntegerV
       (fromMaybe (error ("no database for predicate " ++ show pred0 ++ " available " ++ (
           let preds = filter (\(Pred (PredName _ pn1) _) ->
                           case pred0 of
-                            PredName _ pn0 -> pn1 == pn0) (concat (hMapCUL @(IDatabase) getPreds dbs))
-          in show preds))) (hFindCULV @(IDatabase) (\db -> pred0 `elem` (map predName (getPreds db))) dbs))
+                            PredName _ pn0 -> pn1 == pn0) (concat (hMapCUL @(IDatabaseUniformDBFormula Formula) getPreds dbs))
+          in show preds))) (hFindCULV @(IDatabaseUniformDBFormula Formula) (\db -> pred0 `elem` (map predName (getPreds db)) && supported db ret form env) dbs))
 
 formulaToQueryPlan :: (HMapConstraint (IDatabase) l) => HList l -> Formula -> QueryPlan
 formulaToQueryPlan dbs  form@(FAtomic (Atom pred0  _)) =
-    Exec form  (findDB pred0 dbs)
+    Exec form
 formulaToQueryPlan _ FOne = QPOne
 formulaToQueryPlan _ FZero = QPZero
 formulaToQueryPlan dbs  (FChoice form1 form2) = QPChoice (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
@@ -131,8 +136,7 @@ formulaToQueryPlan dbs  (FPar form1 form2) = QPPar (formulaToQueryPlan dbs form1
 formulaToQueryPlan dbs  (FSequencing form1 form2) = QPSequencing (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
 formulaToQueryPlan dbs  (Aggregate agg form) = QPAggregate agg (formulaToQueryPlan dbs  form)
 formulaToQueryPlan dbs  ins@(FInsert (Lit _ (Atom pred1 _))) =
-    let xs2 = findDB pred1 dbs in
-        Exec ins xs2
+        Exec ins
 
 
 
@@ -140,7 +144,7 @@ formulaToQueryPlan dbs  ins@(FInsert (Lit _ (Atom pred1 _))) =
 {- near semi-ring -}
 simplifyQueryPlan :: QueryPlan -> QueryPlan
 
-simplifyQueryPlan qp@(Exec _ _) = qp
+simplifyQueryPlan qp@(Exec _) = qp
 simplifyQueryPlan (QPChoice qp1 qp2) =
     let qp1' = simplifyQueryPlan  qp1
         qp2' = simplifyQueryPlan  qp2 in
@@ -216,8 +220,33 @@ combineQPParData qp1 qp2 =
 supportedDB :: IDatabaseUniformDBFormula Formula db => Set Var -> Formula -> Set Var -> db -> Bool
 supportedDB ret form vars db = supported db ret form vars
 
+findDBQueryPlan :: HMapConstraint (IDatabaseUniformDBFormula Formula) l => HList l -> QueryPlan2 -> QueryPlan2
+findDBQueryPlan dbsx qp@(qpd, Exec2 form _) =
+  let dbx = findDB (returnvs qpd) form (paramvs qpd) dbsx in
+      (qpd, Exec2 form dbx)
+findDBQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
+    let qp1' = findDBQueryPlan dbsx ip1
+        qp2' = findDBQueryPlan dbsx ip2 in
+        -- trace ("findDBQueryPlan: \n" ++ drawTree (toTree ip1) ++ "\n------------>\n" ++ drawTree (toTree qp1') ++ "\n and \n" ++
+          -- drawTree (toTree ip2) ++ "\n------------------>\n" ++ drawTree (toTree qp2')) $
+        (qpd, QPSequencing2 qp1' qp2')
+findDBQueryPlan dbsx (qpd, QPChoice2 qp1 qp2) =
+    let qp1' = findDBQueryPlan dbsx qp1
+        qp2' = findDBQueryPlan dbsx qp2 in
+        (qpd, QPChoice2 qp1' qp2')
+findDBQueryPlan dbsx (qpd, QPPar2 qp1 qp2) =
+    let qp1' = findDBQueryPlan dbsx qp1
+        qp2' = findDBQueryPlan dbsx qp2 in
+        (qpd, QPPar2 qp1' qp2')
+findDBQueryPlan _ qp@(_, QPOne2) = qp
+findDBQueryPlan _ qp@(_, QPZero2) = qp
+findDBQueryPlan dbsx (qpd, QPAggregate2 agg qp1) =
+    let qp1' = findDBQueryPlan dbsx qp1 in
+        (qpd, QPAggregate2 agg qp1')
+
+
 optimizeQueryPlan :: HMapConstraint (IDatabaseUniformDBFormula Formula) l => HList l -> QueryPlan2 -> QueryPlan2
-optimizeQueryPlan _ qp@(_, Exec2 _ _) = qp
+optimizeQueryPlan _ qp@(qpd, Exec2 _ _) = qp
 
 optimizeQueryPlan dbsx (qpd, QPSequencing2 ip1  ip2) =
     let qp1' = optimizeQueryPlan dbsx ip1
@@ -295,9 +324,9 @@ calculateVars :: Set Var -> MSet Var -> QueryPlan -> QueryPlan2
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
 
 calculateVars1 :: MSet Var -> QueryPlan -> QueryPlan2
-calculateVars1  rvars (Exec form dbxs) =
+calculateVars1  rvars (Exec form) =
     let fvs = freeVars form in
-        ( dqdb{freevs =  fvs, determinevs =  fvs, linscopevs = Include fvs \/ rvars, rinscopevs = rvars}, (Exec2  form dbxs))
+        ( dqdb{freevs =  fvs, determinevs =  fvs, linscopevs = Include fvs \/ rvars, rinscopevs = rvars}, (Exec2  form 0))
 
 calculateVars1  rvars (QPSequencing qp1 qp2) =
     let qp2'@(qpd2, _) = calculateVars1 rvars qp2
@@ -550,16 +579,16 @@ execQueryPlan r QPOne3 = r
 execQueryPlan rs (QPAggregate3 combinedvs (FReturn vars) qp) =
       transformResultStream combinedvs (execQueryPlan rs qp)
 execQueryPlan rs QPZero3 = closeResultStream rs
-execQueryPlan rs (QPAggregate3 combinedvs Not qp) = -- assume no unbounded vars under not
+execQueryPlan rs (QPAggregate3 combinedvs Not qp) =
     transformResultStream combinedvs (filterResultStream rs (\row -> do
         let rs2 = execQueryPlan (pure row) qp
         isResultStreamEmpty rs2))
-execQueryPlan rs (QPAggregate3 combinedvs Exists qp) = -- assume no unbounded vars under exists
+execQueryPlan rs (QPAggregate3 combinedvs Exists qp) =
     transformResultStream combinedvs (filterResultStream rs (\row -> do
         let rs2 = execQueryPlan (pure row) qp
         emp <- isResultStreamEmpty rs2
         return (not emp)))
-execQueryPlan rs (QPAggregate3 combinedvs (Summarize funcs groupby) qp) = -- assume no unbounded vars under not
+execQueryPlan rs (QPAggregate3 combinedvs (Summarize funcs groupby) qp) =
     transformResultStream combinedvs (do
         row <- rs
         let rs2 = execQueryPlan (pure row) qp
