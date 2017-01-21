@@ -1,0 +1,90 @@
+name:           QueryArrow-rpc-socket
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+executable QueryArrowSocket
+  hs-source-dirs:  src
+  main-is:         Main.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   HDBC-sqlite3,
+                   HDBC-postgresql,
+                   HDBC,
+                   aeson,
+                   bytestring,
+                   haskell-neo4j-client,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   array,
+                   temporary,
+                   process,
+                   conduit-combinators,
+                   conduit,
+                   http-conduit,
+                   resourcet,
+                   async,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   regex-tdfa,
+                   monad-control,
+                   lifted-async,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   network,
+                   binary,
+                   conduit-extra,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   lrucache,
+                   either,
+                   directory,
+                   optparse-applicative,
+                   QueryArrow,
+                   QueryArrow-rpc-common,
+                   QueryArrow-common,
+                   log-adapter,
+                   template-haskell
+  ghc-options:     -Wall -fPIC -threaded
+  other-modules:
+
+executable SocketRPCServer
+  hs-source-dirs:  src
+  main-is: TCPMain.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   aeson,
+                   scientific,
+                   transformers,
+                   semigroups,
+                   semigroupoids,
+                   unordered-containers,
+                   resourcet,
+                   network,
+                   hslogger,
+                   constraints,
+                   time,
+                   log-adapter,
+                   either,
+                   directory,
+                   QueryArrow-common,
+                   QueryArrow-rpc-common,
+                   QueryArrow-remote,
+                   template-haskell
+  ghc-options:     -Wall
+  other-modules:
