@@ -92,3 +92,11 @@ pprint3 showhdr (vars, rows) = (if showhdr then join vars ++ "\n" else "") ++ in
 pprint :: Bool -> [Var] -> [MapResultRow] -> String
 pprint showhdr vars rows =
     pprint2 showhdr (map unVar vars) (map (mapKeys unVar . M.map show) rows)
+
+evalExpr :: MapResultRow -> Expr -> ResultValue
+evalExpr row (StringExpr s) = StringValue s
+evalExpr row (IntExpr s) = IntValue s
+evalExpr row (VarExpr v) = case lookup v row of
+    Nothing -> Null
+    Just r -> r
+evalExpr row expr = error ("evalExpr: unsupported expr " ++ show expr)

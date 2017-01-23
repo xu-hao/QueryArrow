@@ -2,7 +2,7 @@
 module QueryArrow.FileSystem.Builtin where
 
 import QueryArrow.FO.Data
-import QueryArrow.FileSystem.Utils
+import QueryArrow.FO.Utils
 
 pattern FilePathPredName ns = QPredName ns [] "FILE_PATH"
 
@@ -64,9 +64,9 @@ pattern DirObjectPred ns = Pred (DirObjectPredName ns) (PredType ObjectPred [PTK
 
 pattern NewFileObjectPred ns = Pred (NewFileObjectPredName ns) (PredType PropertyPred [PTKeyI TextType, PTPropO (RefType "FileObject")])
 
-pattern NewDirObjectPred ns = Pred (NewDirObjectPredName ns) (PredType PropertyPred [PTKeyI TextType, PTPropO (RefType "FileObject")])
+pattern NewDirObjectPred ns = Pred (NewDirObjectPredName ns) (PredType PropertyPred [PTKeyI TextType, PTPropO (RefType "DirObject")])
 
-pattern FileContentPred ns = Pred (FileContentPredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO (RefType "FileContnet")])
+pattern FileContentPred ns = Pred (FileContentPredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO (RefType "FileContent")])
 
 pattern DirContentPred ns = Pred (DirContentPredName ns) (PredType PropertyPred [PTKeyI (RefType "DirObject"), PTKeyIO (RefType "DirContent")])
 
@@ -74,4 +74,4 @@ pattern DirDirPred ns = Pred (DirDirPredName ns) (PredType PropertyPred [PTKeyIO
 
 pattern FileDirPred ns = Pred (FileDirPredName ns) (PredType PropertyPred [PTPropIO (RefType "FileObject"), PTPropIO (RefType "DirObject")])
 
-pattern FileContentRangePred ns = Pred (FileContentPredName ns) (PredType PropertyPred [PTKeyI (RefType "FileContent"), PTPropI NumberType, PTPropI NumberType, PTPropIO TextType])
+pattern FileContentRangePred ns = Pred (FileContentRangePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileContent"), PTPropI NumberType, PTPropI NumberType, PTPropIO ByteStringType])

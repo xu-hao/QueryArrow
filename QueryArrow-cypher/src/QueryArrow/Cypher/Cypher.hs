@@ -674,6 +674,7 @@ instance Convertible ResultValue CypherExpr where
     safeConvert (IntValue i) = Right (CypherIntConstExpr i)
     safeConvert (StringValue i) = Right (CypherStringConstExpr i)
     safeConvert (Null) = Right (CypherNullExpr)
+    -- safeConvert (ByteStringValue bs) = Left (ConvertError "" "" "" "")
 
 instance Convertible Expr CypherExpr where
     safeConvert (IntExpr i) = Right (CypherIntConstExpr i)

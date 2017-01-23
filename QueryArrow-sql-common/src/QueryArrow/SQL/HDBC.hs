@@ -21,10 +21,11 @@ import Data.Convertible
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
 
-convertExprToSQL :: Expr -> SqlValue
-convertExprToSQL (IntExpr i) = toSql i
-convertExprToSQL (StringExpr s) = toSql s
-convertExprToSQL e = error ("unsupported sql expr type: " ++ show e)
+convertResultValueToSQL :: ResultValue -> SqlValue
+convertResultValueToSQL (IntValue i) = toSql i
+convertResultValueToSQL (StringValue s) = toSql s
+convertResultValueToSQL (ByteStringValue s) = toSql s
+convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
 convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
@@ -33,17 +34,20 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         SqlInt64 _ -> IntValue (fromSql sqlvalue)
                         SqlInteger _ -> IntValue (fromSql sqlvalue)
                         SqlString _ -> StringValue (fromSql sqlvalue)
-                        SqlByteString _ -> StringValue (fromSql sqlvalue)
+                        SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
                         SqlNull -> Null
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
+instance Convertible MapResultRow MapResultRow where
+  safeConvert = Right
+
 instance IPSDBStatement HDBCStatement where
-        type ParameterType HDBCStatement = Map Var Expr
+        type ParameterType HDBCStatement = MapResultRow
         type PSRowType HDBCStatement = MapResultRow
         execWithParams (HDBCStatement ret vars stmt params) args = do
                 liftIO $ infoM "SQL" ("execute stmt")
                 liftIO $ putStrLn ("execHDBCStatement: params = " ++ show args)
-                rcode <- liftIO $ execute stmt (map (\v -> convertExprToSQL (case lookup v args of
+                rcode <- liftIO $ execute stmt (map (\v -> convertResultValueToSQL (case lookup v args of
                     Just e -> e
                     Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args))) params)
                 if rcode == -1

@@ -54,9 +54,10 @@ dbMap = fromList [
     ("SQL/HDBC/CockroachDB", CockroachDB.getDB),
     ("SQL/HDBC/Sqlite3", Sqlite3.getDB),
     ("Cypher/Neo4j", Neo4j.getDB),
-    ("InMemory/EqDB", \ps ->  return (AbstractDatabase (NoConnectionDatabase (InMemory.EqDB (db_name ps))))),
-    ("InMemory/RegexDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.RegexDB (db_name ps))))),
-    ("InMemory/UtilsDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.UtilsDB (db_name ps))))),
+    ("InMemory/EqDB", \ps ->  return (AbstractDatabase (NoConnectionDatabase (InMemory.EqDB (db_name ps) (db_namespace ps))))),
+    ("InMemory/RegexDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.RegexDB (db_name ps) (db_namespace ps))))),
+    ("InMemory/UtilsDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.UtilsDB (db_name ps) (db_namespace ps))))),
+    ("InMemory/TextDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.TextDB (db_name ps) (db_namespace ps))))),
     ("ElasticSearch/ElasticSearch", ElasticSearch.getDB),
     ("Remote/TCP", Remote.TCP.getDB),
     ("FileSystem", FileSystem.getDB)

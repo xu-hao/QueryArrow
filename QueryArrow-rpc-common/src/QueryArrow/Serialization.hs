@@ -1,13 +1,14 @@
 {-# LANGUAGE DeriveGeneric, StandaloneDeriving, FlexibleInstances #-}
 module QueryArrow.Serialization where
 
-import Prelude hiding (lookup)
 import Data.Aeson
 import GHC.Generics
-import Data.Map.Strict (toList, fromList)
+import Data.Map.Strict (toList, fromList, Map)
 import Data.Namespace.Path
 import Data.Set (Set)
-import Data.Map.Strict (Map)
+import Data.ByteString (ByteString)
+import Data.Text.Encoding
+import Data.ByteString.Base64 as B64
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
@@ -55,6 +56,13 @@ instance FromJSON (ObjectPath String) where
 
 instance ToJSON (ObjectPath String) where
     toJSON (ObjectPath (NamespacePath l) a) = toJSON (a : l)
+
+instance ToJSON ByteString where
+    toJSON bs = toJSON (decodeUtf8 (B64.encode bs))
+instance FromJSON ByteString where
+    parseJSON str = do
+      bs <- parseJSON str
+      return (B64.decodeLenient (encodeUtf8 bs))
 
 instance FromJSON Formula
 instance ToJSON Formula

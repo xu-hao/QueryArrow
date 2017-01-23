@@ -22,6 +22,7 @@ library
                    hslogger,
                    parsec,
                    text,
+                   base64-bytestring,
                    log-adapter,
                    QueryArrow-common
   ghc-options:     -Wall -fPIC

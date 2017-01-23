@@ -5,12 +5,13 @@ import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import QueryArrow.FileSystem.Utils
 import Control.Monad.IO.Class (liftIO)
-import qualified Data.ByteString.Char8 as BL
 import System.Directory
 import Control.Exception(throw)
 import System.IO
 import Data.Text (Text, unpack, pack)
 import QueryArrow.DB.ResultStream
+import Data.ByteString (ByteString, hGet)
+import QueryArrow.Utils
 
 import Control.Monad.Free
 import Control.Monad
@@ -31,7 +32,7 @@ data FSCommand x = DirExists String (Bool -> x)
                  | MakeFile String x
                  | MakeDir String x
                  | Write String Integer Text x
-                 | Read String Integer Integer (Text -> x)
+                 | Read String Integer Integer (ByteString -> x)
                  | ListDirDir String (String -> x)
                  | ListDirFile String (String -> x)
                  | Stat String (Maybe Stats -> x)
@@ -39,8 +40,10 @@ data FSCommand x = DirExists String (Bool -> x)
                  | ModificationTime String (UTCTime -> x)
                  | MoveFile String String x
                  | MoveDir String String x
+                 | EvalByteString Expr (ByteString -> x)
                  | EvalText Expr (Text -> x)
                  | EvalInteger Expr (Integer -> x)
+                 | SetByteString Var ByteString x
                  | SetText Var Text x
                  | SetInteger Var Integer x
                  | Stop deriving Functor
@@ -74,7 +77,7 @@ makeDir a = liftF (MakeDir a ())
 fswrite :: String -> Integer -> Text -> FSProgram ()
 fswrite a b d = liftF (Write a b d ())
 
-fsread :: String -> Integer -> Integer -> FSProgram Text
+fsread :: String -> Integer -> Integer -> FSProgram ByteString
 fsread a b c = liftF (Read a b c id)
 
 listDirDir :: String -> FSProgram String
@@ -107,11 +110,17 @@ setText var expr = liftF (SetText var expr ())
 setInteger :: Var -> Integer -> FSProgram ()
 setInteger var expr = liftF (SetInteger var expr ())
 
+setByteString :: Var -> ByteString -> FSProgram ()
+setByteString var expr = liftF (SetByteString var expr ())
+
 evalText :: Expr -> FSProgram Text
 evalText expr = liftF (EvalText expr id)
 
 evalInteger :: Expr -> FSProgram Integer
 evalInteger expr = liftF (EvalInteger expr id)
+
+evalByteString :: Expr -> FSProgram ByteString
+evalByteString expr = liftF (EvalByteString expr id)
 
 interpret :: FSCommand (StateT MapResultRow DBResultStream ()) ->  StateT MapResultRow DBResultStream ()
 interpret (DirExists a next) = do
@@ -153,8 +162,8 @@ interpret (Write a b c next) = do
 interpret (Read a b d next) = do
   c <- liftIO $ withFile a ReadMode $ \h -> do
       hSeek h AbsoluteSeek b
-      BL.hGet h (fromInteger (d - b))
-  next (pack (BL.unpack c))
+      hGet h (fromInteger (d - b))
+  next c
 interpret (ListDirDir a next) = do
   ps <- liftIO $ listDirectory a
   let ps5 = map (a </>) ps
@@ -206,12 +215,22 @@ interpret (EvalInteger a next) = do
     IntValue s -> next (fromIntegral s)
     _ -> error ("FileSystem: not an integer")
 
+interpret (EvalByteString a next) = do
+  row <- get
+  case evalExpr row a of
+    ByteStringValue s -> next s
+    _ -> error ("FileSystem: not a byte string")
+
 interpret (SetText a b next) = do
   modify (insert a (StringValue b))
   next
 
 interpret (SetInteger a b next) = do
   modify (insert a (IntValue (fromIntegral b)))
+  next
+
+interpret (SetByteString a b next) = do
+  modify (insert a (ByteStringValue b))
   next
 
 interpret Stop =

@@ -5,6 +5,7 @@ import QueryArrow.FO.Data
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FileSystem.Builtin
 import QueryArrow.FileSystem.Commands
+import QueryArrow.FO.Utils
 
 import Control.Monad
 import Data.Convertible
@@ -33,7 +34,7 @@ fsSupported _ (FAtomic (Atom (FileModifyTimePredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (DirModifyTimePredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (NewFileObjectPredName _) _)) env = True
 fsSupported _ (FAtomic (Atom (NewDirObjectPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirContentPredName _) _)) env = True
+fsSupported _ (FAtomic (Atom (DirContentPredName _) [_, VarExpr v])) env | not (v `Set.member` env) = True
 fsSupported _ (FAtomic (Atom (FileContentPredName _) [_, VarExpr v])) env | not (v `Set.member` env) = True
 fsSupported _ (FAtomic (Atom (DirDirPredName _) [arg1, arg2])) env | freeVars arg1 `Set.isSubsetOf` env || freeVars arg2 `Set.isSubsetOf` env = True
 fsSupported _ (FAtomic (Atom (FileDirPredName _) [arg1, arg2])) env | freeVars arg1 `Set.isSubsetOf` env || freeVars arg2 `Set.isSubsetOf` env = True
@@ -41,6 +42,7 @@ fsSupported _ (FAtomic (Atom (FileContentRangePredName _) _)) env = True
 fsSupported _ (FInsert (Lit Pos (Atom (FileNamePredName _) _))) env = True
 fsSupported _ (FInsert (Lit Pos (Atom (DirNamePredName _) _))) env = True
 fsSupported _ (FInsert (Lit Pos (Atom (FileContentPredName _) _))) env = True
+fsSupported _ (FInsert (Lit Pos (Atom (DirContentPredName _) _))) env = True
 fsSupported _ (FInsert (Lit Pos (Atom (DirDirPredName _) _))) env = True
 fsSupported _ (FInsert (Lit Pos (Atom (FileDirPredName _) _))) env = True
 fsSupported _ (FInsert (Lit Pos (Atom (FileNamePredName _) _))) env = True
@@ -110,6 +112,12 @@ fileObjectPath o =
     ExistingFileObject ap ->
       return ap
 
+toAP :: String -> String -> String
+toAP root p = case p of
+            ['/'] -> root
+            '/' : p2 -> root </> p2
+            _ -> error ("fsTranslateQuery: malformatted path " ++ p)
+
 fsTranslateQuery :: FileSystemTrans -> Set Var -> Formula -> Set Var -> FSProgram ()
 fsTranslateQuery  _ ret (FAtomic (Atom (NewFileObjectPredName _) [arg1, VarExpr var])) env = do
   n <- T.unpack <$> evalText arg1
@@ -161,7 +169,7 @@ fsTranslateQuery  _ ret (FAtomic (Atom (DirModifyTimePredName _) [arg1, VarExpr 
 
 fsTranslateQuery  (FileSystemTrans root _) ret (FAtomic (Atom (FilePathPredName _) [VarExpr var, arg1])) env = do
   p <- T.unpack <$> evalText arg1
-  let ap = root </> p
+  let ap = toAP root p
   b <- fileExists ap
   if b
     then
@@ -171,7 +179,7 @@ fsTranslateQuery  (FileSystemTrans root _) ret (FAtomic (Atom (FilePathPredName 
 
 fsTranslateQuery  (FileSystemTrans root _) ret (FAtomic (Atom (DirPathPredName _) [VarExpr var, arg1])) env = do
   p <- T.unpack <$> evalText arg1
-  let ap = root </> p
+  let ap = toAP root p
   b <- dirExists ap
   if b
     then
@@ -224,11 +232,11 @@ fsTranslateQuery  _ ret (FAtomic (Atom (DirDirPredName _) [arg1, arg2])) env = d
       case o2 of
         NewDirObject _ ->
           stop
-        ExistingDirObject ap2 ->
-          unless (length ap2 > length ap &&
-                  take (length ap) ap2 == ap &&
-                  ap2 !! length ap == pathSeparator &&
-                  isNothing (find (== pathSeparator) (drop (length ap + 1) ap2))) stop
+        ExistingDirObject ap2 -> do
+          let seg = splitDirectories ap
+          let seg2 = splitDirectories ap2
+          unless (length seg2 == length seg + 1 &&
+                  take (length seg) seg2 == seg) stop
 
 fsTranslateQuery  _ ret (FAtomic (Atom (FileDirPredName _) [arg1, VarExpr var])) env | not (var `Set.member` env) = do
   o <- convert <$> evalText arg1
@@ -262,24 +270,24 @@ fsTranslateQuery  _ ret (FAtomic (Atom (FileDirPredName _) [arg1, arg2])) env = 
       case o2 of
         NewDirObject _ ->
           stop
-        ExistingDirObject ap2 ->
-          unless (length ap2 > length ap &&
-                  take (length ap) ap2 == ap &&
-                  ap2 !! length ap == pathSeparator &&
-                  isNothing (find (== pathSeparator) (drop (length ap + 1) ap2))) stop
+        ExistingDirObject ap2 -> do
+          let seg = splitDirectories ap
+          let seg2 = splitDirectories ap2
+          unless (length seg2 == length seg + 1 &&
+                  take (length seg) seg2 == seg) stop
 
 fsTranslateQuery  _ ret (FAtomic (Atom (FileContentRangePredName _) [arg1, arg2, arg3, VarExpr var])) env | not (var `Set.member` env) = do
   FileContent ap <- convert <$> evalText arg1
   a <- evalInteger arg2
   b <- evalInteger arg3
   c <- fsread ap a b
-  setText var c
+  setByteString var c
 
 fsTranslateQuery  _ ret (FAtomic (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4])) env = do
   FileContent ap <- convert <$> evalText arg1
   a <- evalInteger arg2
   b <- evalInteger arg3
-  d <- evalText arg4
+  d <- evalByteString arg4
   c <- fsread ap a b
   unless (c == d) stop
 
@@ -288,14 +296,14 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileContentPredName _) [arg1, a
   FileContent ap2 <- convert <$> evalText arg2
   case o of
     NewFileObject _ -> error "cannot add content to a new file object"
-    ExistingFileObject ap -> fscopyFile ap ap2
+    ExistingFileObject ap -> fscopyFile ap2 ap
 
 fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirContentPredName _) [arg1, arg2]))) env = do
   o <- convert <$> evalText arg1
   DirContent ap2 <- convert <$> evalText arg2
   case o of
     NewDirObject _ -> error "cannot add content to a new dir object"
-    ExistingDirObject ap -> fscopyDir ap ap2
+    ExistingDirObject ap -> fscopyDir ap2 ap
 
 fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileNamePredName _) [arg1, arg2]))) env = do
   o <- convert <$> evalText arg1
@@ -304,7 +312,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileNamePredName _) [arg1, arg2
     NewFileObject _ -> error "cannot change name of new file object"
     ExistingFileObject ap -> do
       let ap2 = takeDirectory ap </> n
-      unless (ap2 == ap) $ moveFile ap ap2
+      unless (equalFilePath ap2 ap) $ moveFile ap ap2
 
 fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirNamePredName _) [arg1, arg2]))) env = do
   o <- convert <$> evalText arg1
@@ -313,7 +321,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirNamePredName _) [arg1, arg2]
     NewFileObject _ -> error "cannot change name of new dir object"
     ExistingFileObject ap -> do
       let ap2 = takeDirectory ap </> n
-      unless (ap2 == ap) $ moveDir ap ap2
+      unless (equalFilePath ap2 ap) $ moveDir ap ap2
 
 fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirDirPredName _) [arg1, arg2]))) env = do
   o <- convert <$> evalText arg2

@@ -10,16 +10,16 @@ import Control.Monad.Except
 import Data.Convertible.Base
 import Data.Maybe
 import Control.Monad.Trans.Resource
-import Control.Monad.Trans.Reader
 import qualified Data.Text as T
 import Data.Set (Set)
 import System.Log.Logger (errorM, noticeM)
 import Control.Applicative ((<|>))
 import Control.Exception (catch, SomeException)
 import QueryArrow.FO.Types
+import Data.ByteString (ByteString)
 
 -- result value
-data ResultValue = StringValue T.Text | IntValue Int | Null deriving (Eq , Ord, Show, Read)
+data ResultValue = StringValue T.Text | IntValue Int | ByteStringValue ByteString | Null deriving (Eq , Ord, Show, Read)
 
 instance Num ResultValue where
     IntValue a + IntValue b = IntValue (a + b)
@@ -42,6 +42,7 @@ instance Convertible Expr ResultValue where
 typeOf :: ResultValue -> CastType
 typeOf (IntValue _) = NumberType
 typeOf (StringValue _) = TextType
+typeOf (ByteStringValue _) = ByteStringType
 typeOf (Null) = error "typeOf: null value"
 
 -- result row
