@@ -62,7 +62,7 @@ pattern FileObjectPred ns = Pred (FileObjectPredName ns) (PredType ObjectPred [P
 
 pattern DirObjectPred ns = Pred (DirObjectPredName ns) (PredType ObjectPred [PTKeyI (RefType "DirObject")])
 
-pattern NewFileObjectPred ns = Pred (NewFileObjectPredName ns) (PredType PropertyPred [PTKeyI TextType, PTPropO (RefType "DirObject")])
+pattern NewFileObjectPred ns = Pred (NewFileObjectPredName ns) (PredType PropertyPred [PTKeyI TextType, PTPropO (RefType "FileObject")])
 
 pattern NewDirObjectPred ns = Pred (NewDirObjectPredName ns) (PredType PropertyPred [PTKeyI TextType, PTPropO (RefType "FileObject")])
 
