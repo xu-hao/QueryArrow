@@ -33,9 +33,9 @@ instance INoConnectionDatabase2 (GenericDatabase ESTrans ElasticSearchDB) where
     type NoConnectionRowType (GenericDatabase ESTrans ElasticSearchDB) = MapResultRow
     noConnectionDBStmtExec (GenericDatabase _ db _ _) (qu, vars) rs = do
       row <- rs
-      execWithParams db qu (convert row)
+      execWithParams db qu row
 
-execWithParams :: ElasticSearchDB -> ElasticSearchQuery -> Map Var Expr -> DBResultStream MapResultRow
+execWithParams :: ElasticSearchDB -> ElasticSearchQuery -> MapResultRow -> DBResultStream MapResultRow
 execWithParams esci (ElasticSearchQuery type0 rec) args = do
     hit <- esResultStream esci type0 rec args
     return (convertHitToMapResultRow type0 rec hit)
@@ -95,14 +95,14 @@ convertHitToMapResultRow _ map2 eshit =
                     Nothing -> map3
             _ -> map3) empty map2
 
-extractQueryItem :: Text -> ElasticSearchQueryExpr -> Map Var Expr -> [ESQ.ESTermQuery]
+extractQueryItem :: Text -> ElasticSearchQueryExpr -> MapResultRow -> [ESQ.ESTermQuery]
 extractQueryItem key val args = case val of
     ElasticSearchQueryParam i ->
         case lookup i args of
             Just expr ->
                 case expr of
-                    StringExpr s -> [ESQ.ESTermQuery (ESQ.ESStrTermQuery key s)]
-                    IntExpr i -> [ESQ.ESTermQuery (ESQ.ESIntTermQuery key i)]
+                    StringValue s -> [ESQ.ESTermQuery (ESQ.ESStrTermQuery key s)]
+                    IntValue i -> [ESQ.ESTermQuery (ESQ.ESIntTermQuery key i)]
                     _ -> error "unsupported expr type"
             Nothing -> error "no such argument"
     ElasticSearchQueryIntVal val ->
@@ -112,14 +112,14 @@ extractQueryItem key val args = case val of
     ElasticSearchQueryVar _ ->
         []
 
-extractInsertItem :: Text -> ElasticSearchQueryExpr -> Map Var Expr -> (Text, Value)
+extractInsertItem :: Text -> ElasticSearchQueryExpr -> MapResultRow -> (Text, Value)
 extractInsertItem key val args = case val of
     ElasticSearchQueryParam i ->
         case lookup i args of
             Just expr ->
                 case expr of
-                    StringExpr s -> (key, String s)
-                    IntExpr i -> (key, Number (fromInteger (toInteger i)))
+                    StringValue s -> (key, String s)
+                    IntValue i -> (key, Number (fromInteger (toInteger i)))
                     _ -> error "unsupported expr type"
             Nothing -> error "no such argument"
     ElasticSearchQueryIntVal val ->
@@ -132,7 +132,7 @@ extractInsertItem key val args = case val of
 page :: Int
 page = 100
 
-recordToQuery :: Map Text ElasticSearchQueryExpr -> Map Var Expr -> Int -> Int -> ESQ.ESQuery
+recordToQuery :: Map Text ElasticSearchQueryExpr -> MapResultRow -> Int -> Int -> ESQ.ESQuery
 recordToQuery rec args off lim = ESQ.ESQuery off lim (
                         ESQ.ESBoolQuery (
                             ESQ.ESMustQuery (
@@ -141,12 +141,12 @@ recordToQuery rec args off lim = ESQ.ESQuery off lim (
                         )
                     )
 
-recordToESRecord :: Map Text ElasticSearchQueryExpr -> Map Var Expr -> ESRecord
+recordToESRecord :: Map Text ElasticSearchQueryExpr -> MapResultRow -> ESRecord
 recordToESRecord rec args =
     ESRecord (foldrWithKey (\key val list -> insert key (snd (extractInsertItem key val args)) list) empty rec)
 
 
-esResultStream :: MonadIO m => ESQ.ElasticSearchConnInfo -> Text -> Map Text ElasticSearchQueryExpr -> Map Var Expr -> ResultStream m ESHit
+esResultStream :: MonadIO m => ESQ.ElasticSearchConnInfo -> Text -> Map Text ElasticSearchQueryExpr -> MapResultRow -> ResultStream m ESHit
 esResultStream esci type0 rec args = do
         let getrs off lim = do
                 let esquery = recordToQuery rec args off lim
