@@ -28,6 +28,10 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
 
+Cite: 
+
+Hao Xu, Ben Keller, Antoine de Torcy, Jason Coposky (2016) QueryArrow: Bidirectional Integration of Multiple Metadata Sources. 8th iRODS User Group Meeting, University of North Carolina at Chapel Hill. June 2016.
+
 Slides: https://irods.org/uploads/2016/06/queryarrow2_Hao-Xu_DICE_iRODS-UGM-2016.pdf
 
 Technical Report: https://irods.org/uploads/2015/01/xu-queryarrow-2016.pdf
