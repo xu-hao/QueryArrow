@@ -158,7 +158,7 @@ QueryArrow provides an HTTP based server based on Yesod.
 
 The command for starting the server is `QueryArrowHttp`.
 
-### Build C++ plugin
+## Build C++ plugin
 
 In addition to running QueryArrow as a standalone service, QueryArrow provides an iRODS database plugin.
 
