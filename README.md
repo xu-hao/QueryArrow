@@ -39,9 +39,11 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
 
-## How to build (ubuntu 16.04)
+## How to build
 
-### Install GHC 8.0.1
+### ubuntu 16.04
+
+#### Install GHC 8.0.1
 
 from source:
 
@@ -57,7 +59,7 @@ If built from source, it is `<prefix>/lib/ghc-8.0.1/`. Default `<prefix>` is `/u
 
 If installed debian package, it is `/usr/lib/ghc`.
 
-### Build QueryArrow
+#### Build QueryArrow
 
     apt-get install postgresql-server-dev-all libsqlite3-dev -y
 
@@ -69,7 +71,7 @@ If installed debian package, it is `/usr/lib/ghc`.
 
     stack build
 
-### Create QueryArrow package
+#### Create QueryArrow package
 
     cd ..
 
@@ -83,7 +85,7 @@ make a new directory
 
     cpack --config CPackConfig.cmake
 
-### Install QueryArrow package
+#### Install QueryArrow package
 
     dpkg -i queryarrow-0.2-Linux-amd64.deb
     
