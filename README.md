@@ -1,5 +1,6 @@
 # QueryArrow
 
+## Resources
 Hao Xu, Ben Keller, Antoine de Torcy, Jason Coposky (2016) QueryArrow: Bidirectional Integration of Multiple Metadata Sources. 8th iRODS User Group Meeting, University of North Carolina at Chapel Hill. June 2016.
 
 Slides: https://irods.org/uploads/2016/06/queryarrow2_Hao-Xu_DICE_iRODS-UGM-2016.pdf
@@ -7,6 +8,8 @@ Slides: https://irods.org/uploads/2016/06/queryarrow2_Hao-Xu_DICE_iRODS-UGM-2016
 Technical Report: https://irods.org/uploads/2015/01/xu-queryarrow-2016.pdf
 
 Specification: https://github.com/xu-hao/CertifiedQueryArrow
+
+## Introduction
 
 QueryArrow is motivated by the following applications: bidirectional metadata integration from different metadata sources, metadata policies, metadata migration from different databases, metadata indexing.
 
