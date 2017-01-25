@@ -8,6 +8,8 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins. Each
 
 Slides: https://irods.org/uploads/2016/06/queryarrow2_Hao-Xu_DICE_iRODS-UGM-2016.pdf
 
+Technical Report: https://irods.org/uploads/2015/01/xu-queryarrow-2016.pdf
+
 # How to build
 
 ## ubuntu 16.04
