@@ -163,4 +163,4 @@ The command for starting the server is `QueryArrowHttp`.
 
 In addition to running QueryArrow as a standalone service, QueryArrow provides an iRODS database plugin.
 
-build irods
+(to be updated: how to build irods plugin)
