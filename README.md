@@ -39,9 +39,9 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
 
-# How to build
+## How to build
 
-## ubuntu 16.04
+ubuntu 16.04
 
 ### Install GHC 8.0.1
 
