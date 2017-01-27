@@ -8,7 +8,7 @@ import Control.Monad.IO.Class (liftIO)
 import System.Directory
 import Control.Exception(throw)
 import System.IO
-import Data.Text (Text, unpack, pack)
+import Data.Text (Text, unpack)
 import QueryArrow.DB.ResultStream
 import Data.ByteString (ByteString, hGet)
 import QueryArrow.Utils
@@ -20,6 +20,7 @@ import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (insert)
 import System.FilePath ((</>))
 import Data.Time.Clock
+import System.FilePath.Find
 
 data Stats = Stats {isDir :: Bool}
 
@@ -33,8 +34,11 @@ data FSCommand x = DirExists String (Bool -> x)
                  | MakeDir String x
                  | Write String Integer Text x
                  | Read String Integer Integer (ByteString -> x)
-                 | ListDirDir String (String -> x)
-                 | ListDirFile String (String -> x)
+                 | ListDirDir String ([String] -> x)
+                 | ListDirFile String ([String] -> x)
+                 | Foreach [String] (String -> x)
+                 | ForeachInteger [Integer] (Integer -> x)
+                 | Find RecursionPredicate FilterPredicate String ([String] -> x)
                  | Stat String (Maybe Stats -> x)
                  | Size String (Integer -> x)
                  | ModificationTime String (UTCTime -> x)
@@ -80,11 +84,20 @@ fswrite a b d = liftF (Write a b d ())
 fsread :: String -> Integer -> Integer -> FSProgram ByteString
 fsread a b c = liftF (Read a b c id)
 
-listDirDir :: String -> FSProgram String
+fsfind :: RecursionPredicate -> FilterPredicate -> String -> FSProgram [String]
+fsfind p q a = liftF (Find p q a id)
+
+listDirDir :: String -> FSProgram [String]
 listDirDir a = liftF (ListDirDir a id)
 
-listDirFile :: String -> FSProgram String
+listDirFile :: String -> FSProgram [String]
 listDirFile a = liftF (ListDirFile a id)
+
+foreach :: [String] -> FSProgram String
+foreach as = liftF (Foreach as id)
+
+foreachInteger :: [Integer] -> FSProgram Integer
+foreachInteger as = liftF (ForeachInteger as id)
 
 stat :: String -> FSProgram (Maybe Stats)
 stat a = liftF (Stat a id)
@@ -92,8 +105,8 @@ stat a = liftF (Stat a id)
 size :: String -> FSProgram Integer
 size a = liftF (Size a id)
 
-modificationTime :: String -> FSProgram UTCTime
-modificationTime a = liftF (ModificationTime a id)
+fsmodificationTime :: String -> FSProgram UTCTime
+fsmodificationTime a = liftF (ModificationTime a id)
 
 moveFile :: String -> String -> FSProgram ()
 moveFile a b = liftF (MoveFile a b ())
@@ -164,18 +177,31 @@ interpret (Read a b d next) = do
       hSeek h AbsoluteSeek b
       hGet h (fromInteger (d - b))
   next c
+
+interpret (Find p q a next) = do
+  ps <- liftIO $ find p q a
+  next ps
+
 interpret (ListDirDir a next) = do
   ps <- liftIO $ listDirectory a
   let ps5 = map (a </>) ps
   ps2 <- liftIO $ filterM doesDirectoryExist ps5
-  p <- lift $ listResultStream ps2
-  next p
+  next ps2
+
 interpret (ListDirFile a next) = do
   ps <- liftIO $ listDirectory a
   let ps5 = map (a </>) ps
   ps2 <- liftIO $ filterM doesFileExist ps5
-  p <- lift $ listResultStream ps2
-  next p
+  next ps2
+
+interpret (Foreach as next) = do
+  a <- lift $ listResultStream as
+  next a
+
+interpret (ForeachInteger as next) = do
+  a <- lift $ listResultStream as
+  next a
+
 interpret (Stat a next) = do
   b <- liftIO $ doesFileExist a
   stats <- if b

@@ -59,6 +59,7 @@ class TCSubst a where
 instance TCSubst CastType where
   tcsubst _ NumberType = NumberType
   tcsubst _ TextType = TextType
+  tcsubst _ ByteStringType = ByteStringType
   tcsubst _ ty@(RefType _) = ty
   tcsubst m tv@(TypeVar v) = fromMaybe tv (lookup v m)
 
@@ -78,6 +79,7 @@ instance FreeTypeVars CastType where
   freeTypeVars NumberType = mempty
   freeTypeVars TextType = mempty
   freeTypeVars (RefType _) = mempty
+  freeTypeVars ByteStringType = mempty
   freeTypeVars (TypeVar v) = Set.singleton v
 
 instance FreeTypeVars PredType where

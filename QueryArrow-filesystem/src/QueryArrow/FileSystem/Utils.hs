@@ -3,12 +3,8 @@
 module QueryArrow.FileSystem.Utils where
 
 
-import QueryArrow.FO.Data
-import QueryArrow.DB.DB
 import QueryArrow.Utils ()
 
-import Prelude hiding (lookup)
-import Data.Map.Strict (lookup)
 import System.FilePath
 import Control.Exception(throw)
 import Control.Monad

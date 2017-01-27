@@ -26,6 +26,7 @@ library
                    free,
                    bytestring,
                    directory,
+                   filemanip,
                    filepath,
                    time,
                    namespace >= 0.1.2.2,
