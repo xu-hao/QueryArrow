@@ -537,7 +537,7 @@ prepareQueryPlan dbs  (QPSequencingT qp1 qp2) = do
     qp2' <- prepareQueryPlan dbs  qp2
     return (QPSequencing3 qp1' qp2')
 prepareQueryPlan _ QPOneT = return QPOne3
-prepareQueryPlan _ QPZeroT = return QPZero3
+prepareQueryPlan _ QPZeroT = return QPOne3
 prepareQueryPlan dbs  (QPAggregateT combinedvs agg qp1) = do
     qp1' <- prepareQueryPlan dbs  qp1
     return (QPAggregate3 combinedvs agg qp1')

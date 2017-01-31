@@ -18,8 +18,10 @@ import Control.Exception (catch, SomeException)
 import QueryArrow.FO.Types
 import Data.ByteString (ByteString)
 
+type Location = [String]
+
 -- result value
-data ResultValue = StringValue T.Text | IntValue Int | ByteStringValue ByteString | Null deriving (Eq , Ord, Show, Read)
+data ResultValue = StringValue T.Text | IntValue Int | ByteStringValue ByteString | RefValue Location String | Null deriving (Eq , Ord, Show, Read)
 
 instance Num ResultValue where
     IntValue a + IntValue b = IntValue (a + b)
@@ -166,3 +168,7 @@ doQueryWithConn db conn vars2 qu vars rs = do
 
 newtype QueryTypeIso conn = QueryTypeIso (QueryType conn)
 newtype DBQueryTypeIso db = DBQueryTypeIso (DBQueryType db)
+
+-- class Bidirectional a b where
+--  toLeft :: b -> a
+--  toRight :: a -> b

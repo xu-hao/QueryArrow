@@ -54,6 +54,7 @@ packages:
     - QueryArrow-common/
     - QueryArrow-inmemory/
     - QueryArrow-remote
+    - QueryArrow-remote-socket
     - QueryArrow-ffi-service
     - QueryArrow-ffi-service-local
     - QueryArrow-ffi-service-handle-common

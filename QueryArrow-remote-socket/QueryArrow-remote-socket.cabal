@@ -1,26 +1,24 @@
-name:           QueryArrow-rpc-socket
+name:           QueryArrow-remote-socket
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
 author:         Hao Xu
 
-executable QueryArrowSocket
+executable QueryArrowRemoteSocket
   hs-source-dirs:  src
-  main-is:         Main.hs
+  main-is: Main.hs
   build-depends:
                    base >= 4,
                    mtl,
                    aeson,
                    resourcet,
-                   time,
-                   hslogger,
                    network,
-                   either,
-                   directory,
+                   hslogger,
                    optparse-applicative,
-                   QueryArrow,
-                   QueryArrow-rpc-common,
+                   log-adapter,
+                   directory,
                    QueryArrow-common,
-                   log-adapter
+                   QueryArrow-remote,
+                   QueryArrow
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

@@ -12,6 +12,10 @@ pattern FileNamePredName ns = QPredName ns [] "FILE_NAME"
 
 pattern DirNamePredName ns = QPredName ns [] "DIR_NAME"
 
+pattern FileHostPredName ns = QPredName ns [] "FILE_HOST"
+
+pattern DirHostPredName ns = QPredName ns [] "DIR_HOST"
+
 pattern FileSizePredName ns = QPredName ns [] "FILE_SIZE"
 
 -- pattern FileCreateTimePredName ns = QPredName ns [] "FILE_CREATE_TIME"
@@ -47,6 +51,10 @@ pattern DirPathPred ns = Pred (DirPathPredName ns) (PredType PropertyPred [PTKey
 pattern FileNamePred ns = Pred (FileNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
 
 pattern DirNamePred ns = Pred (DirNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO TextType])
+
+pattern FileHostPred ns = Pred (FileNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
+
+pattern DirHostPred ns = Pred (DirNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO TextType])
 
 pattern FileSizePred ns = Pred (FileSizePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO NumberType])
 

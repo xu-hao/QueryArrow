@@ -1,263 +1,341 @@
-{-# LANGUAGE DeriveFunctor #-}
-module QueryArrow.FileSystem.Commands where
+{-# LANGUAGE DeriveFunctor, RankNTypes, GADTs, StandaloneDeriving, MultiParamTypeClasses #-}
+module QueryArrow.FileSystem.Commands (
+    File(fHost), fsreplaceFileName, fsfileName, fsRelP, fsDir, fsreplaceRelP,
+    Stats(..), FSProgram,
+    stat, fswrite, fsread, fileExists, dirExists, fsfindFilesByPath, fsfindDirsByPath,
+    fstruncate, unlinkFile, removeDir, makeFile, makeDir, moveFile, moveDir, fsmodificationTime, fssize, evalResultValue, setResultValue, foreach,
+    fscopyFile, fscopyDir, listDirDir, listDirFile, fsallFiles, fsallDirs, fsallNonRootFiles, fsallNonRootDirs, fsfindFilesByName, fsfindDirsByName,
+    fsfindFilesByHost, fsfindDirsByHost, fsfindFilesBySize, fsfindFilesByModificationTime, fsfindDirsByModificationTime, stop,
+    interpret,
+    makeLocalInterpreter, makeRemoteInterpreter,
+    makeLocalInterpreter2, makeRemoteToLocalInterpreter2, makeRemoteToRemoteInterpreter2, makeLocalToRemoteInterpreter2,
+    Interpreter(..), Interpreter2(..)
+          ) where
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
-import QueryArrow.FileSystem.Utils
-import Control.Monad.IO.Class (liftIO)
-import System.Directory
-import Control.Exception(throw)
-import System.IO
-import Data.Text (Text, unpack)
 import QueryArrow.DB.ResultStream
-import Data.ByteString (ByteString, hGet)
+import Data.ByteString (ByteString)
 import QueryArrow.Utils
+import QueryArrow.FileSystem.LocalCommands
 
 import Control.Monad.Free
-import Control.Monad
 import Control.Monad.Trans.State (StateT, get, modify)
+import Control.Monad.Trans.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (insert)
-import System.FilePath ((</>))
 import Data.Time.Clock
-import System.FilePath.Find
+import Data.Maybe
+import QueryArrow.FileSystem.Interpreter
+import Data.Aeson
 
-data Stats = Stats {isDir :: Bool}
+data FSCommand x where
+   DirExists :: File -> (Bool -> x) -> FSCommand x
+   FileExists :: File -> (Bool -> x) -> FSCommand x
+   CopyFile :: File -> File -> x -> FSCommand x
+   CopyDir :: File -> File -> x -> FSCommand x
+   UnlinkFile :: File -> x -> FSCommand x
+   RemoveDir :: File -> x -> FSCommand x
+   MakeFile :: File -> x -> FSCommand x
+   MakeDir :: File -> x -> FSCommand x
+   Write :: File -> Integer -> ByteString -> x -> FSCommand x
+   Read :: File -> Integer -> Integer -> (ByteString -> x) -> FSCommand x
+   ListDirDir :: File -> ([File] -> x) -> FSCommand x
+   ListDirFile :: File -> ([File] -> x) -> FSCommand x
+   Foreach :: forall x a. [a] -> (a -> x) -> FSCommand x
+   AllFiles :: ([File] -> x) -> FSCommand x
+   AllDirs :: ([File] -> x) -> FSCommand x
+   AllNonRootFiles :: ([File] -> x) -> FSCommand x
+   AllNonRootDirs :: ([File] -> x) -> FSCommand x
+   FindFilesByName :: String -> ([File] -> x) -> FSCommand x
+   FindDirsByName :: String -> ([File] -> x) -> FSCommand x
+   FindFilesByPath :: String -> ([File] -> x) -> FSCommand x
+   FindDirsByPath :: String -> ([File] -> x) -> FSCommand x
+   FindFilesByHost :: String -> ([File] -> x) -> FSCommand x
+   FindDirsByHost :: String -> ([File] -> x) -> FSCommand x
+   FindFilesBySize :: Integer -> ([File] -> x) -> FSCommand x
+   FindFilesByModificationTime :: Integer -> ([File] -> x) -> FSCommand x
+   FindDirsByModficationTime :: Integer -> ([File] -> x) -> FSCommand x
+   Stat :: File -> (Maybe Stats -> x) -> FSCommand x
+   Truncate :: File -> Integer -> x -> FSCommand x
+   Size :: File -> (Integer -> x) -> FSCommand x
+   ModificationTime :: File -> (UTCTime -> x) -> FSCommand x
+   MoveFile :: File -> File -> x -> FSCommand x
+   MoveDir :: File -> File -> x -> FSCommand x
+   EvalResultValue :: Expr -> (ResultValue -> x) -> FSCommand x
+   SetResultValue :: Var -> ResultValue -> x -> FSCommand x
+   Stop :: FSCommand x
 
-data FSCommand x = DirExists String (Bool -> x)
-                 | FileExists String (Bool -> x)
-                 | CopyFile String String x
-                 | CopyDir String String x
-                 | UnlinkFile String x
-                 | RemoveDir String x
-                 | MakeFile String x
-                 | MakeDir String x
-                 | Write String Integer Text x
-                 | Read String Integer Integer (ByteString -> x)
-                 | ListDirDir String ([String] -> x)
-                 | ListDirFile String ([String] -> x)
-                 | Foreach [String] (String -> x)
-                 | ForeachInteger [Integer] (Integer -> x)
-                 | Find RecursionPredicate FilterPredicate String ([String] -> x)
-                 | Stat String (Maybe Stats -> x)
-                 | Size String (Integer -> x)
-                 | ModificationTime String (UTCTime -> x)
-                 | MoveFile String String x
-                 | MoveDir String String x
-                 | EvalByteString Expr (ByteString -> x)
-                 | EvalText Expr (Text -> x)
-                 | EvalInteger Expr (Integer -> x)
-                 | SetByteString Var ByteString x
-                 | SetText Var Text x
-                 | SetInteger Var Integer x
-                 | Stop deriving Functor
+deriving instance Functor FSCommand
 
 type FSProgram = Free FSCommand
 
-dirExists :: String -> FSProgram Bool
+
+dirExists :: File -> FSProgram Bool
 dirExists a = liftF (DirExists a id)
 
-fileExists :: String -> FSProgram Bool
+fileExists :: File -> FSProgram Bool
 fileExists a = liftF (FileExists a id)
 
-fscopyFile :: String -> String -> FSProgram ()
+fscopyFile :: File -> File -> FSProgram ()
 fscopyFile a b = liftF (CopyFile a b ())
 
-fscopyDir :: String -> String -> FSProgram ()
+fscopyDir :: File -> File -> FSProgram ()
 fscopyDir a b = liftF (CopyDir a b ())
 
-unlinkFile :: String -> FSProgram ()
+unlinkFile :: File -> FSProgram ()
 unlinkFile a = liftF (UnlinkFile a ())
 
-removeDir :: String -> FSProgram ()
+removeDir :: File -> FSProgram ()
 removeDir a = liftF (RemoveDir a ())
 
-makeFile :: String -> FSProgram ()
+makeFile :: File -> FSProgram ()
 makeFile a = liftF (MakeFile a ())
 
-makeDir :: String -> FSProgram ()
+makeDir :: File -> FSProgram ()
 makeDir a = liftF (MakeDir a ())
 
-fswrite :: String -> Integer -> Text -> FSProgram ()
+fswrite :: File -> Integer -> ByteString -> FSProgram ()
 fswrite a b d = liftF (Write a b d ())
 
-fsread :: String -> Integer -> Integer -> FSProgram ByteString
+fsread :: File -> Integer -> Integer -> FSProgram ByteString
 fsread a b c = liftF (Read a b c id)
 
-fsfind :: RecursionPredicate -> FilterPredicate -> String -> FSProgram [String]
-fsfind p q a = liftF (Find p q a id)
+fsallFiles :: FSProgram [File]
+fsallFiles = liftF (AllFiles id)
 
-listDirDir :: String -> FSProgram [String]
+fsallDirs :: FSProgram [File]
+fsallDirs = liftF (AllDirs id)
+
+fsallNonRootFiles :: FSProgram [File]
+fsallNonRootFiles = liftF (AllNonRootFiles id)
+
+fsallNonRootDirs :: FSProgram [File]
+fsallNonRootDirs = liftF (AllNonRootDirs id)
+
+fsfindFilesByName :: String -> FSProgram [File]
+fsfindFilesByName n = liftF (FindFilesByName n id)
+
+fsfindDirsByName :: String -> FSProgram [File]
+fsfindDirsByName n = liftF (FindDirsByName n id)
+
+fsfindFilesByPath :: String -> FSProgram [File]
+fsfindFilesByPath n = liftF (FindFilesByPath n id)
+
+fsfindDirsByPath :: String -> FSProgram [File]
+fsfindDirsByPath n = liftF (FindDirsByPath n id)
+
+fsfindFilesByHost :: String -> FSProgram [File]
+fsfindFilesByHost n = liftF (FindFilesByHost n id)
+
+fsfindDirsByHost :: String -> FSProgram [File]
+fsfindDirsByHost n = liftF (FindDirsByHost n id)
+
+fsfindFilesBySize :: Integer -> FSProgram [File]
+fsfindFilesBySize n = liftF (FindFilesBySize n id)
+
+fsfindFilesByModificationTime :: Integer -> FSProgram [File]
+fsfindFilesByModificationTime n = liftF (FindFilesByModificationTime n id)
+
+fsfindDirsByModificationTime :: Integer -> FSProgram [File]
+fsfindDirsByModificationTime n = liftF (FindDirsByModficationTime n id)
+
+listDirDir :: File -> FSProgram [File]
 listDirDir a = liftF (ListDirDir a id)
 
-listDirFile :: String -> FSProgram [String]
+listDirFile :: File -> FSProgram [File]
 listDirFile a = liftF (ListDirFile a id)
 
-foreach :: [String] -> FSProgram String
+foreach :: [a] -> FSProgram a
 foreach as = liftF (Foreach as id)
 
-foreachInteger :: [Integer] -> FSProgram Integer
-foreachInteger as = liftF (ForeachInteger as id)
-
-stat :: String -> FSProgram (Maybe Stats)
+stat :: File -> FSProgram (Maybe Stats)
 stat a = liftF (Stat a id)
 
-size :: String -> FSProgram Integer
-size a = liftF (Size a id)
+fssize :: File -> FSProgram Integer
+fssize a = liftF (Size a id)
 
-fsmodificationTime :: String -> FSProgram UTCTime
+fstruncate :: File -> Integer -> FSProgram ()
+fstruncate a i = liftF (Truncate a i ())
+
+fsmodificationTime :: File -> FSProgram UTCTime
 fsmodificationTime a = liftF (ModificationTime a id)
 
-moveFile :: String -> String -> FSProgram ()
+moveFile :: File -> File -> FSProgram ()
 moveFile a b = liftF (MoveFile a b ())
 
-moveDir :: String -> String -> FSProgram ()
+moveDir :: File -> File -> FSProgram ()
 moveDir a b = liftF (MoveDir a b ())
 
 stop :: FSProgram a
 stop = liftF Stop
 
-setText :: Var -> Text -> FSProgram ()
-setText var expr = liftF (SetText var expr ())
+setResultValue :: Var -> ResultValue -> FSProgram ()
+setResultValue var expr = liftF (SetResultValue var expr ())
 
-setInteger :: Var -> Integer -> FSProgram ()
-setInteger var expr = liftF (SetInteger var expr ())
+evalResultValue :: Expr -> FSProgram ResultValue
+evalResultValue expr = liftF (EvalResultValue expr id)
 
-setByteString :: Var -> ByteString -> FSProgram ()
-setByteString var expr = liftF (SetByteString var expr ())
+type InterMonad = StateT MapResultRow (ReaderT ([((String, String), Interpreter)], [((String, String, String, String), Interpreter2)]) DBResultStream)
 
-evalText :: Expr -> FSProgram Text
-evalText expr = liftF (EvalText expr id)
+redirect :: (ToJSON a, FromJSON a) => LocalizedFSCommand a -> String -> String -> InterMonad a
+redirect cmd hosta roota = do
+  (hostmap, _) <- lift ask
+  let i = fromMaybe (error "cannot find host or root") (lookup (hosta, roota) hostmap)
+  interpreter i cmd
 
-evalInteger :: Expr -> FSProgram Integer
-evalInteger expr = liftF (EvalInteger expr id)
+redirect2 :: LocalizedFSCommand2  -> String -> String -> String -> String -> InterMonad ()
+redirect2 cmd hosta roota hostb rootb = do
+  (_, hostmap2) <- lift ask
+  let i = fromMaybe (error "cannot find host or root") (lookup (hosta, roota, hostb, rootb) hostmap2)
+  interpreter2 i cmd
 
-evalByteString :: Expr -> FSProgram ByteString
-evalByteString expr = liftF (EvalByteString expr id)
+runPredicate :: (ToJSON a, FromJSON a) => LocalizedFSCommand [a] -> InterMonad [a]
+runPredicate predicate = do
+  (hostmap, _) <- lift ask
+  concat <$> mapM (\(_, ia) -> interpreter ia predicate) hostmap
 
-interpret :: FSCommand (StateT MapResultRow DBResultStream ()) ->  StateT MapResultRow DBResultStream ()
-interpret (DirExists a next) = do
-  b <- liftIO $ doesDirectoryExist a
+
+interpret :: FSCommand ( InterMonad ()) ->  InterMonad ()
+interpret (DirExists (File hosta roota a) next) = do
+  b <- redirect (LDirExists a) hosta roota
   next b
-interpret (FileExists a next) = do
-  b <- liftIO $ doesFileExist a
+
+interpret (FileExists (File hosta roota a) next) = do
+  b <- redirect (LFileExists a) hosta roota
   next b
-interpret (CopyFile a b next) = do
-  liftIO $ copyFile a b
-  next
-interpret (CopyDir a b next) = do
-  liftIO $ copyDirectory a b
-  next
-interpret (UnlinkFile a next) = do
-  liftIO $ removeFile a
-  next
-interpret (RemoveDir a next) = do
-  liftIO $ removeDirectoryRecursive a
-  next
-interpret (MakeFile a next) = do
-  liftIO $ do
-    b <- doesPathExist a
-    if b
-      then
-        throw (userError "file already exists")
-      else
-        appendFile a ""
-  next
-interpret (MakeDir a next) = do
-  liftIO $ createDirectory a
-  next
-interpret (Write a b c next) = do
-  liftIO $ withFile a WriteMode $ \h -> do
-      hSeek h AbsoluteSeek b
-      hPutStr h (unpack c)
+
+interpret (UnlinkFile (File hosta roota a) next) = do
+  redirect (LUnlinkFile a) hosta roota
   next
 
-interpret (Read a b d next) = do
-  c <- liftIO $ withFile a ReadMode $ \h -> do
-      hSeek h AbsoluteSeek b
-      hGet h (fromInteger (d - b))
-  next c
+interpret (RemoveDir (File hosta roota a) next) = do
+  redirect (LRemoveDir a) hosta roota
+  next
 
-interpret (Find p q a next) = do
-  ps <- liftIO $ find p q a
-  next ps
+interpret (MakeFile (File hosta roota a) next) = do
+  redirect (LMakeFile a ) hosta roota
+  next
 
-interpret (ListDirDir a next) = do
-  ps <- liftIO $ listDirectory a
-  let ps5 = map (a </>) ps
-  ps2 <- liftIO $ filterM doesDirectoryExist ps5
-  next ps2
+interpret (MakeDir (File hosta roota a) next) = do
+  redirect (LMakeDir a ) hosta roota
+  next
 
-interpret (ListDirFile a next) = do
-  ps <- liftIO $ listDirectory a
-  let ps5 = map (a </>) ps
-  ps2 <- liftIO $ filterM doesFileExist ps5
-  next ps2
+interpret (Write (File hosta roota a) b c next) = do
+  redirect (LWrite a b c ) hosta roota
+  next
 
-interpret (Foreach as next) = do
-  a <- lift $ listResultStream as
-  next a
+interpret (Read (File hosta roota a) b d next) = do
+  bs <- redirect (LRead a b d ) hosta roota
+  next bs
 
-interpret (ForeachInteger as next) = do
-  a <- lift $ listResultStream as
-  next a
+interpret (ListDirDir (File hosta roota a) next) = do
+  fs <- redirect (LListDirDir a ) hosta roota
+  next fs
 
-interpret (Stat a next) = do
-  b <- liftIO $ doesFileExist a
-  stats <- if b
-    then return (Just (Stats False))
-    else do
-      b2 <- liftIO $ doesDirectoryExist a
-      if b2
-        then return (Just (Stats True))
-        else return Nothing
-  next stats
+interpret (ListDirFile (File hosta roota a) next) = do
+  fs <- redirect (LListDirFile a ) hosta roota
+  next fs
 
-interpret (Size fn next) = do
-  s <- liftIO $ getFileSize fn
+interpret (Stat (File hosta roota a) next) = do
+  st <- redirect (LStat a ) hosta roota
+  next st
+
+interpret (Size (File hosta roota fn) next) = do
+  s <- redirect (LSize fn ) hosta roota
   next s
 
-interpret (ModificationTime fn next) = do
-  mt <- liftIO $ getModificationTime fn
+interpret (Truncate (File hosta roota fn) i next) = do
+  redirect (LTruncate fn i ) hosta roota
+  next
+
+interpret (ModificationTime (File hosta roota fn) next) = do
+  mt <- redirect (LModificationTime fn ) hosta roota
   next mt
 
-interpret (MoveFile a b next) = do
-  liftIO $ renameFile b a
+interpret (CopyFile (File hosta roota a) (File hostb rootb b) next) = do
+  redirect2 (L2CopyFile a b ) hosta roota hostb rootb
   next
 
-interpret (MoveDir a b next) = do
-  liftIO $ renameDirectory b a
+interpret (CopyDir (File hosta roota a) (File hostb rootb b) next) = do
+  redirect2 (L2CopyDir a b ) hosta roota hostb rootb
   next
 
-interpret (EvalText a next) = do
+interpret (MoveFile (File hosta roota a) (File hostb rootb b) next) = do
+  redirect2 (L2MoveFile a b ) hosta roota hostb rootb
+  next
+
+interpret (MoveDir (File hosta roota a) (File hostb rootb b) next) = do
+  redirect2 (L2MoveDir a b ) hosta roota hostb rootb
+  next
+
+interpret (AllFiles next) = do
+  fs <- runPredicate LAllFiles
+  next fs
+
+interpret (AllDirs next) = do
+  fs <- runPredicate LAllDirs
+  next fs
+
+interpret (AllNonRootFiles next) = do
+  fs <- runPredicate LAllNonRootFiles
+  next fs
+
+interpret (AllNonRootDirs next) = do
+  fs <- runPredicate LAllNonRootDirs
+  next fs
+
+interpret (FindFilesByPath p next) = do
+  fs <- runPredicate (LFindFilesByPath p)
+  next fs
+
+interpret (FindDirsByPath p next) = do
+  fs <- runPredicate (LFindDirsByPath p)
+  next fs
+
+interpret (FindFilesByName n next) = do
+  fs <- runPredicate (LFindFilesByName n)
+  next fs
+
+interpret (FindDirsByName n next) = do
+  fs <- runPredicate (LFindDirsByName n)
+  next fs
+
+interpret (FindFilesByHost n next) = do
+  (hostmap, _) <- lift ask
+  let hostmap' = filter (\((host2, _), _) -> n == host2) hostmap
+  fs <- concat <$> mapM (\(_, ia)  -> interpreter ia LAllFiles) hostmap'
+  next fs
+
+interpret (FindDirsByHost n next) = do
+  (hostmap, _) <- lift ask
+  let hostmap' = filter (\((host2, _), _) -> n == host2) hostmap
+  fs <- concat <$> mapM (\(_, ia)  -> interpreter ia LAllDirs) hostmap'
+  next fs
+
+interpret (FindFilesBySize n next) = do
+  fs <- runPredicate (LFindFilesBySize n)
+  next fs
+
+interpret (FindFilesByModificationTime n next) = do
+  fs <- runPredicate (LFindFilesByModificationTime n)
+  next fs
+
+interpret (FindDirsByModficationTime n next) = do
+  fs <- runPredicate (LFindDirsByModficationTime n)
+  next fs
+
+interpret (Foreach as next) = do
+  a <- lift . lift $ listResultStream as
+  next a
+
+interpret (EvalResultValue a next) = do
   row <- get
-  case evalExpr row a of
-    StringValue s -> next s
-    _ -> error ("FileSystem: not a string")
+  next (evalExpr row a)
 
-interpret (EvalInteger a next) = do
-  row <- get
-  case evalExpr row a of
-    IntValue s -> next (fromIntegral s)
-    _ -> error ("FileSystem: not an integer")
-
-interpret (EvalByteString a next) = do
-  row <- get
-  case evalExpr row a of
-    ByteStringValue s -> next s
-    _ -> error ("FileSystem: not a byte string")
-
-interpret (SetText a b next) = do
-  modify (insert a (StringValue b))
-  next
-
-interpret (SetInteger a b next) = do
-  modify (insert a (IntValue (fromIntegral b)))
-  next
-
-interpret (SetByteString a b next) = do
-  modify (insert a (ByteStringValue b))
+interpret (SetResultValue a b next) = do
+  modify (insert a b)
   next
 
 interpret Stop =
-  lift $ emptyResultStream
+  lift . lift $ emptyResultStream

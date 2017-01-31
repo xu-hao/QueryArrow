@@ -4,16 +4,9 @@ cabal-version:  >=1.2
 build-type:     Simple
 author:         Hao Xu
 
-library
-  hs-source-dirs:  src
-  exposed-modules:
-                   QueryArrow.FileSystem.FileSystem
-                   QueryArrow.FileSystem.Query
-                   QueryArrow.FileSystem.Connection
-                   QueryArrow.FileSystem.ICAT
-                   QueryArrow.FileSystem.Builtin
-                   QueryArrow.FileSystem.Commands
-                   QueryArrow.FileSystem.Utils
+executable QueryArrowRemoteFS
+  hs-source-dirs: src
+  main-is: Main.hs
   build-depends:
                    base >= 4,
                    containers,
@@ -28,6 +21,56 @@ library
                    directory,
                    filemanip,
                    filepath,
+                   unix-compat,
+                   time,
+                   resourcet,
+                   QueryArrow-rpc-common,
+                   network,
+                   log-adapter,
+                   either,
+                   optparse-applicative,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   QueryArrow-common
+  ghc-options:     -Wall -fPIC -threaded
+  other-modules:   QueryArrow.FileSystem.Utils
+                   QueryArrow.FileSystem.Interpreter
+                   QueryArrow.FileSystem.LocalCommands
+                   QueryArrow.FileSystem.Serialization
+                   QueryArrow.FileSystem.Server.Config
+
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   QueryArrow.FileSystem.FileSystem
+                   QueryArrow.FileSystem.Query
+                   QueryArrow.FileSystem.Connection
+                   QueryArrow.FileSystem.ICAT
+                   QueryArrow.FileSystem.Builtin
+                   QueryArrow.FileSystem.Commands
+                   QueryArrow.FileSystem.Utils
+                   QueryArrow.FileSystem.Interpreter
+                   QueryArrow.FileSystem.LocalCommands
+                   QueryArrow.FileSystem.Serialization
+                   QueryArrow.FileSystem.Server.Config
+  build-depends:
+                   base >= 4,
+                   aeson,
+                   containers,
+                   mtl,
+                   transformers,
+                   HDBC,
+                   convertible,
+                   text >= 1.2.1.1,
+                   hslogger,
+                   free,
+                   bytestring,
+                   directory,
+                   filemanip,
+                   filepath,
+                   unix-compat,
                    time,
                    namespace >= 0.1.2.2,
                    lattices,
