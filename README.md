@@ -59,6 +59,16 @@ If built from source, it is `<prefix>/lib/ghc-8.0.1/`. Default `<prefix>` is `/u
 
 If installed debian package, it is `/usr/lib/ghc`.
 
+#### Install Stack
+
+Follow the instructions on this page:
+
+https://docs.haskellstack.org
+
+If you install from Ubuntu repo, make sure you run
+
+    stack upgrade
+
 #### Build QueryArrow
 
     apt-get install postgresql-server-dev-all libsqlite3-dev -y
