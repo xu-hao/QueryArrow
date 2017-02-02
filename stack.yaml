@@ -64,6 +64,9 @@ packages:
     - QueryArrow-cli
     - QueryArrow-filesystem
     - QueryArrow-gen
+    - QueryArrow-trans
+    - QueryArrow-sum
+    - QueryArrow-cache
     - heterogeneous-list
     - log-adapter
 # The following packages have been ignored due to incompatibility with the

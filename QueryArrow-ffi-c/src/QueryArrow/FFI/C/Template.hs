@@ -34,6 +34,10 @@ import QueryArrow.FFI.Auxiliary
 import Data.Maybe (fromMaybe)
 import Data.Map.Strict (lookup)
 import Data.Char (toUpper)
+import Data.Aeson
+import QueryArrow.SQL.HDBC.PostgreSQL
+import Data.Maybe
+import Data.List (find)
 
 functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
@@ -518,17 +522,34 @@ hsDeleteFunction n a = do
     b <- [|processRes $(b0) (const (return ()))|]
     funD fn2 [return (Clause ps (NormalB b) [])]
 
+searchForDBType :: String -> DBTrans -> Maybe DBTrans
+searchForDBType ty trans =
+  if catalog_database_type (db_info trans) == ty
+    then Just trans
+    else case db_plugins trans of
+      Just plugins -> fromJust (find (isJust) (map (searchForDBType ty) plugins))
+      Nothing -> Nothing
+
 getRewritingRules :: String -> IO (([InsertRewritingRule], [InsertRewritingRule], [InsertRewritingRule]), [Pred])
 getRewritingRules path = do
     transinfo <- getConfig path
-    let ps = db_info (head (db_plugins transinfo))
-    db <- makeICATSQLDBAdapter (db_namespace ps) (db_icat ps) (Just "nextid") ()
-    let predmap0 = constructDBPredMap db
-    putStrLn "predicates loaded "
-    print predmap0
-    -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
-    (rewriting, workspace, _) <- getRewriting predmap0 transinfo
-    return (rewriting, Map.elems (allObjects workspace))
+    let trans = db_plugin transinfo
+    let ps = db_info (fromJust (searchForDBType "SQL/HDBC/PostgreSQL" trans))
+    let ps2 = db_info (fromJust (searchForDBType "Translation" trans))
+    let fsconf0 = fromJSON (fromJust (db_config ps)) in
+        case fsconf0 of
+          Error err -> error err
+          Success fsconf -> do
+              db <- makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) (Just "nextid") ()
+              let predmap0 = constructDBPredMap db
+              putStrLn "predicates loaded "
+              print predmap0
+              -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
+              case fromJSON (fromJust (db_config ps2)) of
+                Error err -> error err
+                Success fsconf2 -> do
+                  (rewriting, workspace, _) <- getRewriting predmap0 fsconf2
+                  return (rewriting, Map.elems (allObjects workspace))
 
 functions :: String -> DecsQ
 functions path = do

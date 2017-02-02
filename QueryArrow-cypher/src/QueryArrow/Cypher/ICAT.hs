@@ -59,8 +59,8 @@ cypherTrans ns preds mappings =
         ] -}
 
 
-makeICATCypherDBAdapter :: String -> [String] -> Neo4jDatabase -> IO (NoConnectionDatabase (GenericDatabase CypherTrans Neo4jDatabase  ))
-makeICATCypherDBAdapter ns [predsPath, mappingsPath] conn = do
+makeICATCypherDBAdapter :: String -> String -> String -> Neo4jDatabase -> IO (NoConnectionDatabase (GenericDatabase CypherTrans Neo4jDatabase  ))
+makeICATCypherDBAdapter ns predsPath mappingsPath conn = do
     preds <- loadPreds predsPath
     mappings <- loadMappings mappingsPath
     let (CypherBuiltIn cypherbuiltin) = cypherBuiltIn (lookupPred ns)

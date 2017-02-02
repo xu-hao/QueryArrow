@@ -18,6 +18,7 @@ library
                    QueryArrow.HTTP.ElasticSearchUtils
   build-depends:
                    base >= 4,
+                   aeson,
                    containers,
                    mtl,
                    transformers,
@@ -58,6 +59,7 @@ library
                    conduit-extra,
                    monad-logger,
                    fast-logger,
+                   heterogeneous-list,
                    constraints,
                    lrucache,
                    QueryArrow-common,

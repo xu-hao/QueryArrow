@@ -1,17 +1,22 @@
-{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings, TypeFamilies #-}
+{-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings, TypeFamilies, DeriveGeneric #-}
 module QueryArrow.SQL.HDBC.PostgreSQL where
 
-import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import QueryArrow.SQL.HDBC
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.SQL.ICAT
 import QueryArrow.Config
 import QueryArrow.SQL.SQL
+import Data.Aeson
+import GHC.Generics
+import QueryArrow.Plugin
+import QueryArrow.Data.Heterogeneous.List
+import QueryArrow.DB.AbstractDatabaseList
+import Data.Maybe
 
 import Database.HDBC.PostgreSQL
 
-newtype PostgreSQLDB = PostgreSQLDB ICATDBConnInfo
+newtype PostgreSQLDB = PostgreSQLDB ICATDBConnInfo2
 
 instance IDatabase2 (GenericDatabase  SQLTrans PostgreSQLDB) where
     newtype ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB) = P HDBCDBConnection
@@ -33,7 +38,28 @@ instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB))
 
 instance IDatabase (GenericDatabase  SQLTrans PostgreSQLDB) where
 
-getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
-getDB ps =
-    let db = makeICATSQLDBAdapter (db_namespace ps) (db_icat ps) (Just "nextid") (PostgreSQLDB ps) in
-        AbstractDatabase <$> db
+
+instance FromJSON ICATDBConnInfo2
+instance ToJSON ICATDBConnInfo2
+
+data ICATDBConnInfo2 = ICATDBConnInfo2 {
+  db_name :: String,
+  db_namespace :: String,
+  db_host :: String,
+  db_password :: String,
+  db_port :: Int,
+  db_username :: String,
+  db_predicates :: String,
+  db_sql_mapping :: String
+} deriving (Show, Generic)
+
+data PostgreSQLPlugin = PostgreSQLPlugin
+
+instance Plugin PostgreSQLPlugin MapResultRow where
+  getDB _ ps (AbstractDBList HNil) =
+    let fsconf0 = fromJSON (fromJust (db_config ps)) in
+        case fsconf0 of
+          Error err -> error err
+          Success fsconf -> do
+              db <- makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) (Just "nextid") (PostgreSQLDB fsconf)
+              return (AbstractDatabase db)

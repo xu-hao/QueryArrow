@@ -10,7 +10,9 @@ library
                    QueryArrow.SQL.HDBC.PostgreSQL
   build-depends:
                    base >= 4,
+                   aeson,
                    HDBC-postgresql,
+                   heterogeneous-list,
                    QueryArrow-common,
                    QueryArrow-sql-common
   ghc-options:     -Wall -fPIC

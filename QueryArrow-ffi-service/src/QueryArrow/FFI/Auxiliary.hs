@@ -14,6 +14,8 @@ import Control.Monad.Error.Class (throwError)
 import Control.Monad.IO.Class (liftIO)
 import Data.Int
 import QueryArrow.FFI.Service
+import Data.Text.Encoding
+import qualified Data.ByteString.UTF8 as BSUTF8
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -808000
@@ -92,10 +94,12 @@ getAllStringArrayResult svc session vars form params = do
 resultValueToInt :: ResultValue -> Int64
 resultValueToInt (IntValue i) = fromIntegral i
 resultValueToInt (StringValue i) = read (Text.unpack i)
+resultValueToInt (ByteStringValue i) = read (BSUTF8.toString i)
 
 resultValueToString :: ResultValue -> Text
 resultValueToString (IntValue i) = Text.pack (show i)
 resultValueToString (StringValue i) = i
+resultValueToString (ByteStringValue i) = decodeUtf8 i
 resultValueToString Null = Text.pack ""
 
 

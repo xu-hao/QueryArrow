@@ -1,10 +1,12 @@
+{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances #-}
 module QueryArrow.SQL.HDBC.CockroachDB where
 
-import QueryArrow.FO.Data
 import QueryArrow.DB.DB
-import QueryArrow.Config
+import QueryArrow.Plugin
 
 import QueryArrow.SQL.HDBC.PostgreSQL as PostgreSQL
 
-getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
-getDB = PostgreSQL.getDB
+data CockroachDBPlugin = CockroachDBPlugin
+
+instance Plugin CockroachDBPlugin MapResultRow where
+  getDB _ ps adbs = getDB PostgreSQLPlugin ps adbs

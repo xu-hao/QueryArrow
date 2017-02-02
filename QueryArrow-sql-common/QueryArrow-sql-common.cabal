@@ -13,6 +13,7 @@ library
                    QueryArrow.SQL.HDBC
   build-depends:
                    base >= 4,
+                   aeson,
                    containers,
                    mtl,
                    transformers,

@@ -10,7 +10,9 @@ library
                    QueryArrow.SQL.HDBC.Sqlite3
   build-depends:
                    base >= 4,
+                   aeson,
                    HDBC-sqlite3,
+                   heterogeneous-list,
                    QueryArrow-common,
                    QueryArrow-sql-common
   ghc-options:     -Wall -fPIC

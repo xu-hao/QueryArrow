@@ -1,20 +1,43 @@
+{-# LANGUAGE DeriveGeneric, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, GADTs #-}
 module QueryArrow.ElasticSearch.ElasticSearch where
 
--- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
-
 import Data.Char (toLower)
+import Data.Aeson
+import GHC.Generics
 
-import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import QueryArrow.Config
+import QueryArrow.Plugin
+import QueryArrow.Data.Heterogeneous.List
+import QueryArrow.DB.AbstractDatabaseList
 
 import qualified QueryArrow.ElasticSearch.Query as ESQ
 import QueryArrow.ElasticSearch.ICAT
 
-import Debug.Trace
+import Data.Maybe
 
-getDB :: ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
-getDB ps = do
-    let conn = ESQ.ElasticSearchConnInfo (db_host ps) (db_port ps) (map toLower (db_name ps))
-    db <-  makeElasticSearchDBAdapter (db_namespace ps) (db_icat ps) conn
-    return (    AbstractDatabase db)
+instance FromJSON ICATDBConnInfo2
+instance ToJSON ICATDBConnInfo2
+
+data ICATDBConnInfo2 = ICATDBConnInfo2 {
+  db_name :: String,
+  db_namespace :: String,
+  db_host :: String,
+  db_password :: String,
+  db_port :: Int,
+  db_username :: String,
+  db_predicates :: String,
+  db_sql_mapping :: String
+} deriving (Show, Generic)
+
+data ElasticSearchPlugin = ElasticSearchPlugin
+
+instance Plugin ElasticSearchPlugin MapResultRow where
+  getDB _ ps (AbstractDBList HNil) =
+    case fromJSON (fromJust (db_config ps)) of
+      Error err -> error err
+      Success fsconf -> do
+        let conn = ESQ.ElasticSearchConnInfo (db_host fsconf) (db_port fsconf) (map toLower (db_name fsconf))
+        db <-  makeElasticSearchDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) conn
+        return (    AbstractDatabase db)
+  getDB _ _ _ = error "ElasticSearchPlugin: config error"

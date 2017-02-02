@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, UndecidableInstances, FlexibleContexts, RankNTypes, GADTs #-}
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
@@ -12,6 +12,8 @@ import QueryArrow.Translation
 import qualified QueryArrow.Translation as T
 import QueryArrow.ListUtils
 import QueryArrow.Cache
+import QueryArrow.DB.AbstractDatabaseList
+import QueryArrow.Plugin
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (foldrWithKey, fromList, Map, lookup, elems)
@@ -31,17 +33,21 @@ import qualified QueryArrow.Remote.NoTranslation.TCP.TCP as Remote.TCP
 import qualified QueryArrow.FileSystem.FileSystem as FileSystem
 import QueryArrow.Data.Heterogeneous.List
 
-type DBMap = Map String (ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula))
+type DBMap = Map String (AbstractPlugin MapResultRow)
 
-getDB :: DBMap -> ICATDBConnInfo -> IO (AbstractDatabase MapResultRow Formula)
-getDB dbMap ps = case lookup (catalog_database_type ps) dbMap of
-    Just getDBFunc -> getDBFunc ps
+getDB2 :: DBMap -> DBTrans -> IO (AbstractDatabase MapResultRow Formula)
+getDB2 dbMap (DBTrans ps plugins) = case lookup (catalog_database_type ps) dbMap of
+    Just (AbstractPlugin getDBFunc) -> do
+      dbs <- case plugins of
+                  Nothing -> return (AbstractDBList HNil)
+                  Just pluginsx -> getDBs dbMap pluginsx
+      getDB getDBFunc ps dbs
     Nothing -> error ("unimplemented database type " ++ (catalog_database_type ps))
 
 getDBs :: DBMap -> [DBTrans] -> IO (AbstractDBList MapResultRow)
 getDBs _ [] = return (AbstractDBList HNil)
-getDBs dbMap (DBTrans ps : l) = do
-    db0 <- getDB dbMap ps
+getDBs dbMap (transinfo : l) = do
+    db0 <- getDB2 dbMap transinfo
     case db0 of
       AbstractDatabase db -> do
         dbs <- getDBs dbMap l
@@ -50,27 +56,24 @@ getDBs dbMap (DBTrans ps : l) = do
 
 dbMap :: DBMap
 dbMap = fromList [
-    ("SQL/HDBC/PostgreSQL", PostgreSQL.getDB),
-    ("SQL/HDBC/CockroachDB", CockroachDB.getDB),
-    ("SQL/HDBC/Sqlite3", Sqlite3.getDB),
-    ("Cypher/Neo4j", Neo4j.getDB),
-    ("InMemory/EqDB", \ps ->  return (AbstractDatabase (NoConnectionDatabase (InMemory.EqDB (db_name ps) (db_namespace ps))))),
-    ("InMemory/RegexDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.RegexDB (db_name ps) (db_namespace ps))))),
-    ("InMemory/UtilsDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.UtilsDB (db_name ps) (db_namespace ps))))),
-    ("InMemory/TextDB", \ps -> return (AbstractDatabase (NoConnectionDatabase (InMemory.TextDB (db_name ps) (db_namespace ps))))),
-    ("ElasticSearch/ElasticSearch", ElasticSearch.getDB),
-    ("Remote/TCP", Remote.TCP.getDB),
-    ("FileSystem", FileSystem.getDB)
+    ("SQL/HDBC/PostgreSQL", AbstractPlugin PostgreSQL.PostgreSQLPlugin),
+    ("SQL/HDBC/CockroachDB", AbstractPlugin CockroachDB.CockroachDBPlugin),
+    ("SQL/HDBC/Sqlite3", AbstractPlugin Sqlite3.SQLite3Plugin),
+    ("Cypher/Neo4j", AbstractPlugin Neo4j.Neo4jPlugin),
+    ("InMemory/EqDB", AbstractPlugin (InMemory.NoConnectionDatabasePlugin InMemory.EqDB)),
+    ("InMemory/RegexDB", AbstractPlugin (InMemory.NoConnectionDatabasePlugin InMemory.RegexDB)),
+    ("InMemory/UtilsDB", AbstractPlugin (InMemory.NoConnectionDatabasePlugin InMemory.UtilsDB)),
+    ("InMemory/TextDB", AbstractPlugin (InMemory.NoConnectionDatabasePlugin InMemory.TextDB)),
+    ("InMemory/MapDB", AbstractPlugin (InMemory.NoConnectionDatabasePlugin2 InMemory.MapDB)),
+    ("InMemory/MutableMapDB", AbstractPlugin (InMemory.NoConnectionDatabasePlugin2 InMemory.StateMapDB)),
+    ("ElasticSearch/ElasticSearch", AbstractPlugin ElasticSearch.ElasticSearchPlugin),
+    ("Remote/TCP", AbstractPlugin Remote.TCP.RemoteTCPPlugin),
+    ("FileSystem", AbstractPlugin FileSystem.FileSystemPlugin),
+    ("Cache", AbstractPlugin CachePlugin),
+    ("Translation", AbstractPlugin TransPlugin)
     ];
 
 
 transDB :: String -> TranslationInfo -> IO (AbstractDatabase MapResultRow Formula)
-transDB name transinfo = do
-    dbs <- getDBs dbMap (db_plugins transinfo)
-    case dbs of
-        AbstractDBList dbs -> do
-            let sumdb = SumDB "sum" dbs
-            tdb <- T.transDB name (AbstractDatabase sumdb) transinfo
-            case tdb of
-              AbstractDatabase db ->
-                AbstractDatabase <$> cacheDB name db (Just (max_cc transinfo))
+transDB name transinfo =
+    getDB2 dbMap (db_plugin transinfo)

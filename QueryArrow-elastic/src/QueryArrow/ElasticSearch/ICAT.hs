@@ -20,5 +20,5 @@ esMetaPred ns = Pred (esMetaPredName ns) (PredType ObjectPred [ParamType True Tr
 esMetaPredName :: String -> PredName
 esMetaPredName ns = QPredName ns [] "ES_META"
 
-makeElasticSearchDBAdapter :: String -> [String] -> ESQ.ElasticSearchConnInfo -> IO (NoConnectionDatabase (GenericDatabase ESTrans ElasticSearchDB))
-makeElasticSearchDBAdapter ns _ conn = return (NoConnectionDatabase (GenericDatabase (ESTrans (constructPredTypeMap [esMetaPred ns]) (fromList [(esMetaPredName ns, (pack "ES_META", [pack "obj_id", pack "meta_id", pack "attribute", pack "value", pack "unit"]))])) conn ns [esMetaPred ns]))
+makeElasticSearchDBAdapter :: String -> String -> String -> ESQ.ElasticSearchConnInfo -> IO (NoConnectionDatabase (GenericDatabase ESTrans ElasticSearchDB))
+makeElasticSearchDBAdapter ns _ _ conn = return (NoConnectionDatabase (GenericDatabase (ESTrans (constructPredTypeMap [esMetaPred ns]) (fromList [(esMetaPredName ns, (pack "ES_META", [pack "obj_id", pack "meta_id", pack "attribute", pack "value", pack "unit"]))])) conn ns [esMetaPred ns]))

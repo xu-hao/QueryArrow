@@ -26,6 +26,7 @@ library
                    aeson,
                    hslogger,
                    namespace >= 0.1.2.2,
+                   heterogeneous-list,
                    lattices,
                    semibounded-lattices,
                    QueryArrow-common,

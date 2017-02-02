@@ -30,6 +30,7 @@ library
                    hslogger,
                    lifted-base,
                    constraints,
+                   heterogeneous-list,
                    QueryArrow-common,
                    QueryArrow-rpc-common,
                    template-haskell

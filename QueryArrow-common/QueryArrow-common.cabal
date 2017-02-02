@@ -18,18 +18,17 @@ library
                    QueryArrow.DB.NoPreparedStatement
                    QueryArrow.DB.ParametrizedStatement
                    QueryArrow.DB.ResultStream
+                   QueryArrow.DB.AbstractDatabaseList
                    QueryArrow.ICAT
                    QueryArrow.BuiltIn
                    QueryArrow.QueryPlan
-                   QueryArrow.Sum
-                   QueryArrow.Translation
-                   QueryArrow.Cache
-                   QueryArrow.Rewriting
                    QueryArrow.Logging
                    QueryArrow.Parser
                    QueryArrow.Config
                    QueryArrow.ListUtils
                    QueryArrow.Utils
+                   QueryArrow.Plugin
+                   QueryArrow.Rewriting
   build-depends:
                    base >= 4,
                    containers,

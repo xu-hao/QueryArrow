@@ -15,8 +15,8 @@ import Text.Read
 nextidPred :: [String] -> String -> Pred
 nextidPred nss nextid = Pred (PredName nss nextid) (PredType ObjectPred [ParamType True False True TextType])
 
-makeICATSQLDBAdapter :: String -> [String] -> Maybe String -> a -> IO (GenericDatabase SQLTrans a)
-makeICATSQLDBAdapter ns [predsPath, mappingsPath] nextid conninfo = do
+makeICATSQLDBAdapter :: String -> String -> String -> Maybe String -> a -> IO (GenericDatabase SQLTrans a)
+makeICATSQLDBAdapter ns predsPath mappingsPath nextid conninfo = do
     preds0 <- loadPreds predsPath
     let preds =
           case nextid of

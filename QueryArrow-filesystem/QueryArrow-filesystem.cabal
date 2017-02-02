@@ -72,6 +72,7 @@ library
                    filepath,
                    unix-compat,
                    time,
+                   heterogeneous-list,
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,

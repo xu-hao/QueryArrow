@@ -24,6 +24,9 @@ library
                    QueryArrow-elastic,
                    QueryArrow-remote,
                    QueryArrow-filesystem,
+                   QueryArrow-trans,
+                   QueryArrow-sum,
+                   QueryArrow-cache,
                    heterogeneous-list
   ghc-options:     -Wall -fPIC
   other-modules:

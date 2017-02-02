@@ -1,20 +1,46 @@
 {
-    "db_plugins" : [{
+    "db_plugin" : {
         "db_info" : {
-           "db_port" : 5432,
-           "db_namespace" : "ICAT",
-           "db_name" : "ICAT",
-           "db_password" : "testpassword",
-           "db_host" : "localhost",
-           "db_username" : "irods",
-           "db_icat" : ["../QueryArrow-gen/gen/ICATGen", "../QueryArrow-gen/gen/SQL/ICATGen"],
-           "catalog_database_type" : "SQL/HDBC/PostgreSQL"
-        }
-    }],
+            "db_config" : {
+                "max_cc" : 1024
+            },
+            "qap_name" : "cache",
+            "catalog_database_type" : "Cache"
+        },
+        "db_plugins": [{
+            "db_info" : {
+                "db_config" : {
+                    "rewriting_file_path" : "../QueryArrow-gen/rewriting-plugin-gen.rules",
+                    "include_file_path": ["../QueryArrow-gen"]
+                },
+                "qap_name" : "trans",
+                "catalog_database_type" : "Translation"
+            },
+            "db_plugins": [{
+                "db_info" : {
+                    "qap_name" : "sum",
+                    "catalog_database_type" : "Sum"
+                },
+                "db_plugins" : [{
+                    "db_info" : {
+                        "db_config" : {
+                            "db_port" : 5432,
+                            "db_name" : "ICAT",
+                            "db_password" : "testpassword",
+                            "db_host" : "localhost",
+                            "db_username" : "irods",
+                            "db_predicates" : "../QueryArrow-gen/gen/ICATGen",
+                            "db_namespace" : "ICAT",
+                            "db_sql_mapping" : "../QueryArrow-gen/gen/SQL/ICATGen"
+                        },
+                        "qap_name" : "ICAT",
+                        "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+                    }
+                }]
+            }]
+        }]
+    },
     "server_addr" : "*",
     "server_port" : 12345,
-    "server_protocols" : ["tcp"],
-    "max_cc" : 1024,
-    "rewriting_file_path" : "../QueryArrow-gen/rewriting-plugin-gen.rules",
-    "include_file_path": ["../QueryArrow-gen"]
+    "server_protocols" : ["tcp"]
 }

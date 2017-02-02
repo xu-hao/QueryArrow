@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, PatternSynonyms, DeriveGeneric, RankNTypes, GADTs #-}
 module QueryArrow.InMemory where
 
 import QueryArrow.DB.ResultStream
@@ -8,6 +8,10 @@ import QueryArrow.FO.Utils
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Utils
+import QueryArrow.Plugin
+import QueryArrow.Data.Heterogeneous.List
+import QueryArrow.DB.AbstractDatabaseList
+import QueryArrow.Config
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict ((!), member,   lookup, fromList,  singleton, keysSet)
@@ -22,6 +26,9 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.IORef
 import Data.Text.Encoding
+import Data.Aeson
+import GHC.Generics
+import Data.Maybe
 import Debug.Trace
 
 
@@ -225,7 +232,7 @@ instance INoConnectionDatabase2 UtilsDB where
 
     noConnectionDBStmtExec (UtilsDB _ _) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
 
--- example UtilsDB
+-- example TextDB
 
 data TextDB = TextDB String String
 
@@ -289,3 +296,49 @@ instance INoConnectionDatabase2 TextDB where
 
 
     noConnectionDBStmtExec (TextDB _ _) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
+
+
+
+data ICATDBInfo = ICATDBInfo {
+  db_namespace :: String
+} deriving (Show, Generic)
+
+instance ToJSON ICATDBInfo
+instance FromJSON ICATDBInfo
+
+
+data ICATMapDBInfo = ICATMapDBInfo {
+  db_namespace2 :: String,
+  predicate_name :: String,
+  db_map:: Value
+} deriving (Show, Generic)
+
+instance ToJSON ICATMapDBInfo
+instance FromJSON ICATMapDBInfo
+
+data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ Formula) => NoConnectionDatabasePlugin (String -> String -> db)
+
+instance Plugin (NoConnectionDatabasePlugin db) MapResultRow where
+  getDB (NoConnectionDatabasePlugin db) ps (AbstractDBList HNil) =
+    case fromJSON (fromJust (db_config ps)) of
+      Error err -> error err
+      Success fsconf ->
+        return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace fsconf))))
+
+data NoConnectionDatabasePlugin2 db a = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ Formula) => NoConnectionDatabasePlugin2 (String -> String -> String -> a -> db)
+
+instance Convertible Value (IO a) => Plugin (NoConnectionDatabasePlugin2 db a) MapResultRow where
+  getDB (NoConnectionDatabasePlugin2 db) ps (AbstractDBList HNil) =
+    case fromJSON (fromJust (db_config ps)) of
+      Error err -> error err
+      Success fsconf -> do
+        dbdata <- convert (db_map fsconf)
+        return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace2 fsconf) (predicate_name fsconf) dbdata)))
+
+instance Convertible Value (IO [(ResultValue, ResultValue)]) where
+  safeConvert a = case fromJSON a of
+    Error err -> error err
+    Success b -> Right (return (map (\(a,b) -> (StringValue a, StringValue b)) b))
+
+instance Convertible Value (IO (IORef [(ResultValue, ResultValue)])) where
+  safeConvert a = Right (convert a >>= newIORef)

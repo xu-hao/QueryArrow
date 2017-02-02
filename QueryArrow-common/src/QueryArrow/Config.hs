@@ -1,49 +1,38 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, TemplateHaskell #-}
 module QueryArrow.Config where
 
 import Data.Aeson
+import Data.Aeson.TH
 import GHC.Generics
-import QueryArrow.FO.Data
 
 import qualified Data.ByteString.Lazy as B
 
 -- config info
 
 data DBTrans = DBTrans {
-    db_info :: ICATDBConnInfo
-} deriving (Show, Generic)
+    db_info :: ICATDBConnInfo,
+    db_plugins :: Maybe [DBTrans]
+} deriving (Show)
 
 
 data ICATDBConnInfo = ICATDBConnInfo {
-    db_host :: String,
-    db_password :: String,
-    db_namespace :: String,
-    db_name :: String,
+    qap_name :: String,
     catalog_database_type :: String,
-    db_port :: Int,
-    db_username :: String,
-    db_icat :: [String]
-} deriving (Show, Generic)
+    db_config :: Maybe Value
+} deriving (Show)
 
 data TranslationInfo = TranslationInfo {
-    db_plugins :: [DBTrans],
+    db_plugin :: DBTrans,
     server_addr :: String,
     server_port :: Int,
-    server_protocols :: [String],
-    max_cc :: Integer,
-    rewriting_file_path :: String,
-    include_file_path :: [String]
+    server_protocols :: [String]
 } deriving (Show, Generic)
-
-instance FromJSON ICATDBConnInfo
-instance ToJSON ICATDBConnInfo
 
 instance FromJSON TranslationInfo
 instance ToJSON TranslationInfo
 
-instance FromJSON DBTrans
-instance ToJSON DBTrans
-
+$(deriveJSON defaultOptions{omitNothingFields = True} ''DBTrans)
+$(deriveJSON defaultOptions{omitNothingFields = True} ''ICATDBConnInfo)
 
 getConfig :: FromJSON a => String -> IO a
 getConfig filepath = do

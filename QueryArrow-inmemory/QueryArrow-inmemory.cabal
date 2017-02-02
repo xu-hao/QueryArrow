@@ -10,6 +10,7 @@ library
                    QueryArrow.InMemory
   build-depends:
                    base >= 4,
+                   aeson,
                    containers,
                    mtl,
                    transformers,
@@ -20,6 +21,7 @@ library
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
+                   heterogeneous-list,
                    QueryArrow-common
   ghc-options:     -Wall -fPIC
   other-modules:

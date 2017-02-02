@@ -9,9 +9,8 @@ import QueryArrow.DB.NoConnection
 
 import Control.Monad
 
-makeFileSystemDBAdapter :: String -> [String] -> String -> Int -> FileSystemConnInfo -> IO (NoConnectionDatabase (GenericDatabase FileSystemTrans FileSystemConn))
-makeFileSystemDBAdapter ns (rootDir : hostmap0) host port conninfo = do
-  let hostmap1 = distribute hostmap0
+makeFileSystemDBAdapter :: String -> String -> String -> Int -> [(String, Int, String)] -> FileSystemConnInfo -> IO (NoConnectionDatabase (GenericDatabase FileSystemTrans FileSystemConn))
+makeFileSystemDBAdapter ns rootDir host port hostmap1 conninfo = do
   unless ((host, port, rootDir) `elem` hostmap1) (error "root dir not found for local host")
   let hostmap = map (\(host', port', root') -> ((host', root'), (if host == host'
                                                             then makeLocalInterpreter
@@ -34,8 +33,4 @@ makeFileSystemDBAdapter ns (rootDir : hostmap0) host port conninfo = do
       FileObjectPred ns, DirObjectPred ns,
       NewFileObjectPred ns, NewDirObjectPred ns,
       FileDirPred ns, DirDirPred ns,
-      FileContentRangePred ns])) where
-        distribute [] = []
-        distribute [_] = error "cannot distribute one element"
-        distribute [_, _] = error "cannot distribute two elements"
-        distribute (a:b:c:t) = (a,read b,c) : distribute t
+      FileContentRangePred ns]))
