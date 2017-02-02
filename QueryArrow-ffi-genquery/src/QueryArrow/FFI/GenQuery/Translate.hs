@@ -106,6 +106,7 @@ translateGenQueryColumnToPredicate  col =
           "USER_NAME" -> "USER_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "USER_ZONE" -> "USER_ZONE_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "USER_COMMENT" -> "USER_COMMENT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "USER_TYPE" -> "USER_TYPE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           -- ACCESS (coll""
           "COLL_ACCESS_NAME" -> "TOKN_TOKEN_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "COLL_TOKEN_NAMESPACE" -> "TOKN_TOKEN_NAMESPACE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
