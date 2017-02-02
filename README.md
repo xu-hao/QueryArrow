@@ -156,7 +156,7 @@ An exmaple is
                             "db_namespace" : "Text",
                         },
                         "qap_name" : "",
-                        "catalog_database_type" : "InMemory/TextDB"
+                        "catalog_database_type" : "InMemory/Text"
                     }
                 }]
             }]
