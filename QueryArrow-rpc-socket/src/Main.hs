@@ -126,7 +126,7 @@ runtcpmulti ps = do
         case protocol of
             "tcp" -> do
                 infoM "RPC_TCP_SERVER" ("listening at " ++ addr ++ ":" ++ show port)
-                (AbstractDatabase tdb) <- transDB "tdb" ps
+                (AbstractDatabase tdb) <- transDB ps
                 let sockHandler sock = forever $ do
                         (handle, clientAddr, clientPort) <- accept sock
                         infoM "RPC_TCP_SERVER" ("client connected from " ++ addr ++ " " ++ show port)
@@ -139,7 +139,7 @@ runtcpmulti ps = do
                 sockHandler sock
             "unix domain socket" -> do
                 infoM "RPC_TCP_SERVER" ("listening at " ++ addr)
-                (AbstractDatabase tdb) <- transDB "tdb" ps
+                (AbstractDatabase tdb) <- transDB ps
                 let sockHandler sock = forever $ do
                         (clientsock, addr) <- NS.accept sock
                         infoM "RPC_TCP_SERVER" ("client connected from " ++ show addr)

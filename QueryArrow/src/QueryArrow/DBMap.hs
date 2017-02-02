@@ -2,25 +2,15 @@
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
-import QueryArrow.DB.NoConnection
 import QueryArrow.FO.Data
-import QueryArrow.Rewriting
 import QueryArrow.Config
-import QueryArrow.Utils
-import QueryArrow.Sum
 import QueryArrow.Translation
-import qualified QueryArrow.Translation as T
-import QueryArrow.ListUtils
 import QueryArrow.Cache
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Plugin
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (foldrWithKey, fromList, Map, lookup, elems)
-import Control.Monad.Except
-import Data.Namespace.Namespace
-import Data.Monoid
-import System.Log.Logger
+import Data.Map.Strict (fromList, Map, lookup)
 
 -- import Plugins
 import qualified QueryArrow.SQL.HDBC.PostgreSQL as PostgreSQL
@@ -54,8 +44,8 @@ getDBs dbMap (transinfo : l) = do
         case dbs of
           AbstractDBList dbs -> return (AbstractDBList (HCons db dbs))
 
-dbMap :: DBMap
-dbMap = fromList [
+dbMap0 :: DBMap
+dbMap0 = fromList [
     ("SQL/HDBC/PostgreSQL", AbstractPlugin PostgreSQL.PostgreSQLPlugin),
     ("SQL/HDBC/CockroachDB", AbstractPlugin CockroachDB.CockroachDBPlugin),
     ("SQL/HDBC/Sqlite3", AbstractPlugin Sqlite3.SQLite3Plugin),
@@ -74,6 +64,6 @@ dbMap = fromList [
     ];
 
 
-transDB :: String -> TranslationInfo -> IO (AbstractDatabase MapResultRow Formula)
-transDB name transinfo =
-    getDB2 dbMap (db_plugin transinfo)
+transDB :: TranslationInfo -> IO (AbstractDatabase MapResultRow Formula)
+transDB transinfo =
+    getDB2 dbMap0 (db_plugin transinfo)

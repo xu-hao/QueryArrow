@@ -52,7 +52,7 @@ runtcpmulti ps = do
         case protocol of
             "tcp" -> do
                 infoM "REMOTE_TCP_SERVER" ("listening on local port " ++ show port)
-                (AbstractDatabase tdb) <- transDB "tdb" ps
+                (AbstractDatabase tdb) <- transDB ps
                 let sockHandler sock = forever $ do
                         (handle, clientAddr, clientPort) <- accept sock
                         infoM "REMOTE_TCP_SERVER" ("client connected from " ++ clientAddr ++ " " ++ show clientPort)
@@ -60,7 +60,7 @@ runtcpmulti ps = do
                 bracket (listenOn (PortNumber (fromIntegral port))) NS.close sockHandler
             "unix domain socket" -> do
                 infoM "REMOTE_UDS_SERVER" ("listening at " ++ addr)
-                (AbstractDatabase tdb) <- transDB "tdb" ps
+                (AbstractDatabase tdb) <- transDB ps
                 let sockHandler sock = forever $ do
                         (clientsock, clientaddr) <- NS.accept sock
                         infoM "REMOTE_UDS_SERVER" ("client connected from " ++ show clientaddr)

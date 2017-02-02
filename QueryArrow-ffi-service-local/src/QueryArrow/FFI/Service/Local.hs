@@ -33,7 +33,7 @@ localService = QueryArrowService {
     infoM "Plugin" ("loading configuration from " ++ path)
     ps <- getConfig path
     infoM "Plugin" ("configuration: " ++ show ps)
-    db <- transDB "plugin" ps
+    db <- transDB ps
     case db of
         AbstractDatabase db -> do
             conn <- dbOpen db

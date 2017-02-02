@@ -48,7 +48,7 @@ instance Yesod App
 runQuery :: (MonadIO m, MonadHandler m) => String -> TranslationInfo -> m Value
 runQuery method ps = do
     liftIO $ infoM "QA" ("REST client connected")
-    (AbstractDatabase tdb) <- liftIO $ transDB "tdb" ps
+    (AbstractDatabase tdb) <- liftIO $ transDB ps
     liftIO $ infoM "QA" ("database loaded")
     (_, conn) <- allocate (dbOpen tdb) dbClose
     t0 <- liftIO $ getCurrentTime

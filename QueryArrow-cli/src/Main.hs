@@ -155,7 +155,7 @@ runUDS addr showhdr hdr qu params = do
 run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
 run2 showhdr hdr query params ps = do
     let vars = map Var hdr
-    AbstractDatabase tdb <- transDB "tdb" ps
+    AbstractDatabase tdb <- transDB ps
     conn <- dbOpen tdb
     ret <- runEitherT $ run (fromList vars) query params tdb conn
     case ret of
