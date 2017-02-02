@@ -34,7 +34,9 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         SqlInt64 _ -> IntValue (fromSql sqlvalue)
                         SqlInteger _ -> IntValue (fromSql sqlvalue)
                         SqlString _ -> StringValue (fromSql sqlvalue)
-                        SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
+                        SqlByteString _ -> StringValue (fromSql sqlvalue)
+                        -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
+                        -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
                         SqlNull -> Null
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
