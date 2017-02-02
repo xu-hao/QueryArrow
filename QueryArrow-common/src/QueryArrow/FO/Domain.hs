@@ -2,59 +2,57 @@ module QueryArrow.FO.Domain where
 
 import QueryArrow.FO.Data
 
-import Data.Map.Strict (Map, lookup, empty, intersectionWith, unionWith, unionsWith, insert, delete)
+import Data.Map.Strict (lookup)
 import Prelude hiding (lookup)
-import Data.Set (Set, singleton, fromList)
-import Data.Maybe (fromMaybe)
+import Data.Set (Set, fromList)
 import Control.Monad.Except (throwError)
 import Algebra.Lattice
-import Algebra.SemiBoundedLattice
 
--- Int must be nonnegative
-data DomainSize = Unbounded
-                | Bounded deriving (Eq, Show)
-
-instance Num DomainSize where
-    Unbounded + _ = Unbounded
-    _ + Unbounded = Unbounded
-    Bounded + Bounded = Bounded
-    Unbounded * _ = Unbounded
-    _ * Unbounded = Unbounded
-    Bounded * Bounded = Bounded
-    abs a = a
-    signum _ = Bounded
-    negate _ = error "negate: DomainSize cannot be negated"
-    fromInteger i = if i < 0 then error ("DomainSize::fromInteger:" ++ show i) else Bounded
-
-instance Ord DomainSize where
-    Unbounded <= Unbounded = True
-    Bounded <= Unbounded = True
-    Unbounded <= Bounded = False
-    Bounded <= Bounded = True
-
-
--- dmul :: DomainSize -> DomainSize -> DomainSize
--- dmul (Infinite a) (Infinite b) = liftM2 (*)
-
-dmaxs :: [DomainSize] -> DomainSize
-dmaxs = maximum . (Bounded : )
-
--- estimate domain size (upper bound)
-type DomainSizeMap = Map Var DomainSize
-
-lookupDomainSize :: Var -> DomainSizeMap -> DomainSize
-lookupDomainSize var map1 = case lookup var map1 of
-    Nothing -> Unbounded
-    Just a -> a
-
--- anything DomainSize value is less than or equal to Unbounded so we can use union and intersection operations on DomainSizeMaps
-mmins :: [DomainSizeMap] -> DomainSizeMap
-mmins = unionsWith min
-
-mmin :: DomainSizeMap -> DomainSizeMap -> DomainSizeMap
-mmin = unionWith min
-mmaxs :: [DomainSizeMap] -> DomainSizeMap
-mmaxs = foldl1 (intersectionWith max) -- must have at least one
+-- -- Int must be nonnegative
+-- data DomainSize = Unbounded
+--                 | Bounded deriving (Eq, Show)
+--
+-- instance Num DomainSize where
+--     Unbounded + _ = Unbounded
+--     _ + Unbounded = Unbounded
+--     Bounded + Bounded = Bounded
+--     Unbounded * _ = Unbounded
+--     _ * Unbounded = Unbounded
+--     Bounded * Bounded = Bounded
+--     abs a = a
+--     signum _ = Bounded
+--     negate _ = error "negate: DomainSize cannot be negated"
+--     fromInteger i = if i < 0 then error ("DomainSize::fromInteger:" ++ show i) else Bounded
+--
+-- instance Ord DomainSize where
+--     Unbounded <= Unbounded = True
+--     Bounded <= Unbounded = True
+--     Unbounded <= Bounded = False
+--     Bounded <= Bounded = True
+--
+--
+-- -- dmul :: DomainSize -> DomainSize -> DomainSize
+-- -- dmul (Infinite a) (Infinite b) = liftM2 (*)
+--
+-- dmaxs :: [DomainSize] -> DomainSize
+-- dmaxs = maximum . (Bounded : )
+--
+-- -- estimate domain size (upper bound)
+-- type DomainSizeMap = Map Var DomainSize
+--
+-- lookupDomainSize :: Var -> DomainSizeMap -> DomainSize
+-- lookupDomainSize var map1 = case lookup var map1 of
+--     Nothing -> Unbounded
+--     Just a -> a
+--
+-- -- anything DomainSize value is less than or equal to Unbounded so we can use union and intersection operations on DomainSizeMaps
+-- mmins :: [DomainSizeMap] -> DomainSizeMap
+-- mmins = unionsWith min
+--
+-- mmin :: DomainSizeMap -> DomainSizeMap -> DomainSizeMap
+-- mmin = unionWith min
+-- mmaxs :: [DomainSizeMap] -> DomainSizeMap
+-- mmaxs = foldl1 (intersectionWith max) -- must have at least one
 
 type DomainSizeFunction a = Set Var -> a -> Set Var
 
@@ -63,7 +61,7 @@ isVar (VarExpr _) = True
 isVar _ = False
 
 toDSP :: PredTypeMap -> DomainSizeFunction Atom
-toDSP ptm vars a@(Atom p args) =
+toDSP ptm vars (Atom p args) =
   (case lookup p ptm of
     Nothing -> error ("toDSP: cannot find predicate " ++ show p)
     Just pt -> fromList (map extractVar (filter isVar (outputComponents pt args)))) \/ vars
@@ -106,7 +104,7 @@ instance DeterminedVars Formula where
 
 
 toOutputVarsFunction :: PredTypeMap -> OutputVarsFunction Atom
-toOutputVarsFunction ptm vars a@(Atom p args) =
+toOutputVarsFunction ptm vars (Atom p args) =
   case lookup p ptm of
     Nothing -> error ("toOutputVarsFunction: cannot find predicate " ++ show p)
     Just pt ->

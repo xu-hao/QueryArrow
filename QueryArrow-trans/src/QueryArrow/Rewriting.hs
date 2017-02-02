@@ -13,13 +13,10 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Class
 import Control.Monad.Except
-import Data.List ((\\), nub)
+import Data.List (nub)
 import Data.Set (Set, toAscList)
 import qualified Data.Set as Set
-import Algebra.Lattice
 import Algebra.SemiBoundedLattice
--- import Debug.Trace
-
 
 type Pattern = Atom
 
@@ -29,7 +26,7 @@ instance Show InsertRewritingRule where
   show (InsertRewritingRule pat form) = serialize pat ++ " -> " ++ serialize form
 
 instance Typecheck InsertRewritingRule where
-  typecheck r@(InsertRewritingRule pat@(Atom pn args) form) =
+  typecheck r@(InsertRewritingRule (Atom pn args) form) =
     if all isVar args
       then if length (nub args) < length args
         then
@@ -76,7 +73,7 @@ instance Match Atom Atom where
 
 rewriteAtomic1 :: Set Var -> Atom -> [InsertRewritingRule] -> NewEnv (Maybe Formula)
 rewriteAtomic1 _ _ [] = return Nothing
-rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
+rewriteAtomic1 ext a2 (InsertRewritingRule p form : rs) =
     case match p a2 of
         Nothing -> rewriteAtomic1 ext a2 rs
         Just sub -> do
@@ -90,30 +87,30 @@ rewriteAtomic1 ext a2 ((InsertRewritingRule p form) : rs) =
 rewrite1 :: Set Var ->[InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrite1 ext  qr  ir dr form0 =
     case form0 of
-        (FAtomic a2) -> do
+        FAtomic a2 -> do
             res <- rewriteAtomic1 ext a2 qr
             return (case res of
                 Nothing -> form0
                 Just form -> form)
-        (FChoice disj1 disj2) ->
-            (FChoice <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2)
-        (FPar disj1 disj2) ->
-            (FPar <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2)
-        (FSequencing conj1 conj2) ->
-            (FSequencing <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2)
-        (FOne) ->
+        FChoice disj1 disj2 ->
+            FChoice <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
+        FPar disj1 disj2 ->
+            FPar <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
+        FSequencing conj1 conj2 ->
+            FSequencing <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2
+        FOne ->
             return FOne
-        (FZero) ->
+        FZero ->
             return FZero
-        (FInsert lit@(Lit s a)) -> do
+        FInsert lit@(Lit s a) -> do
             res <- rewriteAtomic1 ext a (case s of
                             Pos -> ir
                             Neg -> dr)
             return (case res of
                         Nothing -> FInsert lit
                         Just form -> form)
-        (Aggregate agg form) ->
-            (Aggregate agg <$> rewrite1 ext  qr ir dr form)
+        Aggregate agg form ->
+            Aggregate agg <$> rewrite1 ext  qr ir dr form
 
 rewrites    :: Int -> Set Var -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
 rewrites n ext  rules  ir dr form | n < 0     = error "maximum number of rewrites reached"

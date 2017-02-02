@@ -148,11 +148,11 @@ transDB name sumdb transinfo = do
                         then
                             let pred0 = Pred key predtype
                                 params = map (\i -> VarExpr (Var ("var" ++ show i))) [0..length paramTypes - 1]
-                                atom = Atom key params
+                                atom0 = Atom key params
                                 atom1 = Atom pn params in
                                 ((if null (outputOnlyComponents predtype params)
-                                  then ([InsertRewritingRule atom (FAtomic atom1)], [InsertRewritingRule atom (FInsert (Lit Pos atom1))], [InsertRewritingRule atom (FInsert (Lit Neg atom1))])
-                                  else ([InsertRewritingRule atom (FAtomic atom1)], [], [])) <> rules0', pred0 : exportedpreds')
+                                  then ([InsertRewritingRule atom0 (FAtomic atom1)], [InsertRewritingRule atom0 (FInsert (Lit Pos atom1))], [InsertRewritingRule atom0 (FInsert (Lit Neg atom1))])
+                                  else ([InsertRewritingRule atom0 (FAtomic atom1)], [], [])) <> rules0', pred0 : exportedpreds')
                         else
                             (rules0', pred1 : exportedpreds')) (([], [], []), []) exportmap
             -- trace (intercalate "\n" (map show (exports))) $ return ()
@@ -161,8 +161,8 @@ transDB name sumdb transinfo = do
             unless (null repeats) $ error ("more than one export for predicates " ++ show repeats)
             let rules1@(qr, ir, dr) = rules0 <> rewriting
             let checkPatterns rules = do
-                    let repeats = findRepeats (map (\(InsertRewritingRule (Atom p _) _) -> p) rules)
-                    unless (null repeats) $ error ("more than one definition for predicates " ++ show repeats)
+                    let repeats1 = findRepeats (map (\(InsertRewritingRule (Atom p _) _) -> p) rules)
+                    unless (null repeats1) $ error ("more than one definition for predicates " ++ show repeats1)
             checkPatterns qr
             checkPatterns ir
             checkPatterns dr

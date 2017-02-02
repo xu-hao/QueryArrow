@@ -104,7 +104,7 @@ checkVarType v (ParamType pk inp out t) = do
         lift $ modify (insert v (ParamType pk True False t') *** id)
 
 unbounded :: VarTypeMap -> Set Var -> Set Var
-unbounded vtm  = Set.filter (\var -> case lookup var vtm of
+unbounded vtm  = Set.filter (\var0 -> case lookup var0 vtm of
                                         Nothing -> True
                                         Just (ParamType _ False _ _) -> True
                                         _ -> False)
@@ -156,7 +156,7 @@ instance Typecheck Aggregator where
     let rvars = Set.fromList vars
     let ub = unbounded vtm rvars
     unless (null ub) $ throwError ("typecheck: return unbounded vars " ++ intercalate ", " (map serialize (Set.toAscList ub)) ++ " dvars = " ++ show vtm )
-    let vtm' = foldl' (\vtm' var -> delete var vtm') vtm vars
+    let vtm' = foldl' (\vtm0 var0 -> delete var0 vtm0) vtm vars
     lift $ modify (const vtm' *** id)
   typecheck  (Summarize cols _) = do
     vtml <- mapM (\(v, s) ->

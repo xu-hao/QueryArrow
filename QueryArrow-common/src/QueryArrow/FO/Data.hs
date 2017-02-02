@@ -78,7 +78,7 @@ class FreeVars a where
 
 instance FreeVars Expr where
     freeVars (CastExpr _ e) = freeVars e
-    freeVars (VarExpr var) = Set.singleton var
+    freeVars (VarExpr var0) = Set.singleton var0
     freeVars (IntExpr _) = bottom
     freeVars (StringExpr _) = bottom
     freeVars (PatternExpr _) = bottom
@@ -127,8 +127,8 @@ class Unify a where
     unify :: a -> a -> Maybe Substitution
 
 instance Unify Expr where
-    unify (VarExpr var) e = Just (Map.singleton var e)
-    unify e (VarExpr var) = Just (Map.singleton var e)
+    unify (VarExpr var0) e = Just (Map.singleton var0 e)
+    unify e (VarExpr var0) = Just (Map.singleton var0 e)
     unify _ _ = Nothing
 
 instance (Unify a, Subst a) => Unify [a] where
@@ -267,7 +267,7 @@ predNameMatches _ _ = False
 
 constructPredTypeMap :: [Pred] -> PredTypeMap
 constructPredTypeMap =
-  fromList . (map (\(Pred pn pt) -> (pn, pt)))
+  fromList . map (\(Pred pn pt) -> (pn, pt))
 
 instance Key String where
 
@@ -312,10 +312,10 @@ class Serialize a where
     serialize :: a -> String
 
 instance Serialize Atom where
-    serialize (Atom name args) = (predNameToString name) ++ "(" ++ intercalate "," (map serialize args) ++ ")"
+    serialize (Atom name args) = predNameToString name ++ "(" ++ intercalate "," (map serialize args) ++ ")"
 
 instance Serialize Expr where
-    serialize (VarExpr var) = serialize var
+    serialize (VarExpr var0) = serialize var0
     serialize (IntExpr i) = show i
     serialize (StringExpr s) = show s
     serialize (PatternExpr p) = show p
@@ -323,8 +323,10 @@ instance Serialize Expr where
     serialize (CastExpr t v) = serialize v ++ " " ++ serialize t
 
 instance Serialize CastType where
-    serialize TextType = "text"
-    serialize NumberType = "integer"
+    serialize TextType = "Text"
+    serialize NumberType = "Integer"
+    serialize ByteStringType = "ByteString"
+    serialize (RefType ty) = "ref " ++ ty
     serialize (TypeVar v) = v
 
 instance Serialize Var where
@@ -377,22 +379,22 @@ class New a b where
 
 newtype StringWrapper = StringWrapper String
 instance New Expr Var where
-    new var = VarExpr <$> new (VarExpr var)
+    new var0 = VarExpr <$> new (VarExpr var0)
 
 instance New String StringWrapper where
-    new (StringWrapper var) = do
+    new (StringWrapper var0) = do
         (vidmap, vars) <- get
         let findVN vid =
-                let vn = var ++ if vid == negate 1 then "" else show vid in
+                let vn = var0 ++ if vid == negate 1 then "" else show vid in
                     if vn `elem` vars
                         then findVN (vid + 1)
                         else (vn, vid)
-        let (vn, vid) = findVN (fromMaybe (negate 1) (lookup var vidmap))
-        put (insert var (vid + 1) vidmap, vars)
+        let (vn, vid) = findVN (fromMaybe (negate 1) (lookup var0 vidmap))
+        put (insert var0 (vid + 1) vidmap, vars)
         return vn
 
 instance New Var Var where
-    new (Var var) = Var <$> new (StringWrapper var)
+    new (Var var0) = Var <$> new (StringWrapper var0)
 instance New Expr Expr where
     new expr = VarExpr <$> new expr
 
@@ -451,7 +453,7 @@ instance Subst Atom where
     subst s (Atom pred' args) = Atom pred' (subst s args)
 
 extractVar :: Expr -> Var
-extractVar (VarExpr var) = var
+extractVar (VarExpr var0) = var0
 extractVar _ = error "this is not a var expr"
 
 instance Subst Var where
@@ -623,12 +625,12 @@ fpar :: [Formula] -> Formula
 fpar = foldl (.|.) FZero
 
 notE :: Formula -> Formula
-notE a =
-    Aggregate Not a
+notE =
+    Aggregate Not
 
 existsE :: Formula -> Formula
-existsE a =
-    Aggregate Exists a
+existsE =
+    Aggregate Exists
 
 var :: String -> Expr
 var = VarExpr . Var
@@ -674,7 +676,7 @@ typeOf (IntValue _) = NumberType
 typeOf (StringValue _) = TextType
 typeOf (ByteStringValue _) = ByteStringType
 typeOf (RefValue reftype _ _) = RefType reftype
-typeOf (Null) = error "typeOf: null value"
+typeOf Null = error "typeOf: null value"
 
 instance Num ResultValue where
     IntValue a + IntValue b = IntValue (a + b)
@@ -682,14 +684,3 @@ instance Num ResultValue where
 
 instance Fractional ResultValue where
     IntValue a / IntValue b = IntValue (a `quot` b)
-
--- instance Convertible ResultValue Expr where
---     safeConvert (StringValue s) = Right (StringExpr s)
---     safeConvert (IntValue i) = Right (IntExpr i)
---     safeConvert Null = Right (NullExpr)
---     safeConvert v = Left (ConvertError (show v) "ResultValue" "Expr" "")
---
--- instance Convertible Expr ResultValue where
---     safeConvert (StringExpr s) = Right (StringValue s)
---     safeConvert (IntExpr i) = Right (IntValue i)
---     safeConvert v = Left (ConvertError (show v) "Expr" "ResultValue" "")

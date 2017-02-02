@@ -1,5 +1,5 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
-   RankNTypes, FlexibleContexts, GADTs, DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, OverloadedStrings,
+   RankNTypes, FlexibleContexts, GADTs #-}
 module QueryArrow.Utils where
 
 import QueryArrow.DB.ResultStream
@@ -11,18 +11,13 @@ import Prelude  hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys)
 import qualified Data.Map.Strict as M
 import Data.List ((\\), intercalate, transpose)
-import Data.Convertible
 import Control.Monad.Catch
 import Data.Maybe
 import Data.Tree
 
 import Data.Namespace.Namespace
 
--- instance Convertible MapResultRow (Map Var Expr) where
---     safeConvert = Right . M.map convert
-
-
-intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow
+intResultStream :: (Monad m) => Int -> ResultStream m MapResultRow
 intResultStream i = return (insert (Var "i") (IntValue i) empty)
 
 -- map from predicate name to database names
@@ -40,7 +35,7 @@ constructPredDBMap = foldr addPredFromDBToMap empty where
         addPredFromDBToMap :: AbstractDatabase row form -> PredDBMap -> PredDBMap
         addPredFromDBToMap (AbstractDatabase db) predmap = foldr addPredToMap predmap preds where
             dbname = getName db
-            addPredToMap thepred = alter alterValue  thepred
+            addPredToMap thepred = alter alterValue thepred
             alterValue Nothing = Just [dbname]
             alterValue (Just dbnames) = Just (dbname : dbnames)
             preds = getPreds db
@@ -71,7 +66,7 @@ pprint2 :: Bool -> [String] -> [Map String String] -> String
 pprint2 showhdr vars rows =
   pprint3 showhdr (vars, map (\row -> map (g row) vars) rows) where
     g::Map String String ->String->  String
-    g row var  = case lookup var row of
+    g row var0  = case lookup var0 row of
         Nothing -> "null"
         Just e -> e
 
@@ -82,9 +77,9 @@ pprint3 showhdr (vars, rows) = (if showhdr then join vars ++ "\n" else "") ++ in
             m2 = transpose m
             collen = map (maximumd 0 . map length) m
             m = map f [0..length vars-1]
-            f var = map (g var) rows
+            f var0 = map (g var0) rows
             g::Int->  [String] -> String
-            g var row = row !! var
+            g var0 row = row !! var0
             pad n s
                 | length s < n  = s ++ replicate (n - length s) ' '
                 | otherwise     = s
@@ -94,20 +89,20 @@ pprint showhdr vars rows =
     pprint2 showhdr (map unVar vars) (map (mapKeys unVar . M.map show) rows)
 
 evalExpr :: MapResultRow -> Expr -> ResultValue
-evalExpr row (StringExpr s) = StringValue s
-evalExpr row (IntExpr s) = IntValue s
+evalExpr _ (StringExpr s) = StringValue s
+evalExpr _ (IntExpr s) = IntValue s
 evalExpr row (VarExpr v) = case lookup v row of
     Nothing -> Null
     Just r -> r
-evalExpr row expr = error ("evalExpr: unsupported expr " ++ show expr)
+evalExpr _ expr = error ("evalExpr: unsupported expr " ++ show expr)
 
 showPredMap :: PredMap -> String
 showPredMap workspace =
   let show3 (k,a) = (case k of
                           Nothing -> ""
-                          Just k -> k) ++ (case a of
+                          Just k2 -> k2) ++ (case a of
                                     Nothing -> ""
-                                    Just a -> ":" ++ show a)
+                                    Just a2 -> ":" ++ show a2)
   in
       drawTree (fmap show3 (toTree workspace))
 
@@ -120,4 +115,4 @@ samePredAndKey _ _ _ = False
 unionPred :: PredTypeMap -> [Atom] -> [Atom] -> [Atom]
 unionPred ptm as1 as2 =
     as1 ++ filter (not . samePredAndKeys ptm as1) as2 where
-        samePredAndKeys ptm as1 atom = any (samePredAndKey ptm atom) as1
+        samePredAndKeys ptm0 as0 atom0 = any (samePredAndKey ptm0 atom0) as0
