@@ -1,12 +1,11 @@
 {-# LANGUAGE GADTs, StandaloneDeriving, MultiParamTypeClasses, DeriveGeneric, FlexibleInstances #-}
 module QueryArrow.FileSystem.LocalCommands where
 
-import QueryArrow.DB.DB
+import QueryArrow.FO.Data
 import Data.ByteString (ByteString)
 
 import System.FilePath ((</>), equalFilePath, takeDirectory, takeFileName, pathSeparator)
 import Data.Time.Clock
-import Data.Convertible
 import GHC.Generics
 
 data Stats = Stats {isDir :: Bool} deriving Generic
@@ -34,12 +33,13 @@ fsDir file = if equalFilePath [pathSeparator] (fRelP file)
 
 fsfileName :: File -> String
 fsfileName file = takeFileName (fRelP file)
-instance Convertible File ResultValue where
-  safeConvert (File host root path) = Right (RefValue [host, root] path)
 
-instance Convertible ResultValue File where
-  safeConvert (RefValue [host, root] path) = Right (File host root path)
-  safeConvert _ = Left (ConvertError "" "" "" "")
+fileToResultValue :: String -> File -> ResultValue
+fileToResultValue ty (File host root path ) = RefValue ty [host, root] path
+
+resultValueToFile :: ResultValue -> File
+resultValueToFile (RefValue _ [host, root] path) = File host root path
+resultValueToFile _ = error ""
 
 data LocalizedFSCommand2 where
    L2CopyFile :: String -> String -> LocalizedFSCommand2

@@ -18,8 +18,8 @@ import Data.Tree
 
 import Data.Namespace.Namespace
 
-instance Convertible MapResultRow (Map Var Expr) where
-    safeConvert = Right . M.map convert
+-- instance Convertible MapResultRow (Map Var Expr) where
+--     safeConvert = Right . M.map convert
 
 
 intResultStream :: (Functor m, Monad m) => Int -> ResultStream m MapResultRow

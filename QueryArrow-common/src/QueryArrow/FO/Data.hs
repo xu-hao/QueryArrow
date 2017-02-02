@@ -16,6 +16,7 @@ import Data.Namespace.Path
 import Data.Namespace.Namespace
 import Algebra.Lattice
 import Control.Monad (foldM)
+import Data.ByteString (ByteString)
 
 -- predicate kinds
 data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
@@ -661,3 +662,34 @@ instance SubstPred a => SubstPred [a] where
 
 -- predicate map
 type PredMap = Namespace String Pred
+
+type Location = [String]
+
+
+-- result value
+data ResultValue = StringValue T.Text | IntValue Int | ByteStringValue ByteString | RefValue String Location String | Null deriving (Eq , Ord, Show, Read)
+
+typeOf :: ResultValue -> CastType
+typeOf (IntValue _) = NumberType
+typeOf (StringValue _) = TextType
+typeOf (ByteStringValue _) = ByteStringType
+typeOf (RefValue reftype _ _) = RefType reftype
+typeOf (Null) = error "typeOf: null value"
+
+instance Num ResultValue where
+    IntValue a + IntValue b = IntValue (a + b)
+    fromInteger i = IntValue (fromInteger i)
+
+instance Fractional ResultValue where
+    IntValue a / IntValue b = IntValue (a `quot` b)
+
+-- instance Convertible ResultValue Expr where
+--     safeConvert (StringValue s) = Right (StringExpr s)
+--     safeConvert (IntValue i) = Right (IntExpr i)
+--     safeConvert Null = Right (NullExpr)
+--     safeConvert v = Left (ConvertError (show v) "ResultValue" "Expr" "")
+--
+-- instance Convertible Expr ResultValue where
+--     safeConvert (StringExpr s) = Right (StringValue s)
+--     safeConvert (IntExpr i) = Right (IntValue i)
+--     safeConvert v = Left (ConvertError (show v) "Expr" "ResultValue" "")

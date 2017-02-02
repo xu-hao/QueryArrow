@@ -6,7 +6,7 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cwhere, creturn) where
 
-import QueryArrow.FO.Data (Serialize(..), New(..), Sign(..), Var(..), PredName, PredTypeMap, NewEnv, Formula(..), Atom(..), Lit(..), Expr(..), CastType(..), Aggregator(..), registerVars, FreeVars(..), runNew, layeredF, StringWrapper(..))
+import QueryArrow.FO.Data (ResultValue(..), Serialize(..), New(..), Sign(..), Var(..), PredName, PredTypeMap, NewEnv, Formula(..), Atom(..), Lit(..), Expr(..), CastType(..), Aggregator(..), registerVars, FreeVars(..), runNew, layeredF, StringWrapper(..))
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
 import QueryArrow.ListUtils
@@ -675,7 +675,7 @@ instance Convertible ResultValue CypherExpr where
     safeConvert (StringValue i) = Right (CypherStringConstExpr i)
     safeConvert (Null) = Right (CypherNullExpr)
     safeConvert (ByteStringValue bs) = Left (ConvertError "" "" "" "")
-    safeConvert (RefValue _ _) = Left (ConvertError "" "" "" "")
+    safeConvert (RefValue _ _ _) = Left (ConvertError "" "" "" "")
 
 instance Convertible Expr CypherExpr where
     safeConvert (IntExpr i) = Right (CypherIntConstExpr i)

@@ -3,20 +3,15 @@ module QueryArrow.SQL.HDBC where
 
 import Prelude hiding (lookup)
 import QueryArrow.DB.ParametrizedStatement
-import QueryArrow.SQL.SQL
 import QueryArrow.DB.DB
-import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
-import QueryArrow.Utils
 
 import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
 import Control.Applicative ((<$>))
-import Data.Map.Strict (empty, insert, (!), lookup, Map)
-import qualified Data.Map.Strict as M
+import Data.Map.Strict (empty, insert, lookup)
 import System.Log.Logger
-import Data.Text (pack)
 import Data.Convertible
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
@@ -28,8 +23,8 @@ convertResultValueToSQL (ByteStringValue s) = toSql s
 convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
-convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
-                insert var (case sqlvalue of
+convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
+                insert var0 (case sqlvalue of
                         SqlInt32 _ -> IntValue (fromSql sqlvalue)
                         SqlInt64 _ -> IntValue (fromSql sqlvalue)
                         SqlInteger _ -> IntValue (fromSql sqlvalue)
@@ -39,9 +34,6 @@ convertSQLToResult vars sqlvalues = foldl (\row (var, sqlvalue) ->
                         -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
                         SqlNull -> Null
                         _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
-
-instance Convertible MapResultRow MapResultRow where
-  safeConvert = Right
 
 instance IPSDBStatement HDBCStatement where
         type ParameterType HDBCStatement = MapResultRow

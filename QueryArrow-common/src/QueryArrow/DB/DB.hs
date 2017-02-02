@@ -18,37 +18,12 @@ import Control.Exception (catch, SomeException)
 import QueryArrow.FO.Types
 import Data.ByteString (ByteString)
 
-type Location = [String]
-
--- result value
-data ResultValue = StringValue T.Text | IntValue Int | ByteStringValue ByteString | RefValue Location String | Null deriving (Eq , Ord, Show, Read)
-
-instance Num ResultValue where
-    IntValue a + IntValue b = IntValue (a + b)
-    fromInteger i = IntValue (fromInteger i)
-
-instance Fractional ResultValue where
-    IntValue a / IntValue b = IntValue (a `quot` b)
-
-instance Convertible ResultValue Expr where
-    safeConvert (StringValue s) = Right (StringExpr s)
-    safeConvert (IntValue i) = Right (IntExpr i)
-    safeConvert Null = Right (NullExpr)
-    safeConvert v = Left (ConvertError (show v) "ResultValue" "Expr" "")
-
-instance Convertible Expr ResultValue where
-    safeConvert (StringExpr s) = Right (StringValue s)
-    safeConvert (IntExpr i) = Right (IntValue i)
-    safeConvert v = Left (ConvertError (show v) "Expr" "ResultValue" "")
-
-typeOf :: ResultValue -> CastType
-typeOf (IntValue _) = NumberType
-typeOf (StringValue _) = TextType
-typeOf (ByteStringValue _) = ByteStringType
-typeOf (Null) = error "typeOf: null value"
-
 -- result row
 type MapResultRow = Map Var ResultValue
+
+instance Convertible MapResultRow MapResultRow where
+  safeConvert = Right
+
 
 instance IResultRow MapResultRow where
     type ElemType MapResultRow = ResultValue
@@ -57,23 +32,6 @@ instance IResultRow MapResultRow where
                                                         Just rv -> insert var rv map2) empty vars2
     ext v map1 = fromMaybe (error ("cannot find key " ++ show v)) (lookup v map1)
     ret = singleton
-
-class SubstituteResultValue a where
-    substResultValue :: MapResultRow -> a -> a
-
-instance SubstituteResultValue Expr where
-    substResultValue varmap expr@(VarExpr var) = case lookup var varmap of
-        Nothing -> expr
-        Just res -> convert res
-    substResultValue _ expr = expr
-
-instance SubstituteResultValue Atom where
-    substResultValue varmap (Atom thesign theargs) = Atom thesign newargs where
-        newargs = map (substResultValue varmap) theargs
-instance SubstituteResultValue Lit where
-    substResultValue varmap (Lit thesign theatom) = Lit thesign newatom where
-        newatom = substResultValue varmap theatom
-
 
 -- query
 

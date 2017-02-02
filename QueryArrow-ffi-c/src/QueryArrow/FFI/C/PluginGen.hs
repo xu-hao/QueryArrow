@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.PluginGen where
 
-import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), var, (@@), (@@+), (@@-))
+import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
 import QueryArrow.DB.ResultStream

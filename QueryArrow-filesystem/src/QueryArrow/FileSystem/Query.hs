@@ -67,38 +67,38 @@ data FileContent = FileContent File
 data DirContent = DirContent File
 
 instance Convertible FileObject ResultValue where
-  safeConvert (NewFileObject  n) = Right (RefValue ["*"] n)
-  safeConvert (ExistingFileObject file) = safeConvert file
+  safeConvert (NewFileObject  n) = Right (RefValue "FileObject" ["*"] n)
+  safeConvert (ExistingFileObject file) = Right (fileToResultValue "FileObject" file)
 
 instance Convertible ResultValue FileObject where
-  safeConvert (RefValue ["*"] s) =
+  safeConvert (RefValue "FileObject" ["*"] s) =
     Right (NewFileObject  s)
   safeConvert file =
-    ExistingFileObject <$> safeConvert file
+    Right (ExistingFileObject (resultValueToFile file))
 
 instance Convertible DirObject ResultValue where
-  safeConvert (NewDirObject  n) = Right (RefValue ["*"] n)
-  safeConvert (ExistingDirObject file) = safeConvert file
+  safeConvert (NewDirObject  n) = Right (RefValue "DirObject" ["*"] n)
+  safeConvert (ExistingDirObject file) = Right (fileToResultValue "DirObject" file)
 
 instance Convertible ResultValue DirObject where
-  safeConvert (RefValue ["*"] s) =
+  safeConvert (RefValue "DirObject" ["*"] s) =
     Right (NewDirObject  s)
   safeConvert file =
-    ExistingDirObject <$> safeConvert file
+    Right (ExistingDirObject (resultValueToFile file))
 
 instance Convertible FileContent ResultValue where
-  safeConvert (FileContent file) = safeConvert file
+  safeConvert (FileContent file) = Right (fileToResultValue "FileContent" file)
 
 instance Convertible ResultValue FileContent where
   safeConvert file =
-    FileContent <$> safeConvert file
+    Right (FileContent (resultValueToFile file))
 
 instance Convertible DirContent ResultValue where
-  safeConvert (DirContent file) = safeConvert file
+  safeConvert (DirContent file) = Right (fileToResultValue "DirContent" file)
 
 instance Convertible ResultValue DirContent where
   safeConvert file =
-    DirContent <$> safeConvert file
+    Right (DirContent (resultValueToFile file))
 
 dirObjectPath :: DirObject -> FSProgram File
 dirObjectPath o =

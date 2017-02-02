@@ -17,6 +17,7 @@ import qualified Database.Neo4j.Cypher as C
 import Database.Neo4j (withAuthConnection)
 import qualified Data.HashMap.Strict as M
 import Data.ByteString.Char8(pack)
+import Data.Text.Encoding
 import qualified Data.Text as T
 import Data.Aeson.Types as A
 import Data.Int
@@ -31,31 +32,31 @@ import System.Log.Logger
 type Neo4jConnInfo = (String, Int, String, String)
 type Neo4jDatabase = Neo4jConnInfo
 
-instance Convertible Expr C.ParamValue where
-    safeConvert (IntExpr i) = Right (C.newparam (fromIntegral i :: Int64))
-    safeConvert (StringExpr s) = Right (C.newparam s)
+instance Convertible ResultValue C.ParamValue where
+    safeConvert (IntValue i) = Right (C.newparam (fromIntegral i :: Int64))
+    safeConvert (StringValue s) = Right (C.newparam s)
+    safeConvert (ByteStringValue s) = Right (C.newparam (decodeUtf8 s))
     safeConvert e = Left (ConvertError (show e) "Expr" "ParamValue" "unsupported param value expr type")
 
 instance Convertible ([Var], [A.Value]) MapResultRow where
-    safeConvert (vars, values) = Right (foldl (\row (var, value) ->
-                insert var (case value of
+    safeConvert (vars, values) = Right (foldl (\row (var0, value) ->
+                insert var0 (case value of
                         A.Number n -> case floatingOrInteger n of
                             Left r -> error ("floating not supported")
                             Right i -> IntValue (fromIntegral i)
-                        A.String text -> StringValue (text)
+                        A.String text -> StringValue text
                         A.Null -> StringValue "<null>"
                         _ -> error ("unsupported json value: " ++ show value)) row) empty (zip vars values) )
 
-toCypherParams :: Map Var Expr -> M.HashMap T.Text C.ParamValue
+toCypherParams :: MapResultRow -> M.HashMap T.Text C.ParamValue
 toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert v) m) M.empty
 
 instance INoConnectionDatabase2 (GenericDatabase CypherTrans Neo4jDatabase ) where
         type NoConnectionRowType (GenericDatabase CypherTrans Neo4jDatabase ) = MapResultRow
         type NoConnectionQueryType (GenericDatabase CypherTrans Neo4jDatabase ) = CypherQuery
-        noConnectionDBStmtExec :: (GenericDatabase CypherTrans Neo4jDatabase ) -> CypherQuery -> DBResultStream MapResultRow -> DBResultStream MapResultRow
+        noConnectionDBStmtExec :: GenericDatabase CypherTrans Neo4jDatabase -> CypherQuery -> DBResultStream MapResultRow -> DBResultStream MapResultRow
         noConnectionDBStmtExec (GenericDatabase  _  (host, port, username, password) _ _) stmt@(CypherQuery vars _ _) rs = do
-                row <- rs
-                let args = convert row
+                args <- rs
                 resp <- liftIO $ withAuthConnection (pack host) port (pack username, pack password) $ do
                     liftIO $ infoM "Cypher" (serialize stmt ++ " with " ++ show args)
                     liftIO $ putStrLn ("Cypher: execute " ++ serialize stmt ++ " with " ++ show args)

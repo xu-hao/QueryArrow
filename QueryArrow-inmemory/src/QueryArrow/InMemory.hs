@@ -92,12 +92,12 @@ instance INoConnectionDatabase2 StateMapDB where
         let freevars = freeVars lit
         let add rows1 row = rows1 `union` [row]
         let remove rows1 row = rows1 \\ [row]
-        let arg12 (Lit _ (Atom _ [a,b])) = (convert a, convert b)
-            arg12 _ = error "wrong number of args"
+        let arg12 row1 (Lit _ (Atom _ [a,b])) = (evalExpr row1 a, evalExpr row1 b)
+            arg12 _ _ = error "wrong number of args"
         row1 <- stream
         let rows2 = (case thesign of
                         Pos -> add
-                        Neg -> remove) rows (arg12 (substResultValue row1 lit))
+                        Neg -> remove) rows (arg12 row1 lit)
         liftIO $ writeIORef map1 rows2
         return row1
     noConnectionDBStmtExec (StateMapDB _ _ _ map1) qu stream = error ("dqdb: unsupported Formula " ++ show qu)

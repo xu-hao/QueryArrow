@@ -2,24 +2,26 @@
 
 module QueryArrow.FFI.C.Template where
 
-import QueryArrow.FO.Data (Pred(..), Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), PredType(..), ParamType(..), Serialize(..), constructPredTypeMap, CastType(..))
-import QueryArrow.DB.DB
+import QueryArrow.FO.Data
 import QueryArrow.Rewriting
-import Data.Namespace.Namespace
-import Data.Namespace.Path
 import QueryArrow.Translation
 import QueryArrow.Config
 import QueryArrow.Utils
 import QueryArrow.SQL.ICAT
+import QueryArrow.FFI.Service
+import QueryArrow.FFI.Auxiliary
+import QueryArrow.SQL.HDBC.PostgreSQL
+
+import Data.Namespace.Namespace
+import Data.Namespace.Path
 
 import Prelude hiding (lookup)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Control.Monad.Reader
-import qualified Data.Map.Strict as Map
 import Control.Monad.IO.Class (liftIO)
 import Language.Haskell.TH hiding (Pred)
-import Data.Char (toLower)
+import Data.Char (toLower, toUpper)
 import Foreign.C.String
 import Foreign.Ptr
 import Foreign.Storable
@@ -29,14 +31,10 @@ import Foreign.StablePtr
 import Data.Int
 import Control.Arrow ((***))
 import System.Log.Logger (infoM)
-import QueryArrow.FFI.Service
-import QueryArrow.FFI.Auxiliary
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust, isJust)
 import Data.Map.Strict (lookup)
-import Data.Char (toUpper)
+import qualified Data.Map.Strict as Map
 import Data.Aeson
-import QueryArrow.SQL.HDBC.PostgreSQL
-import Data.Maybe
 import Data.List (find)
 
 functype :: Int -> TypeQ -> TypeQ
@@ -65,16 +63,16 @@ arrayToBuffer buf n txt = do
     pokeArray buf strs
 
 arrayToAllocatedBuffer :: CString -> Int -> Int -> [[Text]] -> IO ()
-arrayToAllocatedBuffer buf n1 n2 txt = do
-    infoM "Plugin" ("arrayToAllocatedBuffer: converting " ++ show txt)
-    zipWithM_ (\i txt -> textToBuffer (plusPtr  buf (n1*i)) n1 txt) [0..n2-1] (take n2 (concat txt))
+arrayToAllocatedBuffer buf n1 n2 txt0 = do
+    infoM "Plugin" ("arrayToAllocatedBuffer: converting " ++ show txt0)
+    zipWithM_ (\i txt -> textToBuffer (plusPtr  buf (n1*i)) n1 txt) [0..n2-1] (take n2 (concat txt0))
 
 arrayToAllocatedBuffer2 :: Ptr CString -> Ptr CInt -> Int -> [[Text]] -> IO ()
-arrayToAllocatedBuffer2 buf buflens n txt = do
+arrayToAllocatedBuffer2 buf buflens n txt0 = do
     lens <- peekArray n buflens
     bufs <- peekArray n buf
     mapM_ (\(txt, ptr, len) -> do
-          textToBuffer ptr (fromIntegral len) txt) (zip3 (take n (concat txt)) bufs lens)
+          textToBuffer ptr (fromIntegral len) txt) (zip3 (take n (concat txt0)) bufs lens)
 
 arrayToAllocateBuffer :: Ptr (Ptr CString) -> Ptr CInt -> [[Text]] -> IO ()
 arrayToAllocateBuffer buf lenbuf txt = do
@@ -226,22 +224,22 @@ hsQueryLongForeign name inputtypes outputtypes = do
             return []
 
 hsQuerySomeForeign :: String -> [Type2] -> [Type2] -> DecsQ
-hsQuerySomeForeign name inputtypes outputtypes = do
+hsQuerySomeForeign name inputtypes _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_some_" ++ name))
     sequence [ForeignD <$> (ExportF CCall ("hs_get_some_" ++ name) (mkName ("hs_get_some_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) ([t| CString -> CInt -> CInt -> IO Int|]))|])]
 
 hsQuerySome2Foreign :: String -> [Type2] -> [Type2] -> DecsQ
-hsQuerySome2Foreign name inputtypes outputtypes = do
+hsQuerySome2Foreign name inputtypes _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_some2_" ++ name))
     sequence [ForeignD <$> (ExportF CCall ("hs_get_some2_" ++ name) (mkName ("hs_get_some2_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) ([t| Ptr CString -> Ptr CInt -> CInt -> IO Int|]))|])]
 
 hsQueryAllForeign :: String -> [Type2] -> [Type2] -> DecsQ
-hsQueryAllForeign name inputtypes outputtypes = do
+hsQueryAllForeign name inputtypes _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_all_" ++ name))
     sequence [ForeignD <$> (ExportF CCall ("hs_get_all_" ++ name) (mkName ("hs_get_all_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) ([t| Ptr (Ptr CString) -> Ptr CInt -> IO Int|]))|])]
 
 hsQueryAll2Foreign :: String -> [Type2] -> [Type2] -> DecsQ
-hsQueryAll2Foreign name inputtypes outputtypes = do
+hsQueryAll2Foreign name _ _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_all2_" ++ name))
     sequence [ForeignD <$> (ExportF CCall ("hs_get_all2_" ++ name) (mkName ("hs_get_all2_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> CInt -> Ptr (Ptr CString) -> Ptr CInt -> IO Int|])]
 
@@ -303,7 +301,7 @@ hsQueryLongFunction n inputtypes outputtypes = do
           return []
 
 hsQuerySomeFunction :: String -> [Type2] -> [Type2] -> DecsQ
-hsQuerySomeFunction n inputtypes outputtypes = do
+hsQuerySomeFunction n inputtypes _ = do
     let fn = mkName ("get_some_" ++ n)
     let fn2 = mkName ("hs_get_some_" ++ n)
     let retn = mkName ("retn")
@@ -328,7 +326,7 @@ hsQuerySomeFunction n inputtypes outputtypes = do
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
 hsQuerySome2Function :: String -> [Type2] -> [Type2] -> DecsQ
-hsQuerySome2Function n inputtypes outputtypes = do
+hsQuerySome2Function n inputtypes _ = do
     let fn = mkName ("get_some_" ++ n)
     let fn2 = mkName ("hs_get_some2_" ++ n)
     let retn = mkName ("retn")
@@ -353,7 +351,7 @@ hsQuerySome2Function n inputtypes outputtypes = do
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
 hsQueryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
-hsQueryAllFunction n inputtypes outputtypes = do
+hsQueryAllFunction n inputtypes _ = do
     let fn = mkName ("get_all_" ++ n)
     let fn2 = mkName ("hs_get_all_" ++ n)
     let retn = mkName ("retn")
@@ -377,7 +375,7 @@ hsQueryAllFunction n inputtypes outputtypes = do
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
 hsQueryAll2Function :: String -> [Type2] -> [Type2] -> DecsQ
-hsQueryAll2Function n inputtypes outputtypes = do
+hsQueryAll2Function n _ _ = do
     let fn = mkName ("get_all2_" ++ n)
     let fn2 = mkName ("hs_get_all2_" ++ n)
     let retn = mkName "retn"
@@ -387,10 +385,7 @@ hsQueryAll2Function n inputtypes outputtypes = do
     let listarg = mkName "listarg"
     let cargs = mkName "cargs"
     let cnargs = mkName "cnargs"
-    let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
-    let argnames = map mkName args
     let ps = [VarP s, VarP p, VarP cargs, VarP cnargs, VarP retn, VarP retlen]
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
     let retp = [|arrayToAllocateBuffer $(varE retn) $(varE retlen)|]
     runIO $ putStrLn ("generating function " ++ show fn2)
     let app = [|$(varE fn) svc session $(varE listarg)|]

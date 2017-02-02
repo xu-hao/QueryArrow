@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor, RankNTypes, GADTs, StandaloneDeriving, MultiParamTypeClasses #-}
 module QueryArrow.FileSystem.Commands (
     File(fHost), fsreplaceFileName, fsfileName, fsRelP, fsDir, fsreplaceRelP,
+    fileToResultValue, resultValueToFile,
     Stats(..), FSProgram,
     stat, fswrite, fsread, fileExists, dirExists, fsfindFilesByPath, fsfindDirsByPath,
     fstruncate, unlinkFile, removeDir, makeFile, makeDir, moveFile, moveDir, fsmodificationTime, fssize, evalResultValue, setResultValue, foreach,
