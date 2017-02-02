@@ -1,0 +1,50 @@
+name:           QueryArrow-trans
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   QueryArrow.Translation
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   aeson,
+                   bytestring,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   array,
+                   conduit-combinators,
+                   conduit,
+                   resourcet,
+                   async,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   regex-tdfa,
+                   lifted-async,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   conduit-extra,
+                   cpphs,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   either,
+                   lrucache,
+                   heterogeneous-list,
+                   log-adapter,
+                   QueryArrow-common
+  ghc-options:     -Wall -fPIC
+  other-modules:
