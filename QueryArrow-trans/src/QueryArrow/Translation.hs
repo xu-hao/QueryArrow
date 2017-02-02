@@ -7,12 +7,12 @@ import QueryArrow.FO.Types
 import QueryArrow.QueryPlan
 import QueryArrow.Rewriting
 import QueryArrow.Config
-import QueryArrow.Parser
 import QueryArrow.Utils
 import QueryArrow.ListUtils
 import QueryArrow.Plugin
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.DB.AbstractDatabaseList
+import QueryArrow.RuleParser
 
 import Prelude hiding (lookup)
 import Data.ByteString.Lazy.UTF8 (toString)

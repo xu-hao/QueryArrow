@@ -28,7 +28,6 @@ library
                    QueryArrow.ListUtils
                    QueryArrow.Utils
                    QueryArrow.Plugin
-                   QueryArrow.Rewriting
   build-depends:
                    base >= 4,
                    containers,

@@ -8,14 +8,14 @@ import QueryArrow.ListUtils
 import QueryArrow.DB.DB
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys, fromList)
+import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys)
 import qualified Data.Map.Strict as M
 import Data.List ((\\), intercalate, transpose)
 import Data.Convertible
 import Control.Monad.Catch
+import Data.Maybe
+import Data.Tree
 
-
-import Data.Namespace.Path
 import Data.Namespace.Namespace
 
 instance Convertible MapResultRow (Map Var Expr) where
@@ -100,3 +100,24 @@ evalExpr row (VarExpr v) = case lookup v row of
     Nothing -> Null
     Just r -> r
 evalExpr row expr = error ("evalExpr: unsupported expr " ++ show expr)
+
+showPredMap :: PredMap -> String
+showPredMap workspace =
+  let show3 (k,a) = (case k of
+                          Nothing -> ""
+                          Just k -> k) ++ (case a of
+                                    Nothing -> ""
+                                    Just a -> ":" ++ show a)
+  in
+      drawTree (fmap show3 (toTree workspace))
+
+samePredAndKey :: PredTypeMap -> Atom -> Atom -> Bool
+samePredAndKey ptm (Atom p1 args1) (Atom p2 args2) | p1 == p2 =
+    let predtype = fromMaybe (error ("samePredAndKey: cannot find predicate " ++ show p1)) (lookup p1 ptm) in
+        keyComponents predtype args1 == keyComponents predtype args2
+samePredAndKey _ _ _ = False
+
+unionPred :: PredTypeMap -> [Atom] -> [Atom] -> [Atom]
+unionPred ptm as1 as2 =
+    as1 ++ filter (not . samePredAndKeys ptm as1) as2 where
+        samePredAndKeys ptm as1 atom = any (samePredAndKey ptm atom) as1
