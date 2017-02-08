@@ -162,9 +162,13 @@ An exmaple is
             }]
         }]
     },
-    "server_addr" : "*",
-    "server_port" : 12345,
-    "server_protocols" : ["tcp"]
+    "servers" :[{
+        "server_protocol" : "service/tcp",
+        "server_config" : {
+            "tcp_server_addr" : "*",
+            "tcp_server_port" : 12345
+        }
+    }]
 }
 ~~~
 
@@ -172,20 +176,17 @@ An exmaple is
 
 QueryArrow provides a CLI command `QueryArrow`.
 
-## QueryArrow Socket-based Server
+## QueryArrow Server
 
-QueryArrow provides a socket based server. The socket can be:
+QueryArrow provides servers.
 
-* unix domain socket
-* tcp socket
+|       |unix domain socket|tcp socket|http|
+|:-----:|:----------------:|:--------:|:--:|
+|service| implemented| implemented | implemented |
+|remote| | implemented| |
+|file system| implemented | implemented | |
 
-The command for starting the server is `QueryArrowSocket`.
-
-## QueryArrow HTTP Server
-
-QueryArrow provides an HTTP based server based on Yesod.
-
-The command for starting the server is `QueryArrowHttp`.
+The command for starting the server is `QueryArrowServer`.
 
 ## Build C++ plugin
 
