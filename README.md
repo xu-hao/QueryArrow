@@ -183,8 +183,8 @@ QueryArrow provides servers.
 |       |unix domain socket|tcp socket|http|
 |:-----:|:----------------:|:--------:|:--:|
 |service| implemented| implemented | implemented |
-|remote| | implemented| |
-|file system| implemented | implemented | |
+|remote| implemented | implemented| |
+|file system|  | implemented | |
 
 The command for starting the server is `QueryArrowServer`.
 
