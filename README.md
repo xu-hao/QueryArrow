@@ -22,7 +22,7 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 |      Sum QAP      |           aggregation          |
 |  Translation QAP  |         policy support         |
 |     Cache QAP     |             caching            |
-|      QAS QAP      |            remoting            |
+|      Remote QAP      |            remoting            |
 |     Regex QAP     |       regular expression       |
 |  Mutable Map QAP  |      in-memory mutable map     |
 | Immutable Map QAP |     in-memory immutable map    |
@@ -178,7 +178,7 @@ QueryArrow provides a CLI command `QueryArrow`.
 
 ## QueryArrow Server
 
-QueryArrow provides servers.
+QueryArrow provides server protocols. The service protocol is used for clients to communicate with QueryArrow. The remote protocol is used by the Remote QAP. The file system protocol is used by the FileSystem QAP
 
 |       |unix domain socket|tcp socket|http|
 |:-----:|:----------------:|:--------:|:--:|
