@@ -538,7 +538,7 @@ getRewritingRules path = do
               db <- makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) (Just "nextid") ()
               let predmap0 = constructDBPredMap db
               putStrLn "predicates loaded "
-              print predmap0
+              -- print predmap0
               -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
               case fromJSON (fromJust (db_config ps2)) of
                 Error err -> error err

@@ -70,7 +70,7 @@ instance TCSubst ParamType where
   tcsubst m (ParamType a b c t) = ParamType a b c (tcsubst m t)
 
 instance TCSubst b => TCSubst (Map a b) where
-  tcsubst  m tvm = Map.map (tcsubst m) tvm
+  tcsubst m tvm = Map.map (tcsubst m) tvm
 
 class FreeTypeVars a where
   freeTypeVars :: a -> Set String

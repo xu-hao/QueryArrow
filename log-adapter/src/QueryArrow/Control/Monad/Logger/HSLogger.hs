@@ -3,7 +3,8 @@ module QueryArrow.Control.Monad.Logger.HSLogger where
 import Control.Monad.Logger
 import System.Log.FastLogger
 import System.Log.Logger
-import qualified Data.ByteString.Char8 as CS
+import qualified Data.Text as T
+import Data.Text.Encoding
 
 
 instance MonadLogger IO where
@@ -14,7 +15,7 @@ instance MonadLogger IO where
                           LevelWarn -> WARNING
                           LevelError -> ERROR
                           LevelOther _ -> NOTICE
-      logM (show logsource) priority (CS.unpack (fromLogStr (toLogStr msg)))
+      logM (show logsource) priority (T.unpack (decodeUtf8 (fromLogStr (toLogStr msg))))
 
 instance MonadLoggerIO IO where
   askLoggerIO = return monadLoggerLog

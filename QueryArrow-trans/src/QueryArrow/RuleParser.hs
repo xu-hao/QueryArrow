@@ -154,7 +154,7 @@ execAction (ImportQualifiedExceptFrom ns prednames) = do
     put (predmap, either (\e->error ("import1: " ++ e)) id workspace', exports,r)
 execAction (ImportQualifiedAllFrom ns) = do
     (predmap, workspace, exports,r) <- get
-    let workspace' = importAllFromNamespaceE ns predmap workspace
+    let workspace' = importQualifiedAllFromNamespaceE ns predmap workspace
     put (predmap, either (\e->error ("import2: " ++ e)) id workspace', exports,r)
 execAction (ImportQualifiedFrom ns prednames) = do
     (predmap, workspace, exports,r) <- get

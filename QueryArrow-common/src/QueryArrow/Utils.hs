@@ -14,6 +14,8 @@ import Data.List ((\\), intercalate, transpose)
 import Control.Monad.Catch
 import Data.Maybe
 import Data.Tree
+import Data.Text (pack, unpack)
+import Data.Text.Encoding
 
 import Data.Namespace.Namespace
 
@@ -94,6 +96,26 @@ evalExpr _ (IntExpr s) = IntValue s
 evalExpr row (VarExpr v) = case lookup v row of
     Nothing -> Null
     Just r -> r
+evalExpr row (CastExpr TextType e) =
+    StringValue (case evalExpr row e of
+        IntValue i -> pack (show i)
+        StringValue s -> s
+        ByteStringValue bs -> decodeUtf8 bs
+        _ -> error "cannot cast")
+evalExpr row (CastExpr ByteStringType e) =
+    ByteStringValue (case evalExpr row e of
+        IntValue i -> encodeUtf8 (pack (show i))
+        StringValue s -> encodeUtf8 s
+        ByteStringValue bs -> bs
+        _ -> error "cannot cast")
+evalExpr row (CastExpr NumberType e) =
+    IntValue (case evalExpr row e of
+        IntValue i -> i
+        StringValue s -> read (unpack s)
+        ByteStringValue bs -> read (unpack (decodeUtf8 bs))
+        _ -> error "cannot cast")
+
+
 evalExpr _ expr = error ("evalExpr: unsupported expr " ++ show expr)
 
 showPredMap :: PredMap -> String

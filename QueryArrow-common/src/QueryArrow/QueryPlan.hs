@@ -552,7 +552,7 @@ execQueryPlan  rs (Exec3 combinedvs stmt stmtshow) =
                         row <- rs
                         liftIO $ infoM "QA" ("current row " ++ show row)
                         liftIO $ infoM "QA" ("execute " ++ stmtshow)
-                        liftIO $ putStrLn ("execute " ++ stmtshow)
+                        -- liftIO $ putStrLn ("execute " ++ stmtshow)
                         row2 <- dbStmtExec stmt0 (pure row)
                         liftIO $ infoM "QA" ("returns row")
                         return (transform combinedvs (row <> row2)){- ) -}

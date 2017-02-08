@@ -100,6 +100,7 @@ resultValueToString :: ResultValue -> Text
 resultValueToString (IntValue i) = Text.pack (show i)
 resultValueToString (StringValue i) = i
 resultValueToString (ByteStringValue i) = decodeUtf8 i
+resultValueToString (RefValue ty loc path) = Text.pack (show loc ++ "/" ++ show path)
 resultValueToString Null = Text.pack ""
 
 

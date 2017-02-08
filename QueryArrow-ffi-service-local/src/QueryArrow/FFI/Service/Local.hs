@@ -23,7 +23,7 @@ data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula 
 localService :: QueryArrowService Session
 localService = QueryArrowService {
   execQuery =  \(Session db conn ) form params -> do
-    liftIO $ putStrLn ("execQuery: " ++ serialize form ++ show params)
+    -- liftIO $ putStrLn ("execQuery: " ++ serialize form ++ show params)
     let (varstinp, varstout) = setToMap (fromList (Map.keys params)) empty
     liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn varstout form varstinp (listResultStream [params]))),
   getAllResult = \(Session db conn ) vars form params -> do

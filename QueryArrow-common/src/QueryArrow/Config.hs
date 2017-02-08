@@ -23,10 +23,16 @@ data ICATDBConnInfo = ICATDBConnInfo {
 
 data TranslationInfo = TranslationInfo {
     db_plugin :: DBTrans,
-    server_addr :: String,
-    server_port :: Int,
-    server_protocols :: [String]
+    servers :: [DBServer]
 } deriving (Show, Generic)
+
+data DBServer = DBServer {
+  server_protocol :: String,
+  server_config :: Maybe Value
+} deriving (Show, Generic)
+
+instance FromJSON DBServer
+instance ToJSON DBServer
 
 instance FromJSON TranslationInfo
 instance ToJSON TranslationInfo

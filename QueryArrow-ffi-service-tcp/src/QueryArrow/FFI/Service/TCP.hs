@@ -12,10 +12,12 @@ import Data.Aeson
 import QueryArrow.FFI.Service
 import GHC.Generics
 import System.IO (Handle)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.Text as T
+import Data.Text.Encoding
 import Control.Monad.Trans.Either (EitherT)
 import Network
 import QueryArrow.FFI.Service.Handle
+import Data.ByteString.Lazy (fromStrict)
 
 data TcpClientConfig = TcpClientConfig {
     tcpServerAddr :: String,
@@ -27,7 +29,7 @@ instance FromJSON TcpClientConfig
 tcpConnect :: String -> EitherT Error IO Handle
 tcpConnect path = do
     liftIO $ infoM "TCP Service" ("parsing configuration from " ++ path)
-    let ps = decode (BS.pack path) :: Maybe TcpClientConfig
+    let ps = decode (fromStrict (encodeUtf8 (T.pack path))) :: Maybe TcpClientConfig
     case ps of
         Nothing -> do
             let msg = "cannot parser json"

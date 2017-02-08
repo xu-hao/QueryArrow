@@ -195,6 +195,10 @@ instance IDatabase1 EqDB where
 instance INoConnectionDatabase2 EqDB where
     type NoConnectionQueryType EqDB = (Set Var, Formula, Set Var)
     type NoConnectionRowType EqDB = MapResultRow
+    noConnectionDBStmtExec (EqDB _ _) (_,  (FAtomic (Atom _ [a, VarExpr b])), env) stream | not (b `Set.member` env) = do
+        row <- stream
+        let aval = evalExpr row a
+        return (singleton b aval)
     noConnectionDBStmtExec (EqDB _ _) (_,  (FAtomic (Atom _ [a, b])), _) stream = do
         row <- stream
         if evalExpr row a == evalExpr row b

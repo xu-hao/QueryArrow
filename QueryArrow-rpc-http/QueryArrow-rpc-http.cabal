@@ -4,9 +4,9 @@ cabal-version:  >=1.2
 build-type:     Simple
 author:         Hao Xu
 
-executable QueryArrowHttp
+library
   hs-source-dirs:  src
-  main-is:         App.hs
+  exposed-modules:         QueryArrow.RPC.Service.Service.HTTP
   build-depends:
                    base >= 4,
                    containers,
@@ -54,5 +54,5 @@ executable QueryArrowHttp
                    QueryArrow-common,
                    QueryArrow,
                    template-haskell
-  ghc-options:     -Wall -fPIC -threaded
+  ghc-options:     -Wall -fPIC
   other-modules:

@@ -4,12 +4,13 @@ cabal-version:  >=1.2
 build-type:     Simple
 author:         Hao Xu
 
-executable QueryArrowSocket
+executable QueryArrowServer
   hs-source-dirs:  src
   main-is:         Main.hs
   build-depends:
                    base >= 4,
                    mtl,
+                   containers,
                    aeson,
                    resourcet,
                    time,
@@ -21,6 +22,16 @@ executable QueryArrowSocket
                    QueryArrow,
                    QueryArrow-rpc-common,
                    QueryArrow-common,
+                   QueryArrow-remote,
+                   QueryArrow-rpc-http,
+                   QueryArrow-filesystem,
                    log-adapter
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
+                    QueryArrow.RPC.Service.FileSystem.TCP
+                    QueryArrow.RPC.Service.Remote.Common
+                    QueryArrow.RPC.Service.Remote.TCP
+                    QueryArrow.RPC.Service.Remote.UDS
+                    QueryArrow.RPC.Service.Service.Common
+                    QueryArrow.RPC.Service.Service.TCP
+                    QueryArrow.RPC.Service.Service.UDS

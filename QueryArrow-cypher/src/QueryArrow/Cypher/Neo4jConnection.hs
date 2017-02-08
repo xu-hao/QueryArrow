@@ -59,7 +59,7 @@ instance INoConnectionDatabase2 (GenericDatabase CypherTrans Neo4jDatabase ) whe
                 args <- rs
                 resp <- liftIO $ withAuthConnection (pack host) port (pack username, pack password) $ do
                     liftIO $ infoM "Cypher" (serialize stmt ++ " with " ++ show args)
-                    liftIO $ putStrLn ("Cypher: execute " ++ serialize stmt ++ " with " ++ show args)
+                    -- liftIO $ putStrLn ("Cypher: execute " ++ serialize stmt ++ " with " ++ show args)
                     C.cypher (T.pack (serialize stmt)) (toCypherParams args)
                 case resp of
                     Left t -> do

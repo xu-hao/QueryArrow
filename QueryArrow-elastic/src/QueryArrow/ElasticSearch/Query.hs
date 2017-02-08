@@ -7,7 +7,6 @@ module QueryArrow.ElasticSearch.Query where
 import Network.HTTP.Conduit hiding (host, port)
 import Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Aeson
 import GHC.Generics
 import QueryArrow.ElasticSearch.Record
@@ -15,6 +14,7 @@ import QueryArrow.ElasticSearch.QueryResult
 import QueryArrow.HTTP.ElasticSearchUtils
 import System.Log.Logger
 import qualified Data.Text as Text
+import Data.Text.Encoding
 
 data ElasticSearchConnInfo = ElasticSearchConnInfo {
     host :: String,
@@ -67,14 +67,14 @@ updateESRecord esci type0 esid rec = putJSON (esConnInfoToUrl esci type0 ++ "/" 
 
 queryBySearch :: ElasticSearchConnInfo -> Text.Text -> ESQuery -> IO (Either String ESQueryResult)
 queryBySearch esci type0 qu = do
-        infoM "ElasticSearch" ("queryBySearch: " ++ BL8.unpack (encode qu) ++ show qu)
+        infoM "ElasticSearch" ("queryBySearch: " ++ Text.unpack (decodeUtf8 (BL.toStrict (encode qu))) ++ show qu)
         resp <- post (esConnInfoToUrl esci type0 ++ "/" ++ "_search") (RequestBodyLBS (encode qu))
-        infoM "ElasticSearch" ("resp: " ++ BL8.unpack resp)
+        infoM "ElasticSearch" ("resp: " ++ Text.unpack (decodeUtf8 (BL.toStrict resp)))
         return (eitherDecode resp)
 
 deleteById :: ElasticSearchConnInfo -> Text.Text -> String -> IO BL.ByteString
 deleteById esci type0 esid = do
     infoM "ElasticSearch" ("deleteById: " ++ esid)
     resp <- delete (esConnInfoToUrl esci type0) esid
-    infoM "ElasticSearch" ("resp: " ++ BL8.unpack resp)
+    infoM "ElasticSearch" ("resp: " ++ Text.unpack (decodeUtf8 (BL.toStrict resp)))
     return resp

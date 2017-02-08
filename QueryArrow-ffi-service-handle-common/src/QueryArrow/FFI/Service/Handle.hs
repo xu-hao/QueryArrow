@@ -20,7 +20,6 @@ import QueryArrow.DBMap
 import QueryArrow.Serialization
 import GHC.Generics
 import System.IO (Handle)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Control.Monad.Trans.Either (EitherT)
 import Network
 

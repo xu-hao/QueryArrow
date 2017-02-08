@@ -83,7 +83,7 @@ instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
                                           typecheck qu
                                           )) (mempty, mempty)) ptm)
       return (case effective of
-              Left errmsg -> Left (errmsg ++ ". can't find effective literals, try reordering the literals: " ++ show qu)
+              Left errmsg -> Left (errmsg ++ ": " ++ serialize qu)
               Right _ -> Right ())
 
 

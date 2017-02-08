@@ -31,30 +31,25 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.DB.DB
 import QueryArrow.DBMap
 import QueryArrow.Config
 
-import Prelude hiding (lookup, length)
-import Control.Monad.Trans.Resource
-import System.Environment
-import Data.Time
-import Control.Monad.Except
-import QueryArrow.Serialization
+import Prelude hiding (lookup)
 import System.Log.Logger
 import QueryArrow.Logging
-import Network
 import QueryArrow.Control.Monad.Logger.HSLogger ()
-import Control.Concurrent
-import QueryArrow.RPC.Message
-import Control.Monad.Trans.Either
-import QueryArrow.RPC.DB
-import System.IO (Handle, IOMode(..))
 import QueryArrow.FO.Data
-import qualified Network.Socket as NS
-import Control.Exception (bracket)
-import System.Directory (removeFile)
-import Options.Applicative
+import Options.Applicative hiding (Success)
+import Data.Maybe
+import Data.Map.Strict
+import QueryArrow.RPC.Service
+import QueryArrow.RPC.Service.Service.TCP
+import QueryArrow.RPC.Service.Service.UDS
+import QueryArrow.RPC.Service.Remote.TCP
+import QueryArrow.RPC.Service.Remote.UDS
+import QueryArrow.RPC.Service.Service.HTTP
+import QueryArrow.RPC.Service.FileSystem.TCP
 
 main::IO()
 main = execParser opts >>= mainArgs where
@@ -67,96 +62,24 @@ mainArgs :: String -> IO ()
 mainArgs arg = do
     setup INFO
     ps <- getConfig arg
-    runtcpmulti ps
+    tdb <- transDB ps
+    runtcpmulti tdb (servers ps)
 
+serviceMap :: Map String AbstractRPCService
+serviceMap = fromList [
+    ("service/tcp", AbstractRPCService ServiceTCPRPCService),
+    ("service/unix domain socket", AbstractRPCService ServiceUDSRPCService),
+    ("service/http", AbstractRPCService ServiceHTTPRPCService),
+    ("remote/tcp", AbstractRPCService RemoteTCPRPCService),
+    ("remote/unix domain socket", AbstractRPCService RemoteUDSRPCService),
+    ("file system/tcp", AbstractRPCService FileSystemRPCService)
+    ]
 
-
-worker :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
-worker handle tdb conn = do
-                t0 <- getCurrentTime
-                req <- receiveMsg handle
-                infoM "RPC_TCP_SERVER" ("received message " ++ show req)
-                (t2, t3, b) <- case req of
-                    Nothing -> do
-                        sendMsg handle (errorSet "cannot parser request")
-                        t2 <- getCurrentTime
-                        t3 <- getCurrentTime
-                        return (t2, t3, False)
-                    Just qs -> do
-                        let qu = qsquery qs
-                            hdr = qsheaders qs
-                            par = qsparams qs
-                        case qu of
-                            Quit -> do -- disconnect when qu field is null
-                                t2 <- getCurrentTime
-                                t3 <- getCurrentTime
-                                return (t2, t3, True)
-                            Static qu -> do
-                                t2 <- getCurrentTime
-                                ret <- runEitherT (run3 hdr qu par tdb conn)
-                                t3 <- getCurrentTime
-                                case ret of
-                                    Left e ->
-                                        sendMsg handle (errorSet e)
-                                    Right rep ->
-                                        sendMsg handle (resultSet rep)
-                                return (t2, t3, False)
-                            Dynamic qu -> do
-                                t2 <- getCurrentTime
-                                ret <- runEitherT (run hdr qu par tdb conn)
-                                t3 <- getCurrentTime
-                                case ret of
-                                    Left e ->
-                                        sendMsg handle (errorSet e)
-                                    Right rep ->
-                                        sendMsg handle (resultSet rep)
-                                return (t2, t3, False)
-                t1 <- getCurrentTime
-                infoM "RPC_TCP_SERVER" (show (diffUTCTime t1 t0) ++ "\npre: " ++ show (diffUTCTime t2 t0) ++ "\nquery: " ++ show (diffUTCTime t3 t2) ++ "\npost: " ++ show (diffUTCTime t1 t3))
-                if b
-                    then return ()
-                    else worker handle tdb conn
-
-runtcpmulti :: TranslationInfo -> IO ()
-runtcpmulti ps = do
-    let addr = server_addr ps
-        port = server_port ps
-        protocols = server_protocols ps
-    mapM_ (\protocol ->
-        case protocol of
-            "tcp" -> do
-                infoM "RPC_TCP_SERVER" ("listening at " ++ addr ++ ":" ++ show port)
-                (AbstractDatabase tdb) <- transDB ps
-                let sockHandler sock = forever $ do
-                        (handle, clientAddr, clientPort) <- accept sock
-                        infoM "RPC_TCP_SERVER" ("client connected from " ++ addr ++ " " ++ show port)
-                        forkIO $ runResourceT $ do
-                            (_, conn) <- allocate (dbOpen tdb) (\db -> do
-                                        dbClose db
-                                        infoM "RPC_TCP_SERVER" ("client disconnected"))
-                            lift $ worker handle tdb conn
-                sock <- listenOn (PortNumber (fromIntegral port))
-                sockHandler sock
-            "unix domain socket" -> do
-                infoM "RPC_TCP_SERVER" ("listening at " ++ addr)
-                (AbstractDatabase tdb) <- transDB ps
-                let sockHandler sock = forever $ do
-                        (clientsock, addr) <- NS.accept sock
-                        infoM "RPC_TCP_SERVER" ("client connected from " ++ show addr)
-                        handle <- NS.socketToHandle clientsock ReadWriteMode
-                        forkIO $ runResourceT $ do
-                            (_, conn) <- allocate (dbOpen tdb) (\db -> do
-                                        dbClose db
-                                        infoM "RPC_TCP_SERVER" ("client disconnected"))
-                            lift $ worker handle tdb conn
-                bracket (do
-                  sock <- NS.socket NS.AF_UNIX NS.Stream NS.defaultProtocol
-                  NS.bind sock (NS.SockAddrUnix addr)
-                  NS.listen sock NS.maxListenQueue
-                  return sock) (\sock -> do
-                      NS.shutdown sock NS.ShutdownBoth
-                      NS.close sock
-                      removeFile addr
-                      infoM "RPC_TCP_SERVER" "sockect shutdown and closed") sockHandler
-            _ ->
-                errorM "RPC_TCP_SERVER" ("unsupported protocol " ++ protocol)) protocols
+runtcpmulti :: AbstractDatabase MapResultRow Formula -> [DBServer] -> IO ()
+runtcpmulti db pss = mapM_ (\ps0 -> do
+    let protocol = server_protocol ps0
+    case lookup protocol serviceMap of
+      Just (AbstractRPCService service) ->
+          startService service db (fromJust (server_config ps0))
+      Nothing ->
+          errorM "RPC_TCP_SERVER" ("unsupported protocol " ++ protocol)) pss

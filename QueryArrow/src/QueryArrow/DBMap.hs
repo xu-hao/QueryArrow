@@ -8,6 +8,7 @@ import QueryArrow.Translation
 import QueryArrow.Cache
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Plugin
+import QueryArrow.Sum
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (fromList, Map, lookup)
@@ -60,7 +61,8 @@ dbMap0 = fromList [
     ("Remote/TCP", AbstractPlugin Remote.TCP.RemoteTCPPlugin),
     ("FileSystem", AbstractPlugin FileSystem.FileSystemPlugin),
     ("Cache", AbstractPlugin CachePlugin),
-    ("Translation", AbstractPlugin TransPlugin)
+    ("Translation", AbstractPlugin TransPlugin),
+    ("Sum", AbstractPlugin SumPlugin)
     ];
 
 

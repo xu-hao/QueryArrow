@@ -35,7 +35,7 @@ hs_gen_query svcptr sessionptr cqu cout ccol crow = do
   svc <- deRefStablePtr svcptr
   session <- deRefStablePtr sessionptr
   qu <- peekCString cqu
-  putStrLn ("genquery = " ++ qu)
+  -- putStrLn ("genquery = " ++ qu)
   let (vars, form) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
                 Right gq -> translateGenQueryToQAL gq
