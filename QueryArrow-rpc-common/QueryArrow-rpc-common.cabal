@@ -23,6 +23,7 @@ library
                    parsec,
                    text,
                    base64-bytestring,
+                   data-msgpack,
                    log-adapter,
                    QueryArrow-common
   ghc-options:     -Wall -fPIC

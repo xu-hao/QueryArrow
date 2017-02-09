@@ -31,7 +31,7 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.DB.DB
 import QueryArrow.DBMap
 import QueryArrow.Config
 
@@ -106,8 +106,8 @@ runTCP  addr port showhdr hdr qu params = do
                 qsheaders = fromList (map Var hdr),
                 qsparams = params
                 }
-  sendMsg handle name
-  rep <- receiveMsg handle
+  sendMsgPack handle name
+  rep <- receiveMsgPack handle
   case rep of
       Just (ResultSet err results) ->
           if null err
@@ -122,7 +122,7 @@ runTCP  addr port showhdr hdr qu params = do
                 qsheaders = mempty,
                 qsparams = mempty
                 }
-  sendMsg handle name2
+  sendMsgPack handle name2
 
 runUDS :: String -> Bool -> [String] -> String -> MapResultRow -> IO ()
 runUDS addr showhdr hdr qu params = do
@@ -134,8 +134,8 @@ runUDS addr showhdr hdr qu params = do
                 qsheaders = fromList (map Var hdr),
                 qsparams = params
                 }
-  sendMsg handle name
-  rep <- receiveMsg handle
+  sendMsgPack handle name
+  rep <- receiveMsgPack handle
   case rep of
       Just (ResultSet err results) ->
           if null err
@@ -150,7 +150,7 @@ runUDS addr showhdr hdr qu params = do
                 qsheaders = mempty,
                 qsparams = mempty
                 }
-  sendMsg handle name2
+  sendMsgPack handle name2
 
 run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
 run2 showhdr hdr query params ps = do

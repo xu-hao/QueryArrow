@@ -18,12 +18,12 @@ import Data.Maybe
 import Network
 import QueryArrow.FileSystem.LocalCommands
 import QueryArrow.FileSystem.Serialization
-import QueryArrow.RPC.Message
-import Data.Aeson
+import QueryArrow.RPC.Message (sendMsgPack, receiveMsgPack)
+import Data.MessagePack
 
 
 data Interpreter = Interpreter {
-  interpreter :: forall a m. (MonadIO m, ToJSON a, FromJSON a) => LocalizedFSCommand a ->  m a
+  interpreter :: forall a m. (MonadIO m, MessagePack a) => LocalizedFSCommand a ->  m a
 }
 
 data Interpreter2 = Interpreter2 {
@@ -221,17 +221,17 @@ bufferSize :: Int
 bufferSize = 4096
 
 sendFile0 :: Handle -> Handle -> String -> Integer -> Integer -> IO ()
-sendFile0 h0 h p s off = do
+sendFile0 h0 h p s off =
   unless (s == off) $ do
       buf <- hGet h0 bufferSize
-      sendMsg h (LocalizedCommandWrapper (LWrite p off buf))
-      Just () <- receiveMsg h
+      sendMsgPack h (LocalizedCommandWrapper (LWrite p off buf))
+      Just () <- receiveMsgPack h
       sendFile0 h0 h p s (off + fromIntegral (BS.length buf))
 
 sendFile :: String -> Handle -> String -> IO ()
 sendFile a h b = do
-  liftIO $ sendMsg h (LocalizedCommandWrapper (LMakeFile b))
-  Just () <- liftIO $ receiveMsg h
+  liftIO $ sendMsgPack h (LocalizedCommandWrapper (LMakeFile b))
+  Just () <- liftIO $ receiveMsgPack h
   s <- getFileSize a
   withFile a ReadMode (\h0 ->
       sendFile0 h0 h b s 0)
@@ -240,15 +240,15 @@ receiveFile0 :: Handle -> Handle -> String -> Integer -> Integer -> IO ()
 receiveFile0 h0 h p s off =
   unless (s == off) $ do
       let n = min (fromIntegral bufferSize) (s - off)
-      sendMsg h (LocalizedCommandWrapper (LRead p off (off + n)))
-      Just buf <- receiveMsg h
+      sendMsgPack h (LocalizedCommandWrapper (LRead p off (off + n)))
+      Just buf <- receiveMsgPack h
       hPut h0 buf
       receiveFile0 h0 h p s (off + fromIntegral (BS.length buf))
 
 receiveFile :: String -> Handle -> String -> IO ()
 receiveFile a h b = do
-  liftIO $ sendMsg h (LocalizedCommandWrapper (LSize b))
-  Just s <- liftIO $ receiveMsg h
+  liftIO $ sendMsgPack h (LocalizedCommandWrapper (LSize b))
+  Just s <- liftIO $ receiveMsgPack h
   withFile a ReadMode (\h0 ->
       receiveFile0 h0 h b s 0)
 
@@ -256,24 +256,24 @@ remoteSendFile0 :: Handle -> String -> Handle -> String -> Integer -> Integer ->
 remoteSendFile0 ha a hb b s off =
   unless (s == off) $ do
       let n = min (fromIntegral bufferSize) (s - off)
-      sendMsg ha (LocalizedCommandWrapper (LRead a off (off + n)))
-      Just buf <- receiveMsg ha
-      sendMsg hb (LocalizedCommandWrapper (LWrite b off buf))
-      Just () <- receiveMsg hb
+      sendMsgPack ha (LocalizedCommandWrapper (LRead a off (off + n)))
+      Just buf <- receiveMsgPack ha
+      sendMsgPack hb (LocalizedCommandWrapper (LWrite b off buf))
+      Just () <- receiveMsgPack hb
       remoteSendFile0 ha a hb b s (off + fromIntegral (BS.length buf))
 
 remoteSendFile :: Handle -> String -> Handle -> String -> IO ()
 remoteSendFile ha a hb b = do
-  liftIO $ sendMsg ha (LocalizedCommandWrapper (LSize a))
-  Just s <- liftIO $ receiveMsg ha
-  liftIO $ sendMsg hb (LocalizedCommandWrapper (LMakeFile b))
-  Just () <- liftIO $ receiveMsg hb
+  liftIO $ sendMsgPack ha (LocalizedCommandWrapper (LSize a))
+  Just s <- liftIO $ receiveMsgPack ha
+  liftIO $ sendMsgPack hb (LocalizedCommandWrapper (LMakeFile b))
+  Just () <- liftIO $ receiveMsgPack hb
   remoteSendFile0 ha a hb b s 0
 
 sendDir :: String -> Handle -> String -> IO ()
 sendDir a h b = do
-  sendMsg h (LocalizedCommandWrapper (LMakeDir b))
-  Just () <- receiveMsg h
+  sendMsgPack h (LocalizedCommandWrapper (LMakeDir b))
+  Just () <- receiveMsgPack h
   files <- listDirectory a
   mapM_ (\n -> do
     bool <- doesFileExist (a </> n)
@@ -285,24 +285,24 @@ sendDir a h b = do
 receiveDir :: String -> Handle -> String -> IO ()
 receiveDir a h b = do
   createDirectory a
-  sendMsg h (LocalizedCommandWrapper (LListDirDir b))
-  Just dirs <- receiveMsg h
+  sendMsgPack h (LocalizedCommandWrapper (LListDirDir b))
+  Just dirs <- receiveMsgPack h
   mapM_ (\(File _ _ dir) ->
     receiveDir (a </> takeFileName dir) h dir) (dirs :: [File])
-  sendMsg h (LocalizedCommandWrapper (LListDirFile b))
-  Just files <- receiveMsg h
+  sendMsgPack h (LocalizedCommandWrapper (LListDirFile b))
+  Just files <- receiveMsgPack h
   mapM_ (\(File _ _ file) ->
     receiveFile (a </> takeFileName file) h file) (files :: [File])
 
 remoteSendDir :: Handle -> String -> Handle -> String -> IO ()
 remoteSendDir ha a hb b = do
-  sendMsg hb (LocalizedCommandWrapper (LMakeDir b))
-  Just () <- receiveMsg hb
-  sendMsg ha (LocalizedCommandWrapper (LListDirDir a))
-  Just dirs <- receiveMsg ha
+  sendMsgPack hb (LocalizedCommandWrapper (LMakeDir b))
+  Just () <- receiveMsgPack hb
+  sendMsgPack ha (LocalizedCommandWrapper (LListDirDir a))
+  Just dirs <- receiveMsgPack ha
   mapM_ (\(File _ _ dir) ->
     remoteSendDir ha dir hb (b </> takeFileName dir)) (dirs :: [File])
-  Just files <- receiveMsg ha
+  Just files <- receiveMsgPack ha
   mapM_ (\(File _ _ file) ->
     remoteSendFile ha file hb (b </> takeFileName file)) (files :: [File])
 
@@ -311,23 +311,23 @@ localToRemoteInterpreter2 (L2CopyFile (a) (b) ) = do
   (_, _, roota, host, port, _) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     sendFile (toAP roota a) h b
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
 localToRemoteInterpreter2 (L2CopyDir (a) (b) ) = do
   (_, _, roota, host, port, root) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     sendDir (toAP roota a) h b
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
 localToRemoteInterpreter2 (L2MoveFile (a) (b)) = do
   (_, _, roota, host, port, _) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     sendFile (toAP roota a) h b
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
   liftIO $ removeFile a
 localToRemoteInterpreter2 (L2MoveDir (a) (b)) = do
   (_, _, roota, host, port, root) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     sendDir (toAP roota a) h b
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
   liftIO $ removeDirectoryRecursive a
 
 remoteToLocalInterpreter2 :: MonadIO m => LocalizedFSCommand2  -> ReaderT (String, Int, String, String, Int, String) m ()
@@ -335,26 +335,26 @@ remoteToLocalInterpreter2 (L2CopyFile (a) (b) ) = do
   (host, port, _, _, _, rootb) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     receiveFile a h (toAP rootb b)
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
 remoteToLocalInterpreter2 (L2CopyDir (a) (b) ) = do
   (host, port, _, _, _, rootb) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     receiveDir a h (toAP rootb b)
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
 remoteToLocalInterpreter2 (L2MoveFile (a) (b)) = do
   (host, port, _, _, _, rootb) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     receiveFile a h (toAP rootb b)
-    sendMsg h (LocalizedCommandWrapper (LUnlinkFile a))
-    Just () <- liftIO $ receiveMsg h
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (LocalizedCommandWrapper (LUnlinkFile a))
+    Just () <- liftIO $ receiveMsgPack h
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
 remoteToLocalInterpreter2 (L2MoveDir (a) (b)) = do
   (host, port, _, _, _, rootb) <- ask
   liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
     receiveDir a h (toAP rootb b)
-    sendMsg h (LocalizedCommandWrapper (LRemoveDir a))
-    Just () <- receiveMsg h
-    sendMsg h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+    sendMsgPack h (LocalizedCommandWrapper (LRemoveDir a))
+    Just () <- receiveMsgPack h
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
 
 remoteToRemoteInterpreter2 :: MonadIO m => LocalizedFSCommand2  -> ReaderT (String, Int, String, String, Int, String) m ()
 remoteToRemoteInterpreter2 (L2CopyFile (a) (b) ) = do
@@ -362,39 +362,39 @@ remoteToRemoteInterpreter2 (L2CopyFile (a) (b) ) = do
   liftIO $ bracket (connectTo hosta (PortNumber (fromIntegral porta))) hClose (\ha -> do
     liftIO $ bracket (connectTo hostb (PortNumber (fromIntegral portb))) hClose (\hb -> do
       remoteSendFile ha a hb b
-      sendMsg ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
-      sendMsg hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
+      sendMsgPack ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
+      sendMsgPack hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
 remoteToRemoteInterpreter2 (L2CopyDir (a) (b) ) = do
   (hosta, porta, _, hostb, portb, _) <- ask
   liftIO $ bracket (connectTo hosta (PortNumber (fromIntegral porta))) hClose (\ha -> do
     liftIO $ bracket (connectTo hostb (PortNumber (fromIntegral portb))) hClose (\hb -> do
       remoteSendDir ha a hb b
-      sendMsg ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
-      sendMsg hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
+      sendMsgPack ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
+      sendMsgPack hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
 remoteToRemoteInterpreter2 (L2MoveFile (a) (b)) = do
   (hosta, porta, _, hostb, portb, _) <- ask
   liftIO $ bracket (connectTo hosta (PortNumber (fromIntegral porta))) hClose (\ha -> do
     liftIO $ bracket (connectTo hostb (PortNumber (fromIntegral portb))) hClose (\hb -> do
       remoteSendFile ha a hb b
-      sendMsg ha (LocalizedCommandWrapper (LUnlinkFile a))
-      Just () <- receiveMsg ha
-      sendMsg ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
-      sendMsg hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
+      sendMsgPack ha (LocalizedCommandWrapper (LUnlinkFile a))
+      Just () <- receiveMsgPack ha
+      sendMsgPack ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
+      sendMsgPack hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
 remoteToRemoteInterpreter2 (L2MoveDir (a) (b)) = do
   (hosta, porta, _, hostb, portb, _) <- ask
   liftIO $ bracket (connectTo hosta (PortNumber (fromIntegral porta))) hClose (\ha -> do
     liftIO $ bracket (connectTo hostb (PortNumber (fromIntegral portb))) hClose (\hb -> do
       remoteSendDir ha a hb b
-      sendMsg ha (LocalizedCommandWrapper (LRemoveDir a))
-      Just () <- receiveMsg ha
-      sendMsg ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
-      sendMsg hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
+      sendMsgPack ha (LocalizedCommandWrapper (LRemoveDir a))
+      Just () <- receiveMsgPack ha
+      sendMsgPack ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
+      sendMsgPack hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
 
-remoteInterpreter :: (MonadIO m, ToJSON a, FromJSON a) => String -> Int -> LocalizedFSCommand a -> m a
+remoteInterpreter :: (MonadIO m, MessagePack a) => String -> Int -> LocalizedFSCommand a -> m a
 remoteInterpreter addr port cmd =
   liftIO $ bracket (connectTo addr (PortNumber (fromIntegral port))) hClose (\h -> do
-    sendMsg h (LocalizedCommandWrapper cmd)
-    fromMaybe (error "remoteInterpreter: receive message error") <$> receiveMsg h)
+    sendMsgPack h (LocalizedCommandWrapper cmd)
+    fromMaybe (error "remoteInterpreter: receive message error") <$> receiveMsgPack h)
 
 makeLocalInterpreter :: String -> Int -> String -> Interpreter
 makeLocalInterpreter host port root = Interpreter (\cmd -> runReaderT (localInterpreter cmd) (host, root))

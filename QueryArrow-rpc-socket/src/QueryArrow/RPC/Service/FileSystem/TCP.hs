@@ -8,7 +8,7 @@ import System.Log.Logger
 import Network
 import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Concurrent
-import QueryArrow.RPC.Message
+import QueryArrow.RPC.Message (sendMsgPack, receiveMsgPack)
 import System.IO (Handle)
 import Data.Aeson
 import Data.Maybe
@@ -20,12 +20,12 @@ import QueryArrow.RPC.Service
 worker3 :: Handle -> Interpreter -> IO ()
 worker3 handle i = do
   t0 <- getCurrentTime
-  req0 <- receiveMsg handle
+  req0 <- receiveMsgPack handle
   infoM "RPC_FS_SERVER" ("received message " ++ show req0)
   case fromMaybe (error "message error") req0 of
     LocalizedCommandWrapper req -> do
       resp <- interpreter i req
-      sendMsg handle resp
+      sendMsgPack handle resp
       t1 <- getCurrentTime
       infoM "RPC_FS_SERVER" (show (diffUTCTime t1 t0))
       worker3 handle i

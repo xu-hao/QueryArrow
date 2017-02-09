@@ -28,7 +28,7 @@ import Data.Map.Strict (insert)
 import Data.Time.Clock
 import Data.Maybe
 import QueryArrow.FileSystem.Interpreter
-import Data.Aeson
+import Data.MessagePack
 
 data FSCommand x where
    DirExists :: File -> (Bool -> x) -> FSCommand x
@@ -179,7 +179,7 @@ evalResultValue expr = liftF (EvalResultValue expr id)
 
 type InterMonad = StateT MapResultRow (ReaderT ([((String, String), Interpreter)], [((String, String, String, String), Interpreter2)]) DBResultStream)
 
-redirect :: (ToJSON a, FromJSON a) => LocalizedFSCommand a -> String -> String -> InterMonad a
+redirect :: (MessagePack a) => LocalizedFSCommand a -> String -> String -> InterMonad a
 redirect cmd hosta roota = do
   (hostmap, _) <- lift ask
   let i = fromMaybe (error "cannot find host or root") (lookup (hosta, roota) hostmap)
@@ -191,7 +191,7 @@ redirect2 cmd hosta roota hostb rootb = do
   let i = fromMaybe (error "cannot find host or root") (lookup (hosta, roota, hostb, rootb) hostmap2)
   interpreter2 i cmd
 
-runPredicate :: (ToJSON a, FromJSON a) => LocalizedFSCommand [a] -> InterMonad [a]
+runPredicate :: (MessagePack a) => LocalizedFSCommand [a] -> InterMonad [a]
 runPredicate predicate = do
   (hostmap, _) <- lift ask
   concat <$> mapM (\(_, ia) -> interpreter ia predicate) hostmap

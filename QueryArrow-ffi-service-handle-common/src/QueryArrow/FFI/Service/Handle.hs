@@ -2,26 +2,18 @@
 
 module QueryArrow.FFI.Service.Handle where
 
-import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)
 import Data.Set (fromList)
 import Data.Text (pack)
-import Control.Exception (SomeException, try)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.IO.Class (liftIO)
-import System.Log.Logger (infoM, errorM)
-import Data.Aeson
 import QueryArrow.FFI.Service
 import QueryArrow.RPC.Message
-import QueryArrow.Config
-import QueryArrow.DBMap
 import QueryArrow.Serialization
-import GHC.Generics
 import System.IO (Handle)
 import Control.Monad.Trans.Either (EitherT)
-import Network
 
 data HandleSession = HandleSession Handle
 
@@ -33,8 +25,8 @@ handleService connect =
                           qsheaders = fromList vars,
                           qsparams = params
                           }
-            liftIO $ sendMsg handle name
-            rep <- liftIO $ receiveMsg handle
+            liftIO $ sendMsgPack handle name
+            rep <- liftIO $ receiveMsgPack handle
             case rep of
                 Just (ResultSet err results) ->
                     if null err
@@ -52,8 +44,8 @@ handleService connect =
                             qsheaders = mempty,
                             qsparams = params
                             }
-              liftIO $ sendMsg handle name
-              rep <- liftIO $ receiveMsg handle
+              liftIO $ sendMsgPack handle name
+              rep <- liftIO $ receiveMsgPack handle
               case rep of
                   Just (ResultSet err results) ->
                       if null err
@@ -73,15 +65,15 @@ handleService connect =
                             qsheaders = mempty,
                             qsparams = mempty
                             }
-              liftIO $ sendMsg handle name2,
+              liftIO $ sendMsgPack handle name2,
             qasCommit = \ (HandleSession handle ) -> do
               let name2 = QuerySet {
                             qsquery = Static [Commit],
                             qsheaders = mempty,
                             qsparams = mempty
                             }
-              liftIO $ sendMsg handle name2
-              rep <- liftIO $ receiveMsg handle
+              liftIO $ sendMsgPack handle name2
+              rep <- liftIO $ receiveMsgPack handle
               case rep of
                   Just (ResultSet err results) ->
                       if null err
@@ -98,8 +90,8 @@ handleService connect =
                             qsheaders = mempty,
                             qsparams = mempty
                             }
-              liftIO $ sendMsg handle name2
-              rep <- liftIO $ receiveMsg handle
+              liftIO $ sendMsgPack handle name2
+              rep <- liftIO $ receiveMsgPack handle
               case rep of
                   Just (ResultSet err results) ->
                       if null err

@@ -16,11 +16,11 @@ import QueryArrow.FO.Data
 worker :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
 worker handle tdb conn = do
                 t0 <- getCurrentTime
-                req <- receiveMsg handle
+                req <- receiveMsgPack handle
                 infoM "RPC_TCP_SERVER" ("received message " ++ show req)
                 (t2, t3, b) <- case req of
                     Nothing -> do
-                        sendMsg handle (errorSet "cannot parser request")
+                        sendMsgPack handle (errorSet "cannot parser request")
                         t2 <- getCurrentTime
                         t3 <- getCurrentTime
                         return (t2, t3, False)
@@ -39,9 +39,9 @@ worker handle tdb conn = do
                                 t3 <- getCurrentTime
                                 case ret of
                                     Left e ->
-                                        sendMsg handle (errorSet e)
+                                        sendMsgPack handle (errorSet e)
                                     Right rep ->
-                                        sendMsg handle (resultSet rep)
+                                        sendMsgPack handle (resultSet rep)
                                 return (t2, t3, False)
                             Dynamic qu -> do
                                 t2 <- getCurrentTime
@@ -49,9 +49,9 @@ worker handle tdb conn = do
                                 t3 <- getCurrentTime
                                 case ret of
                                     Left e ->
-                                        sendMsg handle (errorSet e)
+                                        sendMsgPack handle (errorSet e)
                                     Right rep ->
-                                        sendMsg handle (resultSet rep)
+                                        sendMsgPack handle (resultSet rep)
                                 return (t2, t3, False)
                 t1 <- getCurrentTime
                 infoM "RPC_TCP_SERVER" (show (diffUTCTime t1 t0) ++ "\npre: " ++ show (diffUTCTime t2 t0) ++ "\nquery: " ++ show (diffUTCTime t3 t2) ++ "\npost: " ++ show (diffUTCTime t1 t3))

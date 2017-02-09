@@ -40,6 +40,8 @@ library
                    semibounded-lattices,
                    QueryArrow-common,
                    QueryArrow-rpc-common,
+                   data-msgpack,
+                   vector,
                    network
   ghc-options:     -Wall -fPIC
   other-modules:

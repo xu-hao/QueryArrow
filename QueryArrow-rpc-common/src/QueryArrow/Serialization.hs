@@ -1,14 +1,16 @@
 {-# LANGUAGE DeriveGeneric, StandaloneDeriving, FlexibleInstances #-}
 module QueryArrow.Serialization where
 
-import Data.Aeson
+import Data.MessagePack
 import GHC.Generics
-import Data.Map.Strict (toList, fromList, Map)
+import Data.Map.Strict (toList, Map)
+import qualified Data.Map.Strict as Map
 import Data.Namespace.Path
-import Data.Set (Set)
+import Data.Set (Set, fromList, toAscList)
 import Data.ByteString (ByteString)
 import Data.Text.Encoding
 import Data.ByteString.Base64 as B64
+import Data.Aeson
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
@@ -43,11 +45,41 @@ deriving instance Generic Aggregator
 deriving instance Generic Summary
 deriving instance Show Command
 
+instance (Key a, MessagePack a) => MessagePack (ObjectPath a) where
+    fromObject arr = do
+      a : l <- fromObject arr
+      return (ObjectPath (NamespacePath l) a)
+
+    toObject (ObjectPath (NamespacePath l) a) = toObject (a : l)
+
+instance (Ord a, MessagePack a) => MessagePack (Set a) where
+    fromObject = fmap fromList . fromObject
+    toObject = toObject . toAscList
+
+instance MessagePack Formula
+instance MessagePack Lit
+instance MessagePack Sign
+instance MessagePack Atom
+instance MessagePack Pred
+instance MessagePack PredType
+instance MessagePack PredKind
+instance MessagePack ParamType
+instance MessagePack Expr
+instance MessagePack CastType
+instance MessagePack Aggregator
+instance MessagePack Summary
+instance MessagePack ResultValue
+instance MessagePack Var
+instance MessagePack Command
+instance MessagePack DynCommand
+instance MessagePack ResultSet
+instance MessagePack QuerySet
+
 instance (ToJSON a, ToJSON b) => ToJSON (Map b a) where
-    toJSON pm = toJSON (toList pm)
+   toJSON pm = toJSON (toList pm)
 
 instance (FromJSON a, FromJSON b, Ord b) => FromJSON (Map b a) where
-    parseJSON js = fromList <$> parseJSON js
+   parseJSON js = Map.fromList <$> parseJSON js
 
 instance FromJSON (ObjectPath String) where
     parseJSON str = do
@@ -56,6 +88,7 @@ instance FromJSON (ObjectPath String) where
 
 instance ToJSON (ObjectPath String) where
     toJSON (ObjectPath (NamespacePath l) a) = toJSON (a : l)
+
 
 instance ToJSON ByteString where
     toJSON bs = toJSON (decodeUtf8 (B64.encode bs))
