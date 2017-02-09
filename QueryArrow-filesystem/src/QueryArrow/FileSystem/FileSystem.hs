@@ -29,12 +29,8 @@ data ICATFSConnInfo = ICATFSConnInfo {
 data FileSystemPlugin = FileSystemPlugin
 
 instance Plugin FileSystemPlugin MapResultRow where
-  getDB _ ps (AbstractDBList HNil) = do
+  getDB _ _ ps = do
       let conn = FileSystemConnInfo
-      let fsconf0 = fromJSON (fromJust (db_config ps))
-      case fsconf0 of
-        Error err -> error err
-        Success fsconf -> do
-          db <- makeFileSystemDBAdapter (db_namespace fsconf) (fs_root fsconf) (fs_host fsconf) (fs_port fsconf) (fs_hostmap fsconf) conn
-          return (AbstractDatabase db)
-  getDB _ _ _ = error "FileSystemPlugin: config error"
+      let fsconf = getDBSpecificConfig ps
+      db <- makeFileSystemDBAdapter (db_namespace fsconf) (fs_root fsconf) (fs_host fsconf) (fs_port fsconf) (fs_hostmap fsconf) conn
+      return (AbstractDatabase db)

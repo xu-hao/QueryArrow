@@ -33,11 +33,8 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 data ElasticSearchPlugin = ElasticSearchPlugin
 
 instance Plugin ElasticSearchPlugin MapResultRow where
-  getDB _ ps (AbstractDBList HNil) =
-    case fromJSON (fromJust (db_config ps)) of
-      Error err -> error err
-      Success fsconf -> do
-        let conn = ESQ.ElasticSearchConnInfo (db_host fsconf) (db_port fsconf) (map toLower (db_name fsconf))
-        db <-  makeElasticSearchDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) conn
-        return (    AbstractDatabase db)
-  getDB _ _ _ = error "ElasticSearchPlugin: config error"
+  getDB _ _ ps = do
+    let fsconf = getDBSpecificConfig ps
+    let conn = ESQ.ElasticSearchConnInfo (db_host fsconf) (db_port fsconf) (map toLower (db_name fsconf))
+    db <-  makeElasticSearchDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) conn
+    return (AbstractDatabase db)

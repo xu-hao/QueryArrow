@@ -1,4 +1,4 @@
 module QueryArrow.Gen where
 
 configFilePath :: String
-configFilePath = "../QueryArrow-gen/tdb-plugin-gen.json"
+configFilePath = "../QueryArrow-gen/tdb-plugin-gen-config.json"

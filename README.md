@@ -22,19 +22,34 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 |      Sum QAP      |           aggregation          |
 |  Translation QAP  |         policy support         |
 |     Cache QAP     |             caching            |
-|      Remote QAP      |            remoting            |
-|     Regex QAP     |       regular expression       |
-|  Mutable Map QAP  |      in-memory mutable map     |
-| Immutable Map QAP |     in-memory immutable map    |
-|       Eq QAP      |            equality            |
-| Utils QAP | utils |
-| Text QAP | text encoding and decoding |
+|      Remote QAP   |            remoting            |
 | FileSystem QAP | interfacing with file system |
 | ElasticSearch QAP | interfacing with ElasticSearch |
 |     Neo4j QAP     |     interfacing with Neo4j     |
 |   PostgreSQL QAP  |    interfacing with Postgres   |
 |    SQLite3 QAP    |    interfacing with SQLite3    |
 |  CockroachDB QAP  |  interfacing with CockroachDB  |
+|  Include QAP  |  include other JSON files  |
+|     LikeRegex QAP     |       regular expression       |
+|     NotLikeRegex QAP     |       regular expression       |
+|  Mutable Map QAP  |      in-memory mutable map     |
+| Immutable Map QAP |     in-memory immutable map    |
+|       Eq QAP      |            equal            |
+|       Ne QAP      |            not equal            |
+|       Le QAP      |            less than or equal            |
+|       Ge QAP      |            greater than or equal            |
+|       Lt QAP      |            less than            |
+|       Gt QAP      |            greater than            |
+|       Concat QAP      |            string concatenation            |
+|       Strlen QAP      |            string length            |
+|       Add QAP      |            addition            |
+|       Sub QAP      |            subtraction            |
+|       Mul QAP      |            multiplication            |
+|       Div QAP      |            division            |
+|       Mod QAP      |            modulo            |
+|       Exp QAP      |            exponentiation            |
+| Sleep QAP | sleep |
+| Encode QAP | text encoding and decoding |
 
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
@@ -102,65 +117,55 @@ An exmaple is
 ~~~json
 {
     "db_plugin" : {
-        "db_info" : {
-            "db_config" : {
-                "max_cc" : 1024
-            },
-            "qap_name" : "cache",
-            "catalog_database_type" : "Cache"
-        },
-        "db_plugins": [{
-            "db_info" : {
+        "db_config" : {
+            "max_cc" : 1024,
+            "cache_db_plugin": {
                 "db_config" : {
                     "rewriting_file_path" : "../QueryArrow-gen/rewriting-plugin-gen.rules",
-                    "include_file_path": ["../QueryArrow-gen"]
+                    "include_file_path": ["../QueryArrow-gen"],
+                    "trans_db_plugin": {
+                        "db_config" : {
+                            "summands" : [{
+                                "db_config" : {
+                                    "db_port" : 5432,
+                                    "db_name" : "ICAT",
+                                    "db_password" : "testpassword",
+                                    "db_host" : "localhost",
+                                    "db_username" : "irods",
+                                    "db_predicates" : "../QueryArrow-gen/gen/ICATGen",
+                                    "db_namespace" : "ICAT",
+                                    "db_sql_mapping" : "../QueryArrow-gen/gen/SQL/ICATGen"
+                                },
+                                "qap_name" : "ICAT",
+                                "catalog_database_type" : "SQL/HDBC/PostgreSQL"
+                            }, {
+                                "db_config" : {
+                                    "fs_port" : 0,
+                                    "db_namespace" : "FileSystem",
+                                    "fs_host" : "",
+                                    "fs_root" : ["/tmp"],
+                                    "fs_hostmap" : [["", 0, "/tmp"]]
+                                },
+                                "db_name" : "",
+                                "catalog_database_type" : "FileSystem"
+                            }, {
+                                "db_config" : {
+                                    "db_namespace" : "Encode",
+                                },
+                                "qap_name" : "",
+                                "catalog_database_type" : "InMemory/Encode"
+                            }]
+                        },
+                        "qap_name" : "sum",
+                        "catalog_database_type" : "Sum",
+                    }
                 },
                 "qap_name" : "trans",
                 "catalog_database_type" : "Translation"
-            },
-            "db_plugins": [{
-                "db_info" : {
-                    "qap_name" : "sum",
-                    "catalog_database_type" : "Sum"
-                },
-                "db_plugins" : [{
-                    "db_info" : {
-                        "db_config" : {
-                            "db_port" : 5432,
-                            "db_name" : "ICAT",
-                            "db_password" : "testpassword",
-                            "db_host" : "localhost",
-                            "db_username" : "irods",
-                            "db_predicates" : "../QueryArrow-gen/gen/ICATGen",
-                            "db_namespace" : "ICAT",
-                            "db_sql_mapping" : "../QueryArrow-gen/gen/SQL/ICATGen"
-                        },
-                        "qap_name" : "ICAT",
-                        "catalog_database_type" : "SQL/HDBC/PostgreSQL"
-                    }
-                }, {
-                    "db_info" : {
-                        "db_config" : {
-                            "fs_port" : 0,
-                            "db_namespace" : "FileSystem",
-                            "fs_host" : "",
-                            "fs_root" : ["/tmp"],
-                            "fs_hostmap" : [["", 0, "/tmp"]]
-                        },
-                        "db_name" : "",
-                        "catalog_database_type" : "FileSystem"
-                    }
-                }, {
-                    "db_info" : {
-                        "db_config" : {
-                            "db_namespace" : "Text",
-                        },
-                        "qap_name" : "",
-                        "catalog_database_type" : "InMemory/Text"
-                    }
-                }]
-            }]
-        }]
+            }
+        },
+        "qap_name" : "cache",
+        "catalog_database_type" : "Cache"
     },
     "servers" :[{
         "server_protocol" : "service/tcp",

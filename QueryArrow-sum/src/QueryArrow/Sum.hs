@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FunctionalDependencies, ExistentialQuantification, FlexibleInstances, OverloadedStrings, ScopedTypeVariables, UndecidableInstances,
-   RankNTypes, FlexibleContexts, GADTs, DeriveGeneric, TypeApplications #-}
+   RankNTypes, FlexibleContexts, GADTs, DeriveGeneric, TypeApplications, DeriveGeneric #-}
 module QueryArrow.Sum where
 
 import QueryArrow.DB.DB
@@ -18,6 +18,9 @@ import System.Log.Logger
 import Data.Tree
 import Algebra.SemiBoundedLattice
 import Data.Set (Set)
+import Data.Maybe
+import Data.Aeson
+import GHC.Generics
 import Debug.Trace
 -- exec query from dbname
 
@@ -106,7 +109,19 @@ instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstr
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
 
 data SumPlugin = SumPlugin
+data SumPluginConfig = SumPluginConfig {
+  summands :: [ICATDBConnInfo]
+} deriving (Generic)
+
+instance FromJSON SumPluginConfig
+instance ToJSON SumPluginConfig
 
 instance (IResultRow row) => Plugin SumPlugin row where
-  getDB _ ps (AbstractDBList dbs) =
-    return (AbstractDatabase (SumDB (qap_name ps) dbs))
+  getDB _  getDB0 ps0 = do
+    let ps = case fromJSON (fromJust (db_config ps0)) of
+                Error err -> error err
+                Success ps2 -> ps2
+    dbs0 <- getDBs getDB0 (summands ps)
+    case dbs0 of
+        AbstractDBList dbs ->
+            return (AbstractDatabase (SumDB (qap_name ps0) dbs))

@@ -51,11 +51,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 data SQLite3Plugin = SQLite3Plugin
 
 instance Plugin SQLite3Plugin MapResultRow where
-  getDB _ ps (AbstractDBList HNil) =
-      let fsconf0 = fromJSON (fromJust (db_config ps)) in
-          case fsconf0 of
-            Error err -> error err
-            Success fsconf ->
-              let db = makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) Nothing (SQLiteDB fsconf) in
-                  AbstractDatabase <$> db
-  getDB _ _ _ = error "SQLite3: config error"
+  getDB _ _ ps = do
+      let fsconf = getDBSpecificConfig ps
+      let db = makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) Nothing (SQLiteDB fsconf)
+      AbstractDatabase <$> db

@@ -82,7 +82,8 @@ cacheDB name db capacity = do
   return (CacheTransDB name db (cache, cache2))
 
 data ICATCacheConnInfo = ICATCacheConnInfo {
-  max_cc :: Integer
+  max_cc :: Integer,
+  cache_db_plugin :: ICATDBConnInfo
 } deriving (Show, Generic)
 
 instance ToJSON ICATCacheConnInfo
@@ -90,7 +91,9 @@ instance FromJSON ICATCacheConnInfo
 
 data CachePlugin = CachePlugin
 instance Plugin CachePlugin row where
-  getDB _ ps (AbstractDBList (HCons db HNil)) =
-    case fromJSON (fromJust (db_config ps)) of
-      Error err -> error err
-      Success fsconf -> AbstractDatabase <$> cacheDB (qap_name ps) db (Just (max_cc fsconf))
+  getDB _ getDB0 ps = do
+    let fsconf = getDBSpecificConfig ps
+    db0 <- getDB0 (cache_db_plugin fsconf)
+    case db0 of
+        AbstractDatabase db ->
+            AbstractDatabase <$> cacheDB (qap_name ps) db (Just (max_cc fsconf))

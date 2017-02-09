@@ -1,29 +1,23 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, PatternSynonyms, DeriveGeneric, RankNTypes, GADTs #-}
 module QueryArrow.InMemory where
 
-import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
-import QueryArrow.FO.Utils
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
-import QueryArrow.Utils
 import QueryArrow.Plugin
+import QueryArrow.Binding.Binding
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Config
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict ((!), member,   lookup, fromList,  singleton, keysSet)
 import Data.List ((\\), union)
 import Data.Convertible.Base
 import Text.Regex.TDFA ((=~))
 import Control.Monad.IO.Class
-import Control.Monad
 import Data.Text (unpack)
+import qualified Data.Text as T
 import Control.Concurrent (threadDelay)
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.IORef
 import Data.Text.Encoding
 import Data.Aeson
@@ -37,271 +31,191 @@ import Debug.Trace
 
 data MapDB = MapDB String String String [(ResultValue, ResultValue)] deriving Show
 
-instance IDatabase0 MapDB where
-    type DBFormulaType MapDB = Formula
+instance Binding MapDB where
+    dbName (MapDB name _ _ _) = name
+    bindingPred (MapDB _ ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
 
-    getName (MapDB name _ _ _) = name
-    getPreds (MapDB name ns predname _) = [ Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType]) ]
-    supported (MapDB name ns predname _) _ (FAtomic (Atom p _)) _ | predNameMatches (QPredName ns [] predname) p = True
-    supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
+instance BinaryBinding MapDB where
+    supportII _ = True
+    supportIO _ = True
+    supportOO _ = True
+    supportOI _ = True
+    supportInsertII _ = False
+    supportDeleteII _ = False
 
-instance IDatabase1 MapDB where
-    type DBQueryType MapDB = ( Set Var, Formula,  Set Var)
-    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
-
-
-instance INoConnectionDatabase2 MapDB where
-    type NoConnectionQueryType MapDB = (Set Var, Formula, Set Var)
-    type NoConnectionRowType MapDB = MapResultRow
-    noConnectionDBStmtExec (MapDB _ _ _ rows) (vars, ( (FAtomic (Atom _ args))), _) stream  = do
-        row2 <- mapDBFilterResults rows stream args
-        return (transform vars row2)
-    noConnectionDBStmtExec _ qu _ = error ("dqdb: unsupported Formula " ++ show qu)
+instance EffectFreeBinaryBinding MapDB where
+    execII (MapDB _ _ _ rows) _ aval bval =
+      if (aval, bval) `elem` rows
+        then [mempty]
+        else []
+    execIO (MapDB _ _ _ rows) _ aval _ =
+        [snd x | x <- rows, fst x == aval]
+    execOI (MapDB _ _ _ rows) _ _ bval =
+        [fst x | x <- rows, snd x == bval]
+    execOO (MapDB _ _ _ rows) _ _ _ = rows
 
 -- update mapdb
 
 instance Show (IORef a) where
     show _ = "ioref"
 
-data StateMapDB = StateMapDB String String String (IORef ([(ResultValue, ResultValue)])) deriving Show
+data StateMapDB = StateMapDB String String String (IORef [(ResultValue, ResultValue)]) deriving Show
 
-instance IDatabase0 StateMapDB where
-    type DBFormulaType StateMapDB = Formula
+instance Binding StateMapDB where
+    dbName (StateMapDB name _ _ _) = name
+    bindingPred (StateMapDB _ ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
 
-    getName (StateMapDB name _ _ _) = name
-    getPreds (StateMapDB name ns predname _) = [ Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType]) ]
-    supported _ _ (FAtomic _) _ = True
-    supported _ _ (FInsert _) _ = True
-    supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
+instance BinaryBinding StateMapDB where
+    supportII _ = True
+    supportIO _ = True
+    supportOO _ = True
+    supportOI _ = True
+    supportInsertII _ = True
+    supportDeleteII _ = True
 
-instance IDatabase1 StateMapDB where
-    type DBQueryType StateMapDB = ( Set Var, Formula,  Set Var)
-    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
-
-instance INoConnectionDatabase2 StateMapDB where
-    type NoConnectionQueryType StateMapDB = (Set Var, Formula, Set Var)
-    type NoConnectionRowType StateMapDB = MapResultRow
-    noConnectionDBStmtExec (StateMapDB _ _ _ map1) (vars,  FAtomic (Atom _ args), _) stream  = do
+instance EffectfulBinaryBinding StateMapDB where
+    execIIE (StateMapDB _ _ _ map1) _ aval bval = do
+      rows <- liftIO $ readIORef map1
+      return (if (aval, bval) `elem` rows
+        then [mempty]
+        else [])
+    execIOE (StateMapDB _ _ _ map1) _ aval _ = do
+      rows <- liftIO $ readIORef map1
+      return [snd x | x <- rows, fst x == aval]
+    execOIE (StateMapDB _ _ _ map1) _ _ bval = do
+      rows <- liftIO $ readIORef map1
+      return [fst x | x <- rows, snd x == bval]
+    execOOE (StateMapDB _ _ _ map1) _ _ _ =
+      liftIO $ readIORef map1
+    insertIIE (StateMapDB _ _ _ map1) _ aval bval = do
         rows <- liftIO $ readIORef map1
-        row2 <- mapDBFilterResults rows stream args
-        return (transform vars row2)
-    noConnectionDBStmtExec (StateMapDB _ _ _ map1) (_, FInsert lit@(Lit thesign _), _) stream = do
-        rows <- liftIO $ readIORef map1
-        let freevars = freeVars lit
         let add rows1 row = rows1 `union` [row]
-        let remove rows1 row = rows1 \\ [row]
-        let arg12 row1 (Lit _ (Atom _ [a,b])) = (evalExpr row1 a, evalExpr row1 b)
-            arg12 _ _ = error "wrong number of args"
-        row1 <- stream
-        let rows2 = (case thesign of
-                        Pos -> add
-                        Neg -> remove) rows (arg12 row1 lit)
+        let rows2 = add rows (aval, bval)
         liftIO $ writeIORef map1 rows2
-        return row1
-    noConnectionDBStmtExec (StateMapDB _ _ _ map1) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
+    deleteIIE (StateMapDB _ _ _ map1) _ aval bval = do
+        rows <- liftIO $ readIORef map1
+        let remove rows1 row = rows1 \\ [row]
+        let rows2 = remove rows (aval, bval)
+        liftIO $ writeIORef map1 rows2
 
+-- example LikeRegexDB
 
+likeRegexDB :: String -> String -> BinaryBoolean
+likeRegexDB n ns = BinaryBoolean n ns "like_regex" TextType TextType (\(StringValue a) (StringValue b) -> T.unpack a =~ T.unpack b)
 
-mapDBFilterResults :: (Functor m, Monad m) => [(ResultValue, ResultValue)] -> ResultStream m MapResultRow -> [Expr] -> ResultStream m MapResultRow
-mapDBFilterResults rows  results args = do
-    resrow <- results
-    trace (show resrow) $ case args of
-        VarExpr var1 : (VarExpr var2 : _)
-            | var1 `member` resrow ->
-                if var2 `member` resrow then do
-                    guard ((resrow ! var1, resrow ! var2) `elem` rows)
-                    return mempty
-                else
-                    listResultStream [singleton var2 (snd x) | x <- rows, fst x == resrow ! var1]
+-- example NotLikeRegexDB
 
-            | var2 `member` resrow ->
-                listResultStream [singleton var1 (fst x) | x <- rows, snd x == resrow ! var2]
-            | otherwise ->
-                listResultStream [fromList [(var1, fst x), (var2, snd x)] | x <- rows]
-        VarExpr var1 : StringExpr str2 : _ ->
-            if var1 `member` resrow then do
-                guard ((resrow ! var1, StringValue str2) `elem` rows)
-                return mempty
-            else
-                listResultStream [singleton var1 (fst x) | x <- rows, snd x == StringValue str2]
-        StringExpr str1 : VarExpr var2 : _ ->
-            if var2 `member` resrow then do
-                guard ((StringValue str1, resrow ! var2) `elem` rows)
-                return mempty
-            else
-                listResultStream [singleton var2 (snd x) | x <- rows, snd x == StringValue str1]
-        StringExpr str1 : StringExpr str2 : _ -> do
-                guard ((StringValue str1, StringValue str2) `elem` rows)
-                return mempty
-        _ -> do
-            guard False
-            return mempty
-
-
--- example RegexDB
-
-data RegexDB = RegexDB String String
-
-pattern RegexPredName ns = QPredName ns [] "like_regex"
-pattern RegexPred ns = Pred (RegexPredName ns) (PredType ObjectPred [ParamType True True False TextType, ParamType True True False TextType])
-
-instance IDatabase0 RegexDB where
-    type DBFormulaType RegexDB = Formula
-    getName (RegexDB name _) = name
-    getPreds (RegexDB _ ns) = [ RegexPred ns]
-    supported _ _ (FAtomic (Atom (RegexPredName _) _)) _ = True
-    supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
-instance IDatabase1 RegexDB where
-    type DBQueryType RegexDB = ( Set Var, Formula,  Set Var)
-    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
-
-extractStringFromExpr :: ResultValue -> String
-extractStringFromExpr (StringValue s) = unpack s
-extractStringFromExpr a = error "cannot extract string from nonstring"
-
-instance INoConnectionDatabase2 RegexDB where
-    type NoConnectionQueryType RegexDB = (Set Var, Formula, Set Var)
-    type NoConnectionRowType RegexDB = MapResultRow
-    noConnectionDBStmtExec (RegexDB _ _) (_,  (FAtomic (Atom _ [a, b])), _) stream = do
-        row <- stream
-        if extractStringFromExpr (evalExpr row a) =~ extractStringFromExpr (evalExpr row b)
-            then return mempty
-            else emptyResultStream
-
-    noConnectionDBStmtExec (RegexDB _ _) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
+notLikeRegexDB :: String -> String -> BinaryBoolean
+notLikeRegexDB n ns = BinaryBoolean n ns "not_like_regex" TextType TextType (\(StringValue a) (StringValue b) -> not (T.unpack a =~ T.unpack b))
 
 -- example EqDB
 
-data EqDB = EqDB String String
+eqDB :: String -> String -> UnaryIso
+eqDB n ns = UnaryIso n ns "eq" (TypeVar "a") (TypeVar "a") id id
 
-pattern EqPredName ns = QPredName ns [] "eq"
-pattern EqPred ns = Pred (EqPredName ns) (PredType ObjectPred [ParamType True True False (TypeVar "a"), ParamType True True True (TypeVar "a")])
+-- example NeDB
 
-instance IDatabase0 EqDB where
-    type DBFormulaType EqDB = Formula
-    getName (EqDB name _) = name
-    getPreds (EqDB _ ns) = [ EqPred ns]
-    supported _ _ (FAtomic (Atom (EqPredName _) _)) _ = True
-    supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
+neDB :: String -> String -> BinaryBoolean
+neDB n ns = BinaryBoolean n ns "ne" (TypeVar "a") (TypeVar "a") (/=)
 
-instance IDatabase1 EqDB where
-    type DBQueryType EqDB = ( Set Var, Formula,  Set Var)
-    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
+-- example LeDB
 
-instance INoConnectionDatabase2 EqDB where
-    type NoConnectionQueryType EqDB = (Set Var, Formula, Set Var)
-    type NoConnectionRowType EqDB = MapResultRow
-    noConnectionDBStmtExec (EqDB _ _) (_,  (FAtomic (Atom _ [a, VarExpr b])), env) stream | not (b `Set.member` env) = do
-        row <- stream
-        let aval = evalExpr row a
-        return (singleton b aval)
-    noConnectionDBStmtExec (EqDB _ _) (_,  (FAtomic (Atom _ [a, b])), _) stream = do
-        row <- stream
-        if evalExpr row a == evalExpr row b
-            then return mempty
-            else emptyResultStream
+leDB :: String -> String -> BinaryBoolean
+leDB n ns = BinaryBoolean n ns "le" NumberType NumberType (<=)
 
-    noConnectionDBStmtExec (EqDB _ _) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
+-- example GeDB
 
--- example UtilsDB
+geDB :: String -> String -> BinaryBoolean
+geDB n ns = BinaryBoolean n ns "ge" NumberType NumberType (/=)
 
-data UtilsDB = UtilsDB String String
+-- example LtDB
 
-pattern SleepPredName ns = QPredName ns [] "sleep"
-pattern SleepPred ns = Pred (SleepPredName ns) (PredType ObjectPred [ParamType True True False NumberType])
+ltDB :: String -> String -> BinaryBoolean
+ltDB n ns = BinaryBoolean n ns "lt" NumberType NumberType (<)
 
-instance IDatabase0 UtilsDB where
-    type DBFormulaType UtilsDB = Formula
-    getName (UtilsDB name _) = name
-    getPreds (UtilsDB _ ns) = [ SleepPred ns]
-    supported _ _ (FAtomic (Atom (SleepPredName _) [_])) _ = True
-    supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
-instance IDatabase1 UtilsDB where
-    type DBQueryType UtilsDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
+-- example GtDB
 
-instance INoConnectionDatabase2 UtilsDB where
-    type NoConnectionQueryType UtilsDB = (Set Var, Formula, Set Var)
-    type NoConnectionRowType UtilsDB = MapResultRow
-    noConnectionDBStmtExec (UtilsDB _ _) (_,  (FAtomic (Atom (SleepPredName _) [qu])), _) stream = do
-        row <- stream
-        let (IntValue i) = evalExpr row qu
-        liftIO $ threadDelay i
-        return mempty
+gtDB :: String -> String -> BinaryBoolean
+gtDB n ns = BinaryBoolean n ns "gt" NumberType NumberType (>)
 
-    noConnectionDBStmtExec (UtilsDB _ _) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
+-- example SleepDB
 
--- example TextDB
+sleepDB :: String -> String -> UnaryProcedure
+sleepDB n ns = UnaryProcedure n ns "sleep" NumberType  (\ (IntValue i) -> threadDelay i)
 
-data TextDB = TextDB String String
+-- example EncodeDB
 
-pattern EncodePredName ns = QPredName ns [] "encode"
-pattern EncodePred ns = Pred (EncodePredName ns) (PredType PropertyPred [PTKeyIO TextType, PTKeyI TextType, PTPropIO ByteStringType])
+encodeDB :: String -> String -> BinaryParamIso
+encodeDB n ns = BinaryParamIso n ns "encode" TextType TextType ByteStringType (\(StringValue bs) (StringValue codec0) ->
+      let codec = unpack codec0 in ByteStringValue (encoded codec bs)) (\(ByteStringValue bs3) (StringValue codec0)  ->
+      let codec = unpack codec0 in StringValue (decoded codec bs3)) where
+          encoded codec bs = case codec of
+                    "utf8" -> encodeUtf8 bs
+                    "utf16be" -> encodeUtf16BE bs
+                    "utf16le" -> encodeUtf16LE bs
+                    "utf32be" -> encodeUtf32BE bs
+                    "utf32le" -> encodeUtf32LE bs
+                    _ -> error ("unsupported encoding " ++ codec)
+          decoded codec bs = case codec of
+                    "utf8" -> decodeUtf8 bs
+                    "utf16be" -> decodeUtf16BE bs
+                    "utf16le" -> decodeUtf16LE bs
+                    "utf32be" -> decodeUtf32BE bs
+                    "utf32le" -> decodeUtf32LE bs
+                    _ -> error ("unsupported encoding " ++ codec)
 
-instance IDatabase0 TextDB where
-    type DBFormulaType TextDB = Formula
-    getName (TextDB name ns) = name
-    getPreds (TextDB name ns) = [ EncodePred ns]
-    supported _ _ (FAtomic (Atom (EncodePredName _) [_, _, VarExpr var])) env | var `Set.member` env = True
-    supported _ _ (FAtomic (Atom (EncodePredName _) [VarExpr var, _, _])) env | var `Set.member` env = True
-    supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
-instance IDatabase1 TextDB where
-    type DBQueryType TextDB = (Set Var, Formula, Set Var)
-    translateQuery _ vars qu vars2 = return (vars, qu, vars2)
+-- example StrlenDB
 
-instance INoConnectionDatabase2 TextDB where
-    type NoConnectionQueryType TextDB = (Set Var, Formula, Set Var)
-    type NoConnectionRowType TextDB = MapResultRow
-    noConnectionDBStmtExec (TextDB _ _) (_,  (FAtomic (Atom (EncodePredName _) [arg1, arg2, arg3])), env) stream = do
-        row <- stream
-        let (StringValue codec0) = evalExpr row arg2
-            codec = unpack codec0
-            val1 = evalExpr row arg1
-            val3 = evalExpr row arg3
-            decoded =
-                let (ByteStringValue bs) = val3
-                in
-                    case codec of
-                      "utf8" -> decodeUtf8 bs
-                      "utf16be" -> decodeUtf16BE bs
-                      "utf16le" -> decodeUtf16LE bs
-                      "utf32be" -> decodeUtf32BE bs
-                      "utf32le" -> decodeUtf32LE bs
-            encoded =
-                let (StringValue bs) = val1
-                in
-                    case codec of
-                      "utf8" -> encodeUtf8 bs
-                      "utf16be" -> encodeUtf16BE bs
-                      "utf16le" -> encodeUtf16LE bs
-                      "utf32be" -> encodeUtf32BE bs
-                      "utf32le" -> encodeUtf32LE bs
-        case arg1 of
-          VarExpr var1 | not (var1 `Set.member` env) ->
-            return (singleton var1 (StringValue decoded))
-          _ ->
-            case arg3 of
-              VarExpr var3 | not (var3 `Set.member` env) ->
-                return (singleton var3 (ByteStringValue encoded))
-              _ -> do
-                let (ByteStringValue bs3) = val3
-                if bs3 == encoded
-                  then
-                    return mempty
-                  else
-                    emptyResultStream
+strlenDB :: String -> String -> UnaryFunction
+strlenDB n ns = UnaryFunction n ns "strlen" TextType NumberType ( \(StringValue s) -> IntValue (T.length s))
 
+-- example AddDB
 
+addDB :: String -> String -> BinaryIso
+addDB n ns = BinaryIso n ns "add" NumberType NumberType NumberType (+) (\a c -> c - a) (\b c -> c - b)
 
-    noConnectionDBStmtExec (TextDB _ _) qu stream = error ("dqdb: unsupported Formula " ++ show qu)
+-- example ExpDB
 
+expDB :: String -> String -> BinaryFunction
+expDB n ns = BinaryFunction n ns "exp" NumberType NumberType NumberType (^)
 
+-- example MulDB
+
+mulDB :: String -> String -> BinaryMono
+mulDB n ns = BinaryMono n ns "mul" NumberType NumberType NumberType (*) (\a c ->
+                                if c `mod` a == 0
+                                  then Just (c `div` a)
+                                  else Nothing) (\b c ->
+                                if c `mod` b == 0
+                                    then Just (c `div` b)
+                                    else Nothing)
+
+-- example DivDB
+
+divDB :: String -> String -> BinaryFunction
+divDB n ns = BinaryFunction n ns "div" NumberType NumberType NumberType div
+
+-- example ModDB
+
+modDB :: String -> String -> BinaryFunction
+modDB n ns = BinaryFunction n ns "mod" NumberType NumberType NumberType mod
+
+-- example SubDB
+
+subDB :: String -> String -> BinaryIso
+subDB n ns = BinaryIso n ns "sub" NumberType NumberType NumberType (-) (-) (+)
+
+-- example ConcatDB
+
+concatDB :: String -> String -> BinaryMono
+concatDB n ns = BinaryMono n ns "concat" NumberType NumberType NumberType (\(StringValue a) (StringValue b) -> StringValue (T.append a b))
+                    (\(StringValue b) (StringValue c) ->
+                        if T.length c >= T.length b && T.drop (T.length c - T.length b) c == b
+                            then Just (StringValue (T.take (T.length c - T.length b) c))
+                            else Nothing) (\(StringValue a) (StringValue c) ->
+                        if T.length c >= T.length a && T.take (T.length a) c == a
+                            then Just (StringValue (T.drop (T.length a) c))
+                            else Nothing)
 
 data ICATDBInfo = ICATDBInfo {
   db_namespace :: String
@@ -323,21 +237,17 @@ instance FromJSON ICATMapDBInfo
 data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ Formula) => NoConnectionDatabasePlugin (String -> String -> db)
 
 instance Plugin (NoConnectionDatabasePlugin db) MapResultRow where
-  getDB (NoConnectionDatabasePlugin db) ps (AbstractDBList HNil) =
-    case fromJSON (fromJust (db_config ps)) of
-      Error err -> error err
-      Success fsconf ->
-        return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace fsconf))))
+  getDB (NoConnectionDatabasePlugin db) _ ps = do
+      let fsconf = getDBSpecificConfig ps
+      return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace fsconf))))
 
 data NoConnectionDatabasePlugin2 db a = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ Formula) => NoConnectionDatabasePlugin2 (String -> String -> String -> a -> db)
 
 instance Convertible Value (IO a) => Plugin (NoConnectionDatabasePlugin2 db a) MapResultRow where
-  getDB (NoConnectionDatabasePlugin2 db) ps (AbstractDBList HNil) =
-    case fromJSON (fromJust (db_config ps)) of
-      Error err -> error err
-      Success fsconf -> do
-        dbdata <- convert (db_map fsconf)
-        return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace2 fsconf) (predicate_name fsconf) dbdata)))
+  getDB (NoConnectionDatabasePlugin2 db) _ ps = do
+      let fsconf = getDBSpecificConfig ps
+      dbdata <- convert (db_map fsconf)
+      return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace2 fsconf) (predicate_name fsconf) dbdata)))
 
 instance Convertible Value (IO [(ResultValue, ResultValue)]) where
   safeConvert a = case fromJSON a of

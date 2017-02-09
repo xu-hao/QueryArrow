@@ -31,12 +31,8 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 data Neo4jPlugin = Neo4jPlugin
 
 instance Plugin Neo4jPlugin MapResultRow where
-  getDB _ ps  (AbstractDBList HNil) = do
-      let fsconf0 = fromJSON (fromJust (db_config ps))
-      case fsconf0 of
-        Error err -> error err
-        Success fsconf -> do
-            let conn = (db_host fsconf, db_port fsconf, db_username fsconf, db_password fsconf)
-            db <- makeICATCypherDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) conn
-            return (    AbstractDatabase db)
-  getDB _ _ _ = error "FileSystemPlugin: config error"
+  getDB _ _ ps = do
+      let fsconf = getDBSpecificConfig ps
+      let conn = (db_host fsconf, db_port fsconf, db_username fsconf, db_password fsconf)
+      db <- makeICATCypherDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) conn
+      return (    AbstractDatabase db)

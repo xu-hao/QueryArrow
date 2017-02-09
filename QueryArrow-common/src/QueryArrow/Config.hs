@@ -1,19 +1,16 @@
-{-# LANGUAGE DeriveGeneric, TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell #-}
 module QueryArrow.Config where
 
 import Data.Aeson
 import Data.Aeson.TH
-import GHC.Generics
+import Data.Maybe
 
 import qualified Data.ByteString.Lazy as B
 
 -- config info
 
-data DBTrans = DBTrans {
-    db_info :: ICATDBConnInfo,
-    db_plugins :: Maybe [DBTrans]
-} deriving (Show)
-
+class DBTree a where
+  db_plugins :: a -> [ICATDBConnInfo]
 
 data ICATDBConnInfo = ICATDBConnInfo {
     qap_name :: String,
@@ -22,22 +19,17 @@ data ICATDBConnInfo = ICATDBConnInfo {
 } deriving (Show)
 
 data TranslationInfo = TranslationInfo {
-    db_plugin :: DBTrans,
+    db_plugin :: ICATDBConnInfo,
     servers :: [DBServer]
-} deriving (Show, Generic)
+} deriving (Show)
 
 data DBServer = DBServer {
   server_protocol :: String,
   server_config :: Maybe Value
-} deriving (Show, Generic)
+} deriving (Show)
 
-instance FromJSON DBServer
-instance ToJSON DBServer
-
-instance FromJSON TranslationInfo
-instance ToJSON TranslationInfo
-
-$(deriveJSON defaultOptions{omitNothingFields = True} ''DBTrans)
+$(deriveJSON defaultOptions ''DBServer)
+$(deriveJSON defaultOptions ''TranslationInfo)
 $(deriveJSON defaultOptions{omitNothingFields = True} ''ICATDBConnInfo)
 
 getConfig :: FromJSON a => String -> IO a
@@ -46,3 +38,9 @@ getConfig filepath = do
     case d of
             Left err -> error ("getConfig: " ++ filepath ++ " " ++ err)
             Right ps -> return ps
+
+getDBSpecificConfig :: FromJSON a => ICATDBConnInfo -> a
+getDBSpecificConfig ps =
+  case fromJSON (fromJust (db_config ps)) of
+     Error err -> error err
+     Success fsconf -> fsconf

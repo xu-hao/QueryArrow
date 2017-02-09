@@ -16,7 +16,7 @@ import Data.Maybe
 
 import Database.HDBC.PostgreSQL
 
-newtype PostgreSQLDB = PostgreSQLDB ICATDBConnInfo2
+newtype PostgreSQLDB = PostgreSQLDB PostgreSQLDBConfig
 
 instance IDatabase2 (GenericDatabase  SQLTrans PostgreSQLDB) where
     newtype ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB) = P HDBCDBConnection
@@ -39,10 +39,10 @@ instance IDBConnection (ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB))
 instance IDatabase (GenericDatabase  SQLTrans PostgreSQLDB) where
 
 
-instance FromJSON ICATDBConnInfo2
-instance ToJSON ICATDBConnInfo2
+instance FromJSON PostgreSQLDBConfig
+instance ToJSON PostgreSQLDBConfig
 
-data ICATDBConnInfo2 = ICATDBConnInfo2 {
+data PostgreSQLDBConfig = PostgreSQLDBConfig {
   db_name :: String,
   db_namespace :: String,
   db_host :: String,
@@ -56,10 +56,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 data PostgreSQLPlugin = PostgreSQLPlugin
 
 instance Plugin PostgreSQLPlugin MapResultRow where
-  getDB _ ps (AbstractDBList HNil) =
-    let fsconf0 = fromJSON (fromJust (db_config ps)) in
-        case fsconf0 of
-          Error err -> error err
-          Success fsconf -> do
-              db <- makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) (Just "nextid") (PostgreSQLDB fsconf)
-              return (AbstractDatabase db)
+  getDB _ _ ps = do
+      let fsconf = getDBSpecificConfig ps
+      db <- makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) (Just "nextid") (PostgreSQLDB fsconf)
+      return (AbstractDatabase db)

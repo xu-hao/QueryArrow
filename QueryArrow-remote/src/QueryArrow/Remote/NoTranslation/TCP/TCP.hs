@@ -27,12 +27,8 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 data RemoteTCPPlugin = RemoteTCPPlugin
 
 instance Plugin RemoteTCPPlugin MapResultRow where
-  getDB _ ps  (AbstractDBList HNil) =
-    let fsconf0 = fromJSON (fromJust (db_config ps)) in
-        case fsconf0 of
-          Error err -> error err
-          Success fsconf -> do
-              h <- connectTo (db_host fsconf) (PortNumber (fromIntegral (db_port fsconf)))
-              db <- getQueryArrowClient (HandleChannel h)
-              return (AbstractDatabase (NoTranslationDatabase db))
-  getDB _ _ _ = error "RemoteTCPPlugin: config error"
+  getDB _ _ ps = do
+      let fsconf = getDBSpecificConfig ps
+      h <- connectTo (db_host fsconf) (PortNumber (fromIntegral (db_port fsconf)))
+      db <- getQueryArrowClient (HandleChannel h)
+      return (AbstractDatabase (NoTranslationDatabase db))

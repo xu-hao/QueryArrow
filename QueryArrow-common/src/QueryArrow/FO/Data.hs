@@ -680,7 +680,23 @@ typeOf Null = error "typeOf: null value"
 
 instance Num ResultValue where
     IntValue a + IntValue b = IntValue (a + b)
+    IntValue a * IntValue b = IntValue (a * b)
+    abs (IntValue a) = IntValue (abs a)
+    signum (IntValue a) = IntValue (signum a)
+    negate (IntValue a) = IntValue (negate a)
     fromInteger i = IntValue (fromInteger i)
 
 instance Fractional ResultValue where
-    IntValue a / IntValue b = IntValue (a `quot` b)
+    IntValue a / IntValue b = IntValue (round (fromIntegral a / fromIntegral b))
+    fromRational a = IntValue (round (fromRational a))
+
+instance Real ResultValue where
+  toRational (IntValue a) = fromIntegral a
+
+instance Enum ResultValue where
+  toEnum = IntValue
+  fromEnum (IntValue a) = a
+
+instance Integral ResultValue where
+  IntValue a `quotRem` IntValue b = let (q, r) = a `quotRem` b in (IntValue q, IntValue r)
+  toInteger (IntValue a) = toInteger a

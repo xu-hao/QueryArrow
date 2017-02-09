@@ -10,6 +10,7 @@ library
                    QueryArrow.DBMap
   build-depends:
                    base >= 4,
+                   aeson,
                    hslogger,
                    mtl,
                    containers,

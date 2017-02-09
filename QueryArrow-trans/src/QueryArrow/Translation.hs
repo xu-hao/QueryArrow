@@ -184,7 +184,8 @@ transDB name sumdb transinfo = do
 
 data ICATTranslationConnInfo = ICATCacheConnInfo {
   rewriting_file_path :: String,
-  include_file_path :: [String]
+  include_file_path :: [String],
+  trans_db_plugin :: ICATDBConnInfo
 } deriving (Show, Generic)
 
 instance ToJSON ICATTranslationConnInfo
@@ -193,9 +194,8 @@ instance FromJSON ICATTranslationConnInfo
 data TransPlugin = TransPlugin
 
 instance Plugin TransPlugin MapResultRow where
-  getDB _ ps (AbstractDBList (HCons db HNil)) =
-    case fromJSON (fromJust (db_config ps)) of
-      Error err -> error err
-      Success fsconf -> AbstractDatabase <$> transDB (qap_name ps) db fsconf
-
-  getDB _ _ _ = error "TransDBPlugin: config error"
+  getDB _ getDB0 ps = do
+    let fsconf = getDBSpecificConfig ps
+    db0 <- getDB0 (trans_db_plugin fsconf)
+    case db0 of
+        AbstractDatabase db -> AbstractDatabase <$> transDB (qap_name ps) db fsconf
