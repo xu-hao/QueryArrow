@@ -41,6 +41,8 @@ library
                    QueryArrow-common,
                    QueryArrow-rpc-common,
                    data-msgpack,
+                   resource-pool,
+                   async-pool,
                    vector,
                    network
   ghc-options:     -Wall -fPIC

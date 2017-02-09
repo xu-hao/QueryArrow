@@ -20,6 +20,9 @@ import QueryArrow.FileSystem.LocalCommands
 import QueryArrow.FileSystem.Serialization
 import QueryArrow.RPC.Message (sendMsgPack, receiveMsgPack)
 import Data.MessagePack
+import Data.Pool
+import Data.Time.Clock
+import Control.Concurrent.Async.Pool (withTaskGroup, async, wait, TaskGroup)
 
 
 data Interpreter = Interpreter {
@@ -220,6 +223,18 @@ localInterpreter2 (L2MoveDir (a) (b)) = do
 bufferSize :: Int
 bufferSize = 4096
 
+defaultblockSize :: Int
+defaultblockSize = 32 * 1024
+
+defaultNumberOfStrips :: Int
+defaultNumberOfStrips = 1
+
+defaultNumberOfResourcesPerStrip :: Int
+defaultNumberOfResourcesPerStrip = 4
+
+defaultTimeout :: NominalDiffTime
+defaultTimeout = fromInteger 1000000
+
 sendFile0 :: Handle -> Handle -> String -> Integer -> Integer -> IO ()
 sendFile0 h0 h p s off =
   unless (s == off) $ do
@@ -231,10 +246,52 @@ sendFile0 h0 h p s off =
 sendFile :: String -> Handle -> String -> IO ()
 sendFile a h b = do
   liftIO $ sendMsgPack h (LocalizedCommandWrapper (LMakeFile b))
-  Just () <- liftIO $ receiveMsgPack h
+  Just () <- receiveMsgPack h
   s <- getFileSize a
   withFile a ReadMode (\h0 ->
       sendFile0 h0 h b s 0)
+
+withPool :: HostName -> PortID -> Int -> NominalDiffTime -> Int -> (Pool Handle -> TaskGroup -> IO ()) -> IO ()
+withPool host port  numstripes timeout numresourcesperstripe act = do
+  pool <- createPool (connectTo host port) (\h -> do
+    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
+    hClose h) numstripes timeout numresourcesperstripe
+  withTaskGroup (numstripes * numresourcesperstripe) $ \g ->
+    act pool g
+  destroyAllResources pool
+
+parSendFile0 :: String -> Int -> String -> Pool Handle -> TaskGroup -> IO ()
+parSendFile0 a blocksize b pool g = do
+      s <- withResource pool $ \h -> do
+        liftIO $ sendMsgPack h (LocalizedCommandWrapper (LMakeFile b))
+        Just () <- receiveMsgPack h
+        s <- getFileSize a
+        liftIO $ sendMsgPack h (LocalizedCommandWrapper (LTruncate b s))
+        Just () <- receiveMsgPack h
+        return s
+      withFile a ReadMode (\h0 ->
+        mapM_ (\blockid -> do
+          let start = blockid * fromIntegral blocksize
+          let finish = min ((blockid + 1) * fromIntegral blocksize) s
+          resp <- async g (withResource pool $ \h -> do
+                      sendFile0 h0 h b start finish
+                      )
+          wait resp) [0..(s - 1) `div` fromIntegral blocksize])
+
+
+parSendDir0 :: String -> Int -> String -> Pool Handle -> TaskGroup -> IO ()
+parSendDir0 a blocksize b pool g = do
+  withResource pool $ \h -> do
+    sendMsgPack h (LocalizedCommandWrapper (LMakeDir b))
+    Just () <- receiveMsgPack h
+    return ()
+  files <- listDirectory a
+  mapM_ (\n -> do
+    bool <- doesFileExist (a </> n)
+    if bool
+      then parSendFile0 (a</>n) blocksize  (b </>  n) pool g
+      else parSendDir0 (a</>n) blocksize  (b </>  n) pool g
+    ) files
 
 receiveFile0 :: Handle -> Handle -> String -> Integer -> Integer -> IO ()
 receiveFile0 h0 h p s off =
@@ -247,10 +304,29 @@ receiveFile0 h0 h p s off =
 
 receiveFile :: String -> Handle -> String -> IO ()
 receiveFile a h b = do
-  liftIO $ sendMsgPack h (LocalizedCommandWrapper (LSize b))
-  Just s <- liftIO $ receiveMsgPack h
-  withFile a ReadMode (\h0 ->
+  sendMsgPack h (LocalizedCommandWrapper (LSize b))
+  Just s <- receiveMsgPack h
+  appendFile a ""
+  setFileSize a (fromInteger s)
+  withFile a WriteMode (\h0 ->
       receiveFile0 h0 h b s 0)
+
+parReceiveFile0 :: String -> Int -> String -> Pool Handle -> TaskGroup -> IO ()
+parReceiveFile0 a blocksize b pool g = do
+  s <- withResource pool $ \h -> do
+    sendMsgPack h (LocalizedCommandWrapper (LSize b))
+    Just s <- receiveMsgPack h
+    return s
+  appendFile a ""
+  setFileSize a (fromInteger s)
+  withFile a WriteMode (\h0 ->
+    mapM_ (\blockid -> do
+      let start = blockid * fromIntegral blocksize
+      let finish = min ((blockid + 1) * fromIntegral blocksize) s
+      resp <- async g (withResource pool $ \h ->
+                  receiveFile0 h0 h b start finish
+                  )
+      wait resp) [0..(s - 1) `div` fromIntegral blocksize])
 
 remoteSendFile0 :: Handle -> String -> Handle -> String -> Integer -> Integer -> IO ()
 remoteSendFile0 ha a hb b s off =
@@ -294,6 +370,19 @@ receiveDir a h b = do
   mapM_ (\(File _ _ file) ->
     receiveFile (a </> takeFileName file) h file) (files :: [File])
 
+parReceiveDir0 :: String -> Int -> String -> Pool Handle -> TaskGroup -> IO ()
+parReceiveDir0 a blocksize b pool g = do
+  createDirectory a
+  withResource pool $ \h -> do
+    sendMsgPack h (LocalizedCommandWrapper (LListDirDir b))
+    Just dirs <- receiveMsgPack h
+    mapM_ (\(File _ _ dir) ->
+      parReceiveDir0 (a </> takeFileName dir) blocksize dir pool g) (dirs :: [File])
+    sendMsgPack h (LocalizedCommandWrapper (LListDirFile b))
+    Just files <- receiveMsgPack h
+    mapM_ (\(File _ _ file) ->
+      parReceiveFile0 (a </> takeFileName file) blocksize file pool g) (files :: [File])
+
 remoteSendDir :: Handle -> String -> Handle -> String -> IO ()
 remoteSendDir ha a hb b = do
   sendMsgPack hb (LocalizedCommandWrapper (LMakeDir b))
@@ -309,52 +398,42 @@ remoteSendDir ha a hb b = do
 localToRemoteInterpreter2 :: MonadIO m => LocalizedFSCommand2  -> ReaderT (String, Int, String, String, Int, String) m ()
 localToRemoteInterpreter2 (L2CopyFile (a) (b) ) = do
   (_, _, roota, host, port, _) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    sendFile (toAP roota a) h b
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ parSendFile0 (toAP roota a)  defaultblockSize  b
 localToRemoteInterpreter2 (L2CopyDir (a) (b) ) = do
   (_, _, roota, host, port, root) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    sendDir (toAP roota a) h b
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ parSendDir0 (toAP roota a)  defaultblockSize  b
 localToRemoteInterpreter2 (L2MoveFile (a) (b)) = do
   (_, _, roota, host, port, _) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    sendFile (toAP roota a) h b
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ parSendFile0 (toAP roota a)  defaultblockSize  b
   liftIO $ removeFile a
 localToRemoteInterpreter2 (L2MoveDir (a) (b)) = do
   (_, _, roota, host, port, root) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    sendDir (toAP roota a) h b
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ parSendDir0 (toAP roota a)  defaultblockSize  b
   liftIO $ removeDirectoryRecursive a
 
 remoteToLocalInterpreter2 :: MonadIO m => LocalizedFSCommand2  -> ReaderT (String, Int, String, String, Int, String) m ()
 remoteToLocalInterpreter2 (L2CopyFile (a) (b) ) = do
   (host, port, _, _, _, rootb) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    receiveFile a h (toAP rootb b)
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ parReceiveFile0 a  defaultblockSize  (toAP rootb b)
 remoteToLocalInterpreter2 (L2CopyDir (a) (b) ) = do
   (host, port, _, _, _, rootb) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    receiveDir a h (toAP rootb b)
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ parReceiveDir0 a  defaultblockSize  (toAP rootb b)
 remoteToLocalInterpreter2 (L2MoveFile (a) (b)) = do
   (host, port, _, _, _, rootb) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    receiveFile a h (toAP rootb b)
-    sendMsgPack h (LocalizedCommandWrapper (LUnlinkFile a))
-    Just () <- liftIO $ receiveMsgPack h
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ \ pool g -> do
+    parReceiveFile0 a  defaultblockSize  (toAP rootb b) pool g
+    withResource pool $ \ h -> do
+      sendMsgPack h (LocalizedCommandWrapper (LUnlinkFile a))
+      Just () <- receiveMsgPack h
+      return ()
 remoteToLocalInterpreter2 (L2MoveDir (a) (b)) = do
   (host, port, _, _, _, rootb) <- ask
-  liftIO $ bracket (connectTo host (PortNumber (fromIntegral port))) hClose (\h -> do
-    receiveDir a h (toAP rootb b)
-    sendMsgPack h (LocalizedCommandWrapper (LRemoveDir a))
-    Just () <- receiveMsgPack h
-    sendMsgPack h (Exit :: LocalizedCommandWrapper LocalizedFSCommand))
+  liftIO $ withPool host (PortNumber (fromIntegral port)) defaultNumberOfStrips defaultTimeout defaultNumberOfResourcesPerStrip $ \ pool g -> do
+    parReceiveDir0 a  defaultblockSize  (toAP rootb b) pool g
+    withResource pool $ \ h -> do
+      sendMsgPack h (LocalizedCommandWrapper (LRemoveDir a))
+      Just () <- receiveMsgPack h
+      return ()
 
 remoteToRemoteInterpreter2 :: MonadIO m => LocalizedFSCommand2  -> ReaderT (String, Int, String, String, Int, String) m ()
 remoteToRemoteInterpreter2 (L2CopyFile (a) (b) ) = do

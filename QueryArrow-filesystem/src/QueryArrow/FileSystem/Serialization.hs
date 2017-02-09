@@ -8,7 +8,6 @@ import QueryArrow.Serialization ()
 import Data.MessagePack
 import Data.Int
 import Data.Time
-import System.IO
 
 data LocalizedCommandWrapper m where
    LocalizedCommandWrapper :: forall m a. (MessagePack a, Show (m a)) => m a -> LocalizedCommandWrapper m

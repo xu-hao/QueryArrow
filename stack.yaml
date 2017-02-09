@@ -82,6 +82,7 @@ extra-deps:
   - semibounded-lattices-0.1.0.1
   - directory-1.2.7.1
   - data-msgpack-0.0.9
+  - async-pool-0.9.0.1
 
 # Override default flag values for local packages and extra-deps
 flags: {}
