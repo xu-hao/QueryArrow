@@ -50,6 +50,7 @@ import QueryArrow.RPC.Service.Remote.TCP
 import QueryArrow.RPC.Service.Remote.UDS
 import QueryArrow.RPC.Service.Service.HTTP
 import QueryArrow.RPC.Service.FileSystem.TCP
+import Data.Monoid ((<>))
 
 main::IO()
 main = execParser opts >>= mainArgs where

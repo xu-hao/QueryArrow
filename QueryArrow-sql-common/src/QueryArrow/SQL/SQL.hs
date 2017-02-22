@@ -5,14 +5,13 @@ import QueryArrow.FO.Data hiding (Subst, subst)
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.ListUtils
 import QueryArrow.Utils
-import QueryArrow.DB.DB
 import QueryArrow.FO.Domain
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\),union, nub)
 import Control.Monad.Trans.State.Strict (StateT, get, put, evalStateT, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
-import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, alter, toList, elems, size, delete)
+import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, toList, elems, size)
 import Data.Monoid ((<>))
 import Data.Maybe
 import Debug.Trace
@@ -985,3 +984,5 @@ instance IGenericDatabase01 SQLTrans where
         in
             layeredF form && (isJust (evalStateT (limitF  trans env form) initstate )
                 || isJust (evalStateT (sequenceF trans form) initstate))
+
+    gCheckQuery _ _ _ _ = return (Right ())

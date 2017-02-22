@@ -51,6 +51,7 @@ import QueryArrow.RPC.Message
 import QueryArrow.FO.Data
 import Data.Set (fromList)
 import Control.Arrow ((***))
+import Data.Monoid ((<>))
 
 import QueryArrow.Utils
 

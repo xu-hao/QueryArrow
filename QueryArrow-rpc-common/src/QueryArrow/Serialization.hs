@@ -3,8 +3,6 @@ module QueryArrow.Serialization where
 
 import Data.MessagePack
 import GHC.Generics
-import Data.Map.Strict (toList, Map)
-import qualified Data.Map.Strict as Map
 import Data.Namespace.Path
 import Data.Set (Set, fromList, toAscList)
 import Data.ByteString (ByteString)
@@ -75,12 +73,6 @@ instance MessagePack DynCommand
 instance MessagePack ResultSet
 instance MessagePack QuerySet
 
-instance (ToJSON a, ToJSON b) => ToJSON (Map b a) where
-   toJSON pm = toJSON (toList pm)
-
-instance (FromJSON a, FromJSON b, Ord b) => FromJSON (Map b a) where
-   parseJSON js = Map.fromList <$> parseJSON js
-
 instance FromJSON (ObjectPath String) where
     parseJSON str = do
       a : l <- parseJSON str
@@ -89,6 +81,9 @@ instance FromJSON (ObjectPath String) where
 instance ToJSON (ObjectPath String) where
     toJSON (ObjectPath (NamespacePath l) a) = toJSON (a : l)
 
+instance FromJSONKey Var where
+
+instance ToJSONKey Var where
 
 instance ToJSON ByteString where
     toJSON bs = toJSON (decodeUtf8 (B64.encode bs))

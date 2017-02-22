@@ -33,3 +33,38 @@ library
                    QueryArrow-sql-common
   ghc-options:     -Wall -fPIC
   other-modules:
+Test-Suite Test
+    type:       exitcode-stdio-1.0
+    hs-source-dirs:  src test
+    main-is:    Test.hs
+    build-depends:
+                     base >= 4,
+                     containers,
+                     mtl,
+                     transformers,
+                     semigroups,
+                     parsec,
+                     semigroupoids,
+                     QuickCheck,
+                     aeson,
+                     bytestring,
+                     hspec,
+                     haskell-neo4j-client,
+                     unordered-containers,
+                     convertible,
+                     text >= 1.2.1.1,
+                     scientific,
+                     array,
+                     process,
+                     conduit-combinators,
+                     conduit,
+                     resourcet,
+                     async,
+                     time,
+                     exceptions,
+                     utf8-string,
+                     directory,
+                     lattices,
+                     template-haskell
+    ghc-options:
+    other-modules:

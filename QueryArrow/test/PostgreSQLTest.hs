@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, FlexibleInstances, MultiParamTypeClasses #-}
 module Main where
 
-import Config
+import QueryArrow.Config
 
 import System.Environment
 import Database.HDBC

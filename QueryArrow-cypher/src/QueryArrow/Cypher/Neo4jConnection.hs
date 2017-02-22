@@ -7,13 +7,13 @@ import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.Cypher.Cypher
-import QueryArrow.Utils
 
 import Prelude hiding (lookup)
 import Control.Monad.IO.Class (liftIO)
-import Data.Map.Strict (insert, empty, Map, foldlWithKey)
+import Data.Map.Strict (insert, empty, foldlWithKey)
 import Data.Convertible.Base
 import qualified Database.Neo4j.Cypher as C
+import qualified Database.Neo4j.Transactional.Cypher as TC
 import Database.Neo4j (withAuthConnection)
 import qualified Data.HashMap.Strict as M
 import Data.ByteString.Char8(pack)
@@ -60,11 +60,12 @@ instance INoConnectionDatabase2 (GenericDatabase CypherTrans Neo4jDatabase ) whe
                 resp <- liftIO $ withAuthConnection (pack host) port (pack username, pack password) $ do
                     liftIO $ infoM "Cypher" (serialize stmt ++ " with " ++ show args)
                     -- liftIO $ putStrLn ("Cypher: execute " ++ serialize stmt ++ " with " ++ show args)
-                    C.cypher (T.pack (serialize stmt)) (toCypherParams args)
+                    TC.runTransaction $ TC.cypher (T.pack (serialize stmt)) (toCypherParams args)
                 case resp of
                     Left t -> do
-                        liftIO $ errorM "Cypher" ("returns an error: " ++ T.unpack t)
-                        error (T.unpack t)
-                    Right (C.Response cols rows) -> do
+                        let errmsg = "code: " ++ T.unpack (fst t) ++ ", msg: " ++ T.unpack (snd t)
+                        liftIO $ errorM "Cypher" ("error: " ++ errmsg)
+                        error errmsg
+                    Right (TC.Result cols rows _ _) -> do
                         liftIO $ infoM "Cypher" ("query returns " ++  show cols ++ show rows)
                         listResultStream (map (\row -> convert (vars, row)) rows)

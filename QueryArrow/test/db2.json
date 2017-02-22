@@ -1,9 +1,0 @@
-{
-   "db_port" : 7474,
-   "db_name" : "ICAT",
-   "db_password" : "irods",
-   "db_host" : "localhost",
-   "db_username" : "irods",
-   "db_odbc_type" : "unix",
-   "catalog_database_type" : "Cypher/Neo4j"
-}

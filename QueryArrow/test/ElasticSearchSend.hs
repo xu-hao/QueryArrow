@@ -10,7 +10,7 @@ import System.Environment
 import Data.Map.Strict hiding (map)
 import Data.List (intercalate, transpose)
 import Data.Aeson
-import Serialization
+import QueryArrow.Serialization
 import Network.HTTP.Conduit
 import HTTP.ElasticSearchUtils
 import qualified Data.Text as T

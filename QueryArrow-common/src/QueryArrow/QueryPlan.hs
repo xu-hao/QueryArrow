@@ -3,14 +3,12 @@ module QueryArrow.QueryPlan where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
-import QueryArrow.FO.Domain
 import Algebra.SemiBoundedLattice
 import QueryArrow.DB.DB
 import QueryArrow.Data.Heterogeneous.List
 
 import Prelude  hiding (lookup, null)
-import Data.List (elem, union, sortBy, groupBy, nub, intercalate)
+import Data.List (elem, union, sortBy, groupBy, nub)
 import qualified Data.List as List
 import Control.Monad.Except
 import Control.Applicative ((<|>))
@@ -21,11 +19,8 @@ import Data.Conduit
 import Control.Concurrent.Async.Lifted
 import System.Log.Logger
 import Algebra.Lattice
-import Data.Set (Set, fromList, null, isSubsetOf, member, toAscList, (\\))
+import Data.Set (Set, fromList, toAscList)
 import Data.Ord (comparing, Down(..))
-import Data.Functor.Compose (Compose(..))
-import Control.Exception (catch, SomeException)
-import qualified Data.Map.Strict as Map
 import Debug.Trace
 
 type MSet a = Complemented (Set a)
@@ -47,12 +42,11 @@ data QueryPlanData  = QueryPlanData {
     paramvs :: Set Var, -- parameter vars
     returnvs :: Set Var, -- return vars
     combinedvs :: Set Var, -- combined return and available vars that are still in scope
-    availablevs :: Set Var,
-    mustbefreevs :: Set Var
+    availablevs :: Set Var
 }
 
 dqdb :: QueryPlanData
-dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom bottom
+dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom
 
 data QueryPlanNode2   = Exec2 Formula Int
                 | QPChoice2 QueryPlan2 QueryPlan2
