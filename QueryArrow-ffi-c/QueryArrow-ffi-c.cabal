@@ -43,11 +43,11 @@ library
                    constraints,
                    either,
                    QueryArrow-common,
-                   QueryArrow-trans,
+                   QueryArrow-db-trans,
                    QueryArrow-ffi-service,
-                   QueryArrow-sql-common,
+                   QueryArrow-db-sql-common,
                    QueryArrow-gen,
-                   QueryArrow-sql-postgresql,
+                   QueryArrow-db-sql-postgresql,
                    template-haskell
   ghc-options:     -Wall -fPIC -shared -dynamic
   other-modules:

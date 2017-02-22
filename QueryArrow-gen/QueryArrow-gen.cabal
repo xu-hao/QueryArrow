@@ -23,7 +23,7 @@ executable schema_parser_main
                    fast-logger,
                    either,
                    template-haskell,
-                   QueryArrow-sql-common,
+                   QueryArrow-db-sql-common,
                    QueryArrow-common
   ghc-options:     -Wall
   other-modules:   SchemaParser

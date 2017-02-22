@@ -21,7 +21,7 @@ library
                    namespace >= 0.1.2.2,
                    either,
                    QueryArrow-common,
-                   QueryArrow-sql-common,
+                   QueryArrow-db-sql-common,
                    QueryArrow-ffi-service
   ghc-options:     -Wall -fPIC
   other-modules:

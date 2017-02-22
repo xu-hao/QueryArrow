@@ -4,10 +4,8 @@ module QueryArrow.Remote.NoTranslation.Client where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
-import QueryArrow.DB.NoPreparedStatement
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
 import Foreign.Ptr
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions

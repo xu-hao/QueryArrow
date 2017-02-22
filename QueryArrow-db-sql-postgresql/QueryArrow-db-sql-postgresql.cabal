@@ -14,6 +14,6 @@ library
                    HDBC-postgresql,
                    heterogeneous-list,
                    QueryArrow-common,
-                   QueryArrow-sql-common
+                   QueryArrow-db-sql-common
   ghc-options:     -Wall -fPIC
   other-modules:

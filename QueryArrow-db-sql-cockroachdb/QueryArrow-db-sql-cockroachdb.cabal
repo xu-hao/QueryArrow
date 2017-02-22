@@ -12,6 +12,6 @@ library
                    base >= 4,
                    HDBC-postgresql,
                    QueryArrow-common,
-                   QueryArrow-sql-postgresql
+                   QueryArrow-db-sql-postgresql
   ghc-options:     -Wall -fPIC
   other-modules:

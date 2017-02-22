@@ -22,9 +22,9 @@ executable QueryArrowServer
                    QueryArrow,
                    QueryArrow-rpc-common,
                    QueryArrow-common,
-                   QueryArrow-remote,
+                   QueryArrow-db-remote,
                    QueryArrow-rpc-http,
-                   QueryArrow-filesystem,
+                   QueryArrow-db-filesystem,
                    log-adapter
   ghc-options:     -Wall -fPIC -threaded
   other-modules:

@@ -15,7 +15,6 @@ library
                    QueryArrow.DB.NoTranslation
                    QueryArrow.DB.GenericDatabase
                    QueryArrow.DB.NoConnection
-                   QueryArrow.DB.NoPreparedStatement
                    QueryArrow.DB.ParametrizedStatement
                    QueryArrow.DB.ResultStream
                    QueryArrow.DB.AbstractDatabaseList
