@@ -58,15 +58,15 @@ The queries are issued from the client in the QueryArrow Language. QAL is a unif
 
 ### ubuntu 16.04
 
-#### Install GHC 8.0.1
+#### Install GHC 8.0.2
 
 from source:
 
-https://www.haskell.org/ghc/download_ghc_8_0_1#sources
+https://www.haskell.org/ghc/download_ghc_8_0_2#sources
 
 Find out where ghc is installed.
 
-If built from source, it is `<prefix>/lib/ghc-8.0.1/`. Default `<prefix>` is `/usr/local`.
+If built from source, it is `<prefix>/lib/ghc-8.0.2/`. Default `<prefix>` is `/usr/local`.
 
 #### Install Stack
 
