@@ -1,4 +1,4 @@
-name:           QueryArrow-sql-common
+name:           QueryArrow-db-sql-common
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple

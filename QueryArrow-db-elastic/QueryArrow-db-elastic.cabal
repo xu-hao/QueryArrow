@@ -1,4 +1,4 @@
-name:           QueryArrow-sum
+name:           QueryArrow-db-elastic
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -7,24 +7,42 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.Sum
+                   QueryArrow.ElasticSearch.ElasticSearch
+                   QueryArrow.ElasticSearch.ElasticSearchConnection
+                   QueryArrow.ElasticSearch.ESQL
+                   QueryArrow.ElasticSearch.Query
+                   QueryArrow.ElasticSearch.QueryResult
+                   QueryArrow.ElasticSearch.QueryResultHits
+                   QueryArrow.ElasticSearch.ICAT
+                   QueryArrow.ElasticSearch.Record
+                   QueryArrow.HTTP.ElasticSearchUtils
   build-depends:
                    base >= 4,
+                   aeson,
                    containers,
                    mtl,
                    transformers,
                    semigroups,
                    parsec,
                    semigroupoids,
+                   HDBC-sqlite3,
+                   HDBC-postgresql,
+                   HDBC,
                    aeson,
                    bytestring,
+                   haskell-neo4j-client,
                    unordered-containers,
                    convertible,
                    text >= 1.2.1.1,
                    scientific,
                    array,
+                   temporary,
+                   process,
+
+
                    conduit-combinators,
                    conduit,
+                   http-conduit,
                    resourcet,
                    async,
                    time,
@@ -32,19 +50,19 @@ library
                    exceptions,
                    utf8-string,
                    regex-tdfa,
+                   monad-control,
                    lifted-async,
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
+                   network,
                    conduit-extra,
-                   cpphs,
                    monad-logger,
                    fast-logger,
-                   constraints,
-                   either,
-                   lrucache,
                    heterogeneous-list,
-                   log-adapter,
-                   QueryArrow-common
+                   constraints,
+                   lrucache,
+                   QueryArrow-common,
+                   template-haskell
   ghc-options:     -Wall -fPIC
   other-modules:

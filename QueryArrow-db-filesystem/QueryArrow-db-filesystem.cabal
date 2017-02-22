@@ -1,4 +1,4 @@
-name:           QueryArrow-filesystem
+name:           QueryArrow-db-filesystem
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple

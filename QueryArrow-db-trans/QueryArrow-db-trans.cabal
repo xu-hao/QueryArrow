@@ -1,4 +1,4 @@
-name:           QueryArrow-cache
+name:           QueryArrow-db-trans
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -7,7 +7,9 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.Cache
+                   QueryArrow.Rewriting
+                   QueryArrow.Translation
+                   QueryArrow.RuleParser
   build-depends:
                    base >= 4,
                    containers,

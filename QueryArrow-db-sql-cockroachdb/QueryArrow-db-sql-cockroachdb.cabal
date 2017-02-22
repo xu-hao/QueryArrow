@@ -1,4 +1,4 @@
-name:           QueryArrow-sql-sqlite3
+name:           QueryArrow-db-sql-cockroachdb
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -7,13 +7,11 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.SQL.HDBC.Sqlite3
+                   QueryArrow.SQL.HDBC.CockroachDB
   build-depends:
                    base >= 4,
-                   aeson,
-                   HDBC-sqlite3,
-                   heterogeneous-list,
+                   HDBC-postgresql,
                    QueryArrow-common,
-                   QueryArrow-sql-common
+                   QueryArrow-sql-postgresql
   ghc-options:     -Wall -fPIC
   other-modules:

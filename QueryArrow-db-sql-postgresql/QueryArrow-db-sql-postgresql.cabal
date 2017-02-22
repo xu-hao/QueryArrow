@@ -1,4 +1,4 @@
-name:           QueryArrow-sql-postgresql
+name:           QueryArrow-db-sql-postgresql
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
