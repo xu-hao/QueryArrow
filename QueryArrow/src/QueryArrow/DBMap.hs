@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, UndecidableInstances, FlexibleContexts, RankNTypes, GADTs, DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, UndecidableInstances, FlexibleContexts, RankNTypes, GADTs #-}
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
@@ -8,9 +8,7 @@ import QueryArrow.Translation
 import QueryArrow.Cache
 import QueryArrow.Plugin
 import QueryArrow.Sum
-import QueryArrow.Binding.Binding
-import Data.Aeson
-import GHC.Generics
+import QueryArrow.Include
 import Data.Maybe
 
 import Prelude  hiding (lookup)
@@ -33,22 +31,6 @@ getDB2 dbMap ps = case lookup (catalog_database_type ps) dbMap of
     Just (AbstractPlugin getDBFunc) ->
         getDB getDBFunc (getDB2 dbMap) ps
     Nothing -> error ("unimplemented database type " ++ (catalog_database_type ps))
-
-data IncludePlugin = IncludePlugin
-
-data IncludePluginConfig = IncludePluginConfig {
-    include :: String
-} deriving Generic
-
-instance FromJSON IncludePluginConfig
-
-instance ToJSON IncludePluginConfig
-
-instance Plugin IncludePlugin MapResultRow where
-  getDB _ _ ps0 = do
-    let ps = getDBSpecificConfig ps0
-    ps3 <- getConfig (include ps)
-    getDB2 dbMap0 ps3
 
 dbMap0 :: DBMap
 dbMap0 = fromList [

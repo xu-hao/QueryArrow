@@ -45,27 +45,28 @@ packages:
     - QueryArrow-ffi-c-tcp
     - QueryArrow-ffi-c-unixdomainsocket
     - QueryArrow-ffi-c-genquery
-    - QueryArrow-db-elastic/
-    - QueryArrow-db-cypher/
-    - QueryArrow-db-sql-common/
-    - QueryArrow-db-sql-cockroachdb/
-    - QueryArrow-db-sql-postgresql/
-    - QueryArrow-db-sql-sqlite3/
-    - QueryArrow-common/
-    - QueryArrow-db-inmemory/
-    - QueryArrow-db-remote
     - QueryArrow-ffi-service
     - QueryArrow-ffi-service-local
     - QueryArrow-ffi-service-handle-common
     - QueryArrow-ffi-service-tcp
     - QueryArrow-ffi-service-unixdomainsocket
     - QueryArrow-ffi-genquery
-    - QueryArrow-cli
+    - QueryArrow-db-elastic/
+    - QueryArrow-db-cypher/
+    - QueryArrow-db-sql-common/
+    - QueryArrow-db-sql-cockroachdb/
+    - QueryArrow-db-sql-postgresql/
+    - QueryArrow-db-sql-sqlite3/
+    - QueryArrow-db-inmemory/
+    - QueryArrow-db-remote
     - QueryArrow-db-filesystem
-    - QueryArrow-gen
+    - QueryArrow-db-include
     - QueryArrow-db-trans
     - QueryArrow-db-sum
     - QueryArrow-db-cache
+    - QueryArrow-common/
+    - QueryArrow-cli
+    - QueryArrow-gen
     - heterogeneous-list
     - log-adapter
 # The following packages have been ignored due to incompatibility with the
