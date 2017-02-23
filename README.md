@@ -32,7 +32,7 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 |  Include   |  include other JSON files  |
 |  InMemory/StateMap  |      in-memory mutable map     |
 | InMemory/Map |     in-memory immutable map    |
-|       InMemory/BuiltIn      |   built-in predicates, `eq`, `ne`, `like_regex`, `not_like_regex`, `le`, `ge`, `lt`, `gt`, `concat`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `sleep`, `encode`     |
+|       InMemory/BuiltIn      |   built-in predicates `eq`, `ne`, `like_regex`, `not_like_regex`, `le`, `ge`, `lt`, `gt`, `concat`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `sleep`, `encode`     |
 
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
