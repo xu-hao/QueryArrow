@@ -20,6 +20,7 @@ import Data.IORef
 import Data.Text.Encoding
 import Data.Aeson
 import GHC.Generics
+import Text.Regex (subRegex, mkRegex)
 import Debug.Trace
 
 
@@ -195,6 +196,21 @@ modBinding ns = BinaryFunction ns "mod" NumberType NumberType NumberType mod
 subBinding :: String -> BinaryIso
 subBinding ns = BinaryIso ns "sub" NumberType NumberType NumberType (-) (-) (+)
 
+-- example substrBinding
+
+substrBinding :: String -> TernaryFunction
+substrBinding ns = TernaryFunction ns "substr" TextType NumberType NumberType TextType (\(StringValue a) (IntValue b) (IntValue c) -> StringValue (T.drop b (T.take c a)))
+
+-- example replaceBinding
+
+replaceBinding :: String -> TernaryFunction
+replaceBinding ns = TernaryFunction ns "replace" TextType TextType TextType TextType (\(StringValue a) (StringValue b) (StringValue c) -> StringValue (T.replace b c a))
+
+-- example regexReplaceBinding
+
+regexReplaceBinding :: String -> TernaryFunction
+regexReplaceBinding ns = TernaryFunction ns "regex_replace" TextType TextType TextType TextType (\(StringValue a) (StringValue b) (StringValue c) -> StringValue (T.pack (subRegex (mkRegex (T.unpack b)) (T.unpack c) (T.unpack a))))
+
 -- example ConcatDB
 
 concatBinding :: String -> BinaryMono
@@ -226,7 +242,8 @@ builtInDB dbname ns = BindingDatabase dbname [
                                 AbstractBinding (likeRegexBinding ns),
                                 AbstractBinding (notLikeRegexBinding ns),
                                 AbstractBinding (sleepBinding ns),
-                                AbstractBinding (concatBinding ns)]
+                                AbstractBinding (concatBinding ns),
+                                AbstractBinding (substrBinding ns)]
 
 data ICATDBInfo = ICATDBInfo {
   db_namespace :: String
