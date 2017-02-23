@@ -19,37 +19,20 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 
 |        Name       |           Description          |
 |:-----------------:|:------------------------------:|
-|      Sum QAP      |           aggregation          |
-|  Translation QAP  |         policy support         |
-|     Cache QAP     |             caching            |
-|      Remote QAP   |            remoting            |
-| FileSystem QAP | interfacing with file system |
-| ElasticSearch QAP | interfacing with ElasticSearch |
-|     Neo4j QAP     |     interfacing with Neo4j     |
-|   PostgreSQL QAP  |    interfacing with Postgres   |
-|    SQLite3 QAP    |    interfacing with SQLite3    |
-|  CockroachDB QAP  |  interfacing with CockroachDB  |
-|  Include QAP  |  include other JSON files  |
-|     LikeRegex QAP     |       regular expression       |
-|     NotLikeRegex QAP     |       regular expression       |
-|  Mutable Map QAP  |      in-memory mutable map     |
-| Immutable Map QAP |     in-memory immutable map    |
-|       Eq QAP      |            equal            |
-|       Ne QAP      |            not equal            |
-|       Le QAP      |            less than or equal            |
-|       Ge QAP      |            greater than or equal            |
-|       Lt QAP      |            less than            |
-|       Gt QAP      |            greater than            |
-|       Concat QAP      |            string concatenation            |
-|       Strlen QAP      |            string length            |
-|       Add QAP      |            addition            |
-|       Sub QAP      |            subtraction            |
-|       Mul QAP      |            multiplication            |
-|       Div QAP      |            division            |
-|       Mod QAP      |            modulo            |
-|       Exp QAP      |            exponentiation            |
-| Sleep QAP | sleep |
-| Encode QAP | text encoding and decoding |
+|      Sum      |           aggregation          |
+|  Translation  |         policy support         |
+|     Cache     |             caching            |
+|      Remote/TCP   |            remoting            |
+| FileSystem | interfacing with file system |
+| ElasticSearch/ElasticSearch | interfacing with ElasticSearch |
+|     Cypher/Neo4j     |     interfacing with Neo4j     |
+|   SQL/HDBC/PostgreSQL  |    interfacing with Postgres   |
+|    SQL/HDBC/SQLite3    |    interfacing with SQLite3    |
+|  SQL/HDBC/CockroachDB   |  interfacing with CockroachDB  |
+|  Include   |  include other JSON files  |
+|  InMemory/StateMap  |      in-memory mutable map     |
+| InMemory/Map |     in-memory immutable map    |
+|       InMemory/BuiltIn      |   built-in predicates, `eq`, `ne`, `like_regex`, `not_like_regex`, `le`, `ge`, `lt`, `gt`, `concat`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `sleep`, `encode`     |
 
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
@@ -150,10 +133,10 @@ An exmaple is
                                 "catalog_database_type" : "FileSystem"
                             }, {
                                 "db_config" : {
-                                    "db_namespace" : "Encode",
+                                    "db_namespace" : "BuiltIn",
                                 },
                                 "qap_name" : "",
-                                "catalog_database_type" : "InMemory/Encode"
+                                "catalog_database_type" : "InMemory/BuiltIn"
                             }]
                         },
                         "qap_name" : "sum",

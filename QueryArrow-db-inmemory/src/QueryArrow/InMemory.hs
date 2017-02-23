@@ -6,8 +6,6 @@ import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin
 import QueryArrow.Binding.Binding
-import QueryArrow.Data.Heterogeneous.List
-import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Config
 
 import Prelude  hiding (lookup)
@@ -22,131 +20,123 @@ import Data.IORef
 import Data.Text.Encoding
 import Data.Aeson
 import GHC.Generics
-import Data.Maybe
 import Debug.Trace
 
 
 -- example MapDB
 
 
-data MapDB = MapDB String String String [(ResultValue, ResultValue)] deriving Show
+data MapBinding = MapBinding String String [(ResultValue, ResultValue)] deriving Show
+instance Binding MapBinding where
+    bindingPred (MapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
+    bindingSupport _ [_,_] = True
+    bindingSupport _ _ = False
+    bindingSupportInsert _ = False
+    bindingSupportDelete _ = False
+    bindingExec (MapBinding _ _ rows) [I,I] [aval, bval] =
+      return (if (aval, bval) `elem` rows
+        then [[]]
+        else [])
+    bindingExec (MapBinding _ _ rows) [I,O] [aval] =
+        return [[snd x] | x <- rows, fst x == aval]
+    bindingExec (MapBinding _ _ rows) [O,I] [bval] =
+        return [[fst x] | x <- rows, snd x == bval]
+    bindingExec (MapBinding _ _ rows) [O,O] [] =
+        return (map (\(a,b)->[a,b]) rows)
 
-instance Binding MapDB where
-    dbName (MapDB name _ _ _) = name
-    bindingPred (MapDB _ ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
-
-instance BinaryBinding MapDB where
-    supportII _ = True
-    supportIO _ = True
-    supportOO _ = True
-    supportOI _ = True
-    supportInsertII _ = False
-    supportDeleteII _ = False
-
-instance EffectFreeBinaryBinding MapDB where
-    execII (MapDB _ _ _ rows) _ aval bval =
-      if (aval, bval) `elem` rows
-        then [mempty]
-        else []
-    execIO (MapDB _ _ _ rows) _ aval _ =
-        [snd x | x <- rows, fst x == aval]
-    execOI (MapDB _ _ _ rows) _ _ bval =
-        [fst x | x <- rows, snd x == bval]
-    execOO (MapDB _ _ _ rows) _ _ _ = rows
-
+mapDB :: String -> String -> String -> [(ResultValue, ResultValue)] -> BindingDatabase
+mapDB dbname ns n rows = BindingDatabase dbname [AbstractBinding (MapBinding ns n rows)]
 -- update mapdb
 
 instance Show (IORef a) where
     show _ = "ioref"
 
-data StateMapDB = StateMapDB String String String (IORef [(ResultValue, ResultValue)]) deriving Show
+data StateMapBinding = StateMapBinding String String (IORef [(ResultValue, ResultValue)]) deriving Show
 
-instance Binding StateMapDB where
-    dbName (StateMapDB name _ _ _) = name
-    bindingPred (StateMapDB _ ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
-
-instance BinaryBinding StateMapDB where
-    supportII _ = True
-    supportIO _ = True
-    supportOO _ = True
-    supportOI _ = True
-    supportInsertII _ = True
-    supportDeleteII _ = True
-
-instance EffectfulBinaryBinding StateMapDB where
-    execIIE (StateMapDB _ _ _ map1) _ aval bval = do
+instance Binding StateMapBinding where
+    bindingPred (StateMapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
+    bindingSupport _ [_,_] = True
+    bindingSupport _ _ = False
+    bindingSupportInsert _ = True
+    bindingSupportDelete _ = True
+    bindingExec (StateMapBinding _ _ map1) [I,I] [aval, bval] = do
       rows <- liftIO $ readIORef map1
       return (if (aval, bval) `elem` rows
-        then [mempty]
+        then [[]]
         else [])
-    execIOE (StateMapDB _ _ _ map1) _ aval _ = do
+    bindingExec (StateMapBinding _ _ map1) [I,O] [aval] = do
       rows <- liftIO $ readIORef map1
-      return [snd x | x <- rows, fst x == aval]
-    execOIE (StateMapDB _ _ _ map1) _ _ bval = do
+      return [[snd x] | x <- rows, fst x == aval]
+    bindingExec (StateMapBinding _ _ map1) [O,I] [bval] = do
       rows <- liftIO $ readIORef map1
-      return [fst x | x <- rows, snd x == bval]
-    execOOE (StateMapDB _ _ _ map1) _ _ _ =
-      liftIO $ readIORef map1
-    insertIIE (StateMapDB _ _ _ map1) _ aval bval = do
+      return [[fst x] | x <- rows, snd x == bval]
+    bindingExec (StateMapBinding _ _ map1) [O,O] [] = do
+      rows <- liftIO $ readIORef map1
+      return (map (\(a,b)->[a,b]) rows)
+    bindingInsert (StateMapBinding _ _ map1) [aval, bval] = do
         rows <- liftIO $ readIORef map1
         let add rows1 row = rows1 `union` [row]
         let rows2 = add rows (aval, bval)
         liftIO $ writeIORef map1 rows2
-    deleteIIE (StateMapDB _ _ _ map1) _ aval bval = do
+    bindingDelete (StateMapBinding _ _ map1) [aval, bval] = do
         rows <- liftIO $ readIORef map1
         let remove rows1 row = rows1 \\ [row]
         let rows2 = remove rows (aval, bval)
         liftIO $ writeIORef map1 rows2
 
+stateMapDB :: String -> String -> String ->  IORef [(ResultValue, ResultValue)] -> BindingDatabase
+stateMapDB dbname ns n map1 =
+  BindingDatabase dbname [AbstractBinding (StateMapBinding ns n map1)]
+
 -- example LikeRegexDB
 
-likeRegexDB :: String -> String -> BinaryBoolean
-likeRegexDB n ns = BinaryBoolean n ns "like_regex" TextType TextType (\(StringValue a) (StringValue b) -> T.unpack a =~ T.unpack b)
+likeRegexBinding :: String -> BinaryBoolean
+likeRegexBinding ns = BinaryBoolean ns "like_regex" TextType TextType (\(StringValue a) (StringValue b) -> T.unpack a =~ T.unpack b)
 
 -- example NotLikeRegexDB
 
-notLikeRegexDB :: String -> String -> BinaryBoolean
-notLikeRegexDB n ns = BinaryBoolean n ns "not_like_regex" TextType TextType (\(StringValue a) (StringValue b) -> not (T.unpack a =~ T.unpack b))
+notLikeRegexBinding :: String -> BinaryBoolean
+notLikeRegexBinding ns = BinaryBoolean ns "not_like_regex" TextType TextType (\(StringValue a) (StringValue b) -> not (T.unpack a =~ T.unpack b))
 
 -- example EqDB
 
-eqDB :: String -> String -> UnaryIso
-eqDB n ns = UnaryIso n ns "eq" (TypeVar "a") (TypeVar "a") id id
+eqBinding :: String -> UnaryIso
+eqBinding ns = UnaryIso ns "eq" (TypeVar "a") (TypeVar "a") id id
 
 -- example NeDB
 
-neDB :: String -> String -> BinaryBoolean
-neDB n ns = BinaryBoolean n ns "ne" (TypeVar "a") (TypeVar "a") (/=)
+neBinding :: String -> BinaryBoolean
+neBinding ns = BinaryBoolean ns "ne" (TypeVar "a") (TypeVar "a") (/=)
 
 -- example LeDB
 
-leDB :: String -> String -> BinaryBoolean
-leDB n ns = BinaryBoolean n ns "le" NumberType NumberType (<=)
+leBinding :: String -> BinaryBoolean
+leBinding ns = BinaryBoolean ns "le" NumberType NumberType (<=)
 
 -- example GeDB
 
-geDB :: String -> String -> BinaryBoolean
-geDB n ns = BinaryBoolean n ns "ge" NumberType NumberType (/=)
+geBinding :: String -> BinaryBoolean
+geBinding ns = BinaryBoolean ns "ge" NumberType NumberType (/=)
 
 -- example LtDB
 
-ltDB :: String -> String -> BinaryBoolean
-ltDB n ns = BinaryBoolean n ns "lt" NumberType NumberType (<)
+ltBinding :: String -> BinaryBoolean
+ltBinding ns = BinaryBoolean ns "lt" NumberType NumberType (<)
 
 -- example GtDB
 
-gtDB :: String -> String -> BinaryBoolean
-gtDB n ns = BinaryBoolean n ns "gt" NumberType NumberType (>)
+gtBinding :: String -> BinaryBoolean
+gtBinding ns = BinaryBoolean ns "gt" NumberType NumberType (>)
 
 -- example SleepDB
 
-sleepDB :: String -> String -> UnaryProcedure
-sleepDB n ns = UnaryProcedure n ns "sleep" NumberType  (\ (IntValue i) -> threadDelay i)
+sleepBinding :: String -> UnaryProcedure
+sleepBinding ns = UnaryProcedure ns "sleep" NumberType  (\ (IntValue i) -> threadDelay i)
 
 -- example EncodeDB
 
-encodeDB :: String -> String -> BinaryParamIso
-encodeDB n ns = BinaryParamIso n ns "encode" TextType TextType ByteStringType (\(StringValue bs) (StringValue codec0) ->
+encodeBinding :: String -> BinaryParamIso
+encodeBinding ns = BinaryParamIso ns "encode" TextType TextType ByteStringType (\(StringValue bs) (StringValue codec0) ->
       let codec = unpack codec0 in ByteStringValue (encoded codec bs)) (\(ByteStringValue bs3) (StringValue codec0)  ->
       let codec = unpack codec0 in StringValue (decoded codec bs3)) where
           encoded codec bs = case codec of
@@ -166,23 +156,23 @@ encodeDB n ns = BinaryParamIso n ns "encode" TextType TextType ByteStringType (\
 
 -- example StrlenDB
 
-strlenDB :: String -> String -> UnaryFunction
-strlenDB n ns = UnaryFunction n ns "strlen" TextType NumberType ( \(StringValue s) -> IntValue (T.length s))
+strlenBinding :: String -> UnaryFunction
+strlenBinding ns = UnaryFunction ns "strlen" TextType NumberType ( \(StringValue s) -> IntValue (T.length s))
 
 -- example AddDB
 
-addDB :: String -> String -> BinaryIso
-addDB n ns = BinaryIso n ns "add" NumberType NumberType NumberType (+) (\a c -> c - a) (\b c -> c - b)
+addBinding :: String -> BinaryIso
+addBinding ns = BinaryIso ns "add" NumberType NumberType NumberType (+) (\a c -> c - a) (\b c -> c - b)
 
 -- example ExpDB
 
-expDB :: String -> String -> BinaryFunction
-expDB n ns = BinaryFunction n ns "exp" NumberType NumberType NumberType (^)
+expBinding :: String -> BinaryFunction
+expBinding ns = BinaryFunction ns "exp" NumberType NumberType NumberType (^)
 
 -- example MulDB
 
-mulDB :: String -> String -> BinaryMono
-mulDB n ns = BinaryMono n ns "mul" NumberType NumberType NumberType (*) (\a c ->
+mulBinding :: String -> BinaryMono
+mulBinding ns = BinaryMono ns "mul" NumberType NumberType NumberType (*) (\a c ->
                                 if c `mod` a == 0
                                   then Just (c `div` a)
                                   else Nothing) (\b c ->
@@ -192,23 +182,23 @@ mulDB n ns = BinaryMono n ns "mul" NumberType NumberType NumberType (*) (\a c ->
 
 -- example DivDB
 
-divDB :: String -> String -> BinaryFunction
-divDB n ns = BinaryFunction n ns "div" NumberType NumberType NumberType div
+divBinding :: String -> BinaryFunction
+divBinding ns = BinaryFunction ns "div" NumberType NumberType NumberType div
 
 -- example ModDB
 
-modDB :: String -> String -> BinaryFunction
-modDB n ns = BinaryFunction n ns "mod" NumberType NumberType NumberType mod
+modBinding :: String -> BinaryFunction
+modBinding ns = BinaryFunction ns "mod" NumberType NumberType NumberType mod
 
 -- example SubDB
 
-subDB :: String -> String -> BinaryIso
-subDB n ns = BinaryIso n ns "sub" NumberType NumberType NumberType (-) (-) (+)
+subBinding :: String -> BinaryIso
+subBinding ns = BinaryIso ns "sub" NumberType NumberType NumberType (-) (-) (+)
 
 -- example ConcatDB
 
-concatDB :: String -> String -> BinaryMono
-concatDB n ns = BinaryMono n ns "concat" NumberType NumberType NumberType (\(StringValue a) (StringValue b) -> StringValue (T.append a b))
+concatBinding :: String -> BinaryMono
+concatBinding ns = BinaryMono ns "concat" NumberType NumberType NumberType (\(StringValue a) (StringValue b) -> StringValue (T.append a b))
                     (\(StringValue b) (StringValue c) ->
                         if T.length c >= T.length b && T.drop (T.length c - T.length b) c == b
                             then Just (StringValue (T.take (T.length c - T.length b) c))
@@ -216,6 +206,27 @@ concatDB n ns = BinaryMono n ns "concat" NumberType NumberType NumberType (\(Str
                         if T.length c >= T.length a && T.take (T.length a) c == a
                             then Just (StringValue (T.drop (T.length a) c))
                             else Nothing)
+
+builtInDB :: String -> String -> BindingDatabase
+builtInDB dbname ns = BindingDatabase dbname [
+                                AbstractBinding (addBinding ns),
+                                AbstractBinding (subBinding ns),
+                                AbstractBinding (divBinding ns),
+                                AbstractBinding (mulBinding ns),
+                                AbstractBinding (modBinding ns),
+                                AbstractBinding (expBinding ns),
+                                AbstractBinding (strlenBinding ns),
+                                AbstractBinding (encodeBinding ns),
+                                AbstractBinding (geBinding ns),
+                                AbstractBinding (leBinding ns),
+                                AbstractBinding (gtBinding ns),
+                                AbstractBinding (ltBinding ns),
+                                AbstractBinding (eqBinding ns),
+                                AbstractBinding (neBinding ns),
+                                AbstractBinding (likeRegexBinding ns),
+                                AbstractBinding (notLikeRegexBinding ns),
+                                AbstractBinding (sleepBinding ns),
+                                AbstractBinding (concatBinding ns)]
 
 data ICATDBInfo = ICATDBInfo {
   db_namespace :: String
@@ -256,3 +267,12 @@ instance Convertible Value (IO [(ResultValue, ResultValue)]) where
 
 instance Convertible Value (IO (IORef [(ResultValue, ResultValue)])) where
   safeConvert a = Right (convert a >>= newIORef)
+
+builtInPlugin :: NoConnectionDatabasePlugin BindingDatabase
+builtInPlugin = NoConnectionDatabasePlugin builtInDB
+
+mapPlugin :: NoConnectionDatabasePlugin2 BindingDatabase [(ResultValue, ResultValue)]
+mapPlugin = NoConnectionDatabasePlugin2 mapDB
+
+stateMapPlugin :: NoConnectionDatabasePlugin2 BindingDatabase (IORef [(ResultValue, ResultValue)])
+stateMapPlugin = NoConnectionDatabasePlugin2 stateMapDB
