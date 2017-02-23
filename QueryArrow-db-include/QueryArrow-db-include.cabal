@@ -1,0 +1,20 @@
+name:           QueryArrow-db-include
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Simple
+author:         Hao Xu
+
+library
+  hs-source-dirs:  src
+  exposed-modules:
+                   QueryArrow.Include
+  build-depends:
+                   base >= 4,
+                   aeson,
+                   hslogger,
+                   mtl,
+                   containers,
+                   namespace >= 0.1.2.2,
+                   QueryArrow-common
+  ghc-options:     -Wall -fPIC
+  other-modules:
