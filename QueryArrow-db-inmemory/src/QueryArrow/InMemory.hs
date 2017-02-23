@@ -243,6 +243,8 @@ builtInDB dbname ns = BindingDatabase dbname [
                                 AbstractBinding (notLikeRegexBinding ns),
                                 AbstractBinding (sleepBinding ns),
                                 AbstractBinding (concatBinding ns),
+                                AbstractBinding (replaceBinding ns),
+                                AbstractBinding (regexReplaceBinding ns),
                                 AbstractBinding (substrBinding ns)]
 
 data ICATDBInfo = ICATDBInfo {
