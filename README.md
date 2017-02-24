@@ -16,6 +16,8 @@ QueryArrow is motivated by the following applications: bidirectional metadata in
 QueryArrow provides a systematic solution to shared namespace and unshared namespace federation of metadata. In particular, QueryArrow allows querying multiple zones and multiple data sources including NoSQL databases, and updating data sources. For data sources that support two-phase commit, QueryArrow also supports distributed transactions. QueryArrow also enables poly-fill for features that the underlying database does not support.
 
 A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs). Each plugin provides interface with one data store.
+The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
+
 
 
 ## How to build
@@ -229,8 +231,6 @@ Currently, the implemented QAPs include
 | InMemory/Map |     in-memory immutable map    |`db_namespace`,`predicate_name`,`db_map`|
 |       InMemory/BuiltIn      |   built-in predicates: `like_regex`, `not_like_regex`, `eq`, `ne`, `le`, `ge`, `lt`, `gt`, `concat`, `substr`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `like`, `not_like`, `in`, `replace`, `regex_replace`, `sleep`, `encode`     |`db_namespace`|
 
-
-The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
 
 ## QueryArrow CLI
 
