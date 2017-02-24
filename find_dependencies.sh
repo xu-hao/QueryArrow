@@ -9,7 +9,7 @@ mkdir lib
 mkdir include
 mkdir bin
 mkdir etc
-cp $ROOT/CPackConfig.cmake $ROOT/LICENSE.txt .
+cp $ROOT/CPackConfig.cmake $ROOT/LICENSE.txt $ROOT/README.md .
 
 ROOTS=$(find $ROOT -name "*libHSQueryArrow-ffi-c*.so" | grep "install")
 ROOT0="$ROOT/.stack-work/install/x86_64-linux/lts-7.9/8.0.1/bin/QueryArrow $ROOT/.stack-work/install/x86_64-linux/lts-7.9/8.0.1/bin/QueryArrowServer"
