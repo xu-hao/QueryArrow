@@ -4,8 +4,11 @@ module QueryArrow.Config where
 import Data.Aeson
 import Data.Aeson.TH
 import Data.Maybe
+import Data.Yaml
+import System.FilePath
 
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 
 -- config info
 
@@ -34,7 +37,10 @@ $(deriveJSON defaultOptions{omitNothingFields = True} ''ICATDBConnInfo)
 
 getConfig :: FromJSON a => String -> IO a
 getConfig filepath = do
-    d <- eitherDecode <$> B.readFile filepath
+    let ext = takeExtension filepath
+    d <- case ext of
+      "json" -> eitherDecode <$> BL.readFile filepath
+      _ -> decodeEither <$> B.readFile filepath
     case d of
             Left err -> error ("getConfig: " ++ filepath ++ " " ++ err)
             Right ps -> return ps

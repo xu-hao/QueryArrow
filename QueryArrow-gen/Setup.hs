@@ -31,6 +31,6 @@ main = defaultMainWithHooks simpleUserHooks {
                 copyFile "gen/SQL/ICATGen" "etc/QueryArrow/gen/SQL/ICATGen"
                 copyFile "rewriting-plugin-common.rules" "etc/QueryArrow/rewriting-plugin-common.rules"
                 copyFile "rewriting-plugin-gen.rules" "etc/QueryArrow/rewriting-plugin-gen.rules"
-                conf <- readFile "tdb-plugin-gen.json"
-                writeFile "etc/QueryArrow/tdb-plugin-gen-abs.json" (replace conf "../QueryArrow-gen" "/etc/QueryArrow")
+                conf <- readFile "tdb-plugin-gen.yaml"
+                writeFile "etc/QueryArrow/tdb-plugin-gen-abs.yaml" (replace conf "../QueryArrow-gen" "/etc/QueryArrow")
       }

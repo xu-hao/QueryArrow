@@ -85,7 +85,7 @@ input = Input <$>
 mainArgs :: Input -> IO ()
 mainArgs input = do
     setup (if verbose input then INFO else WARNING)
-    ps <- getConfig (fromMaybe "/etc/QueryArrow/tdb-plugin-gen-abs.json" (configFile input))
+    ps <- getConfig (fromMaybe "/etc/QueryArrow/tdb-plugin-gen-abs.yaml" (configFile input))
     let hdr = words (headers input)
     let qu = query input
     let showhdr = showHeaders input

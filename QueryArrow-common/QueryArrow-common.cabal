@@ -62,6 +62,8 @@ library
                    constraints,
                    either,
                    lrucache,
+                   yaml,
+                   filepath,
                    heterogeneous-list,
                    log-adapter
   ghc-options:     -Wall -fPIC
