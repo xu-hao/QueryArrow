@@ -42,7 +42,7 @@ If you install from Ubuntu repo, make sure you run
 
     stack upgrade
 
-#### Build QueryArrow
+#### Install Packages
 
 On `Ubuntu`
 
@@ -51,6 +51,8 @@ On `Ubuntu`
 On `CentOS`
 
     yum install postgresql-devel sqlite3-devel -y
+
+#### Build QueryArrow
 
     git clone http://github.com/xu-hao/QueryArrow
 
@@ -206,11 +208,7 @@ An exmaple is
 }
 ~~~
 
-## QueryArrow CLI
-
-QueryArrow provides a CLI command `QueryArrow`.
-
-## Plugins
+## QueryArrow Plugin
 
 Currently, the implemented QAPs include
 
@@ -233,6 +231,10 @@ Currently, the implemented QAPs include
 
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
+
+## QueryArrow CLI
+
+QueryArrow provides a CLI command `QueryArrow`.
 
 ## QueryArrow Server
 
