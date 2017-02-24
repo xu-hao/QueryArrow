@@ -29,7 +29,7 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 |   SQL/HDBC/PostgreSQL  |    interfacing with Postgres   |`db_name`, `db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
 |    SQL/HDBC/SQLite3    |    interfacing with SQLite3    |`db_file_path`, `db_namespace`, `db_predicates`, `db_sql_mapping`|
 |  SQL/HDBC/CockroachDB   |  interfacing with CockroachDB  |`db_name`, `db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
-|  Include   |  include other JSON files  |`include`|
+|  Include   |  include other config files  |`include`|
 |  InMemory/StateMap  |      in-memory mutable map     |`db_namespace`,`predicate_name`,`db_map`|
 | InMemory/Map |     in-memory immutable map    |`db_namespace`,`predicate_name`,`db_map`|
 |       InMemory/BuiltIn      |   built-in predicates: `like_regex`, `not_like_regex`, `eq`, `ne`, `le`, `ge`, `lt`, `gt`, `concat`, `substr`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `like`, `not_like`, `in`, `replace`, `regex_replace`, `sleep`, `encode`     |`db_namespace`|
@@ -233,9 +233,16 @@ QueryArrow provides server protocols. The service protocol is used for clients t
 
 |       |unix domain socket|tcp socket|http|
 |:-----:|:----------------:|:--------:|:--:|
-|service| implemented| implemented | implemented |
+|service| implemented | implemented | implemented |
 |remote| implemented | implemented| |
 |file system|  | implemented | |
+
+|  Service     |`server_config`|
+|:-----:|:----------------:|
+|service/tcp, remote/tcp | `tcp_server_addr`, `tcp_server_port` |
+|service/http|`http_server_port`|
+|service/unix domain socket, remote/unix domain socket| `uds_server_addr` |
+|file system/tcp| `fs_server_port`, `fs_server_root`, `fs_server_addr`|
 
 The command for starting the server is `QueryArrowServer`.
 
