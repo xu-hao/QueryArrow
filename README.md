@@ -75,8 +75,6 @@ On `CentOS`
 
     cd QueryArrow
 
-    git checkout development
-
     stack build
 
 #### Create QueryArrow package
