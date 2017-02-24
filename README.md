@@ -13,20 +13,18 @@ Specification: https://github.com/xu-hao/CertifiedQueryArrow
 
 QueryArrow is motivated by the following applications: bidirectional metadata integration from different metadata sources, metadata policies, metadata migration from different databases, metadata indexing.
 
-QueryArrow provides a systematic solution to shared namespace and unshared namespace federation of metadata. In particular, QueryArrow allows querying multiple zones and multiple data sources including NoSQL databases, and updating data sources. For data sources that support two-phase commit, QueryArrow also supports distributed transactions. QueryArrow also enables poly-fill for features that the underlying database does not support.
+QueryArrow provides a systematic solution to shared namespace and unshared namespace federation of metadata. In particular, QueryArrow allows querying multiple multiple data sources including NoSQL databases, and updating data sources. For data sources that support two-phase commit, QueryArrow also supports distributed transactions. QueryArrow also enables poly-fill for features that the underlying database does not support.
 
 A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs). Each plugin provides interface with one data store.
-The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
-
-
+The queries are issued from the client in the QueryArrow Language (QAL). QAL is a unified query and update language for SQL and NoSQL databases.
 
 ## How to build
 
-### ubuntu 16.04 and CentOS 7
+### Ubuntu 16.04 and CentOS 7
 
 #### Install GHC 8.0.2
 
-from source:
+From source:
 
 https://www.haskell.org/ghc/download_ghc_8_0_2#sources
 
@@ -40,7 +38,7 @@ Follow the instructions on this page:
 
 https://docs.haskellstack.org
 
-If you install from Ubuntu repo, make sure you run
+If you install from system repo, make sure you run
 
     stack upgrade
 
@@ -62,11 +60,11 @@ On `CentOS`
 
     stack build
 
-#### Create QueryArrow package
+#### Create QueryArrow Package
 
     cd ..
 
-make a new directory
+Make a new directory
 
     mkdir build
 
@@ -76,7 +74,7 @@ make a new directory
 
     cpack --config CPackConfig.cmake
 
-#### Install QueryArrow package
+#### Install QueryArrow Package
 
 On `Ubuntu`
 
@@ -90,7 +88,7 @@ On `CentOS`
 
 By default QueryArrow Configuration files are stored in the `/etc/QueryArrow/tdb-plugin-gen-abs.yaml` file.
 
-An exmaple is
+An example is
 
 ~~~yaml
 db_plugin:
@@ -145,7 +143,7 @@ servers:
 
 You can also use `JSON`.
 
-An exmaple is
+An example is
 
 ~~~json
 {
@@ -238,7 +236,7 @@ QueryArrow provides a CLI command `QueryArrow`.
 
 ## QueryArrow Server
 
-QueryArrow provides server protocols. The service protocol is used for clients to communicate with QueryArrow. The remote protocol is used by the Remote QAP. The file system protocol is used by the FileSystem QAP
+QueryArrow provides server protocols. The service protocol is used for clients to communicate with QueryArrow. The remote protocol is used by the Remote QAP. The file system protocol is used by the FileSystem QAP.
 
 |       |unix domain socket|tcp socket|http|
 |:-----:|:----------------:|:--------:|:--:|
@@ -255,8 +253,6 @@ QueryArrow provides server protocols. The service protocol is used for clients t
 
 The command for starting the server is `QueryArrowServer`.
 
-## Build C++ plugin
+## iRODS Database Plugin
 
-In addition to running QueryArrow as a standalone service, QueryArrow provides an iRODS database plugin.
-
-(to be updated: how to build irods plugin)
+In addition to running QueryArrow as a standalone service, QueryArrow provides an iRODS database plugin. To build it, follow instructions for building iRODS database plugins.
