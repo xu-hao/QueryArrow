@@ -99,6 +99,10 @@ On `Ubuntu`
 
     dpkg -i queryarrow-0.2-Linux-amd64.deb
 
+On `CentOS`
+
+    yum install queryarrow-0.2-Linux-amd64.rpm
+
 ## QueryArrow Configuration
 
 By default QueryArrow Configuration files are stored in the `/etc/QueryArrow/tdb-plugin-gen-abs.yaml` file.
