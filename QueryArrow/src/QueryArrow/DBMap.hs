@@ -18,7 +18,8 @@ import Data.Map.Strict (fromList, Map, lookup)
 import qualified QueryArrow.SQL.HDBC.PostgreSQL as PostgreSQL
 import qualified QueryArrow.SQL.HDBC.CockroachDB as CockroachDB
 import qualified QueryArrow.Cypher.Neo4j as Neo4j
-import qualified QueryArrow.InMemory as InMemory
+import QueryArrow.InMemory.BuiltIn
+import QueryArrow.InMemory.Map
 import qualified QueryArrow.ElasticSearch.ElasticSearch as ElasticSearch
 import qualified QueryArrow.SQL.HDBC.Sqlite3 as Sqlite3
 import qualified QueryArrow.Remote.NoTranslation.TCP.TCP as Remote.TCP
@@ -38,9 +39,9 @@ dbMap0 = fromList [
     ("SQL/HDBC/CockroachDB", AbstractPlugin CockroachDB.CockroachDBPlugin),
     ("SQL/HDBC/Sqlite3", AbstractPlugin Sqlite3.SQLite3Plugin),
     ("Cypher/Neo4j", AbstractPlugin Neo4j.Neo4jPlugin),
-    ("InMemory/BuiltIn", AbstractPlugin InMemory.builtInPlugin),
-    ("InMemory/Map", AbstractPlugin InMemory.mapPlugin),
-    ("InMemory/MutableMap", AbstractPlugin InMemory.stateMapPlugin),
+    ("InMemory/BuiltIn", AbstractPlugin builtInPlugin),
+    ("InMemory/Map", AbstractPlugin mapPlugin),
+    ("InMemory/MutableMap", AbstractPlugin stateMapPlugin),
     ("ElasticSearch/ElasticSearch", AbstractPlugin ElasticSearch.ElasticSearchPlugin),
     ("Remote/TCP", AbstractPlugin Remote.TCP.RemoteTCPPlugin),
     ("FileSystem", AbstractPlugin FileSystem.FileSystemPlugin),

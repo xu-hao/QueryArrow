@@ -30,8 +30,8 @@ A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs
 |    SQL/HDBC/SQLite3    |    interfacing with SQLite3    |`db_file_path`, `db_namespace`, `db_predicates`, `db_sql_mapping`|
 |  SQL/HDBC/CockroachDB   |  interfacing with CockroachDB  |`db_name`, `db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
 |  Include   |  include other JSON files  |`include`|
-|  InMemory/StateMap  |      in-memory mutable map     |`db_namespace2`,`predicate_name`,`db_map`|
-| InMemory/Map |     in-memory immutable map    |`db_namespace2`,`predicate_name`,`db_map`|
+|  InMemory/StateMap  |      in-memory mutable map     |`db_namespace`,`predicate_name`,`db_map`|
+| InMemory/Map |     in-memory immutable map    |`db_namespace`,`predicate_name`,`db_map`|
 |       InMemory/BuiltIn      |   built-in predicates: `like_regex`, `not_like_regex`, `eq`, `ne`, `le`, `ge`, `lt`, `gt`, `concat`, `substr`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `like`, `not_like`, `in`, `replace`, `regex_replace`, `sleep`, `encode`     |`db_namespace`|
 
 

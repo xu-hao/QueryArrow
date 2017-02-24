@@ -7,7 +7,7 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.InMemory QueryArrow.Binding.Binding
+                   QueryArrow.InMemory.BuiltIn QueryArrow.InMemory.Map QueryArrow.Binding.Binding
   build-depends:
                    base >= 4,
                    aeson,
