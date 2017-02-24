@@ -7,6 +7,7 @@ import System.IO
 import Data.ByteString.Lazy (hGet, length, hPut)
 import Data.Aeson
 import Data.MessagePack
+-- import qualified Data.ByteString.Lazy as BSL
 
 receiveMsg :: FromJSON a => Handle -> IO (Maybe a)
 receiveMsg handle = do
@@ -28,12 +29,14 @@ receiveMsgPack handle = do
     reqlenbs <- hGet handle 8
     let reqlen = runGet getWord64be reqlenbs
     req <- hGet handle (fromIntegral reqlen)
-    unpack req
+    -- putStrLn ("receive " ++ show reqlen ++ " bytes: " ++ show (BSL.unpack req))
+    Just <$> unpack req
 
 sendMsgPack :: MessagePack a => Handle -> a -> IO ()
 sendMsgPack handle req0 = do
     let req = pack req0
     let reqlen = length req
+    -- putStrLn ("send " ++ show reqlen ++ " bytes: " ++ show (BSL.unpack req))
     let reqlenbs = runPut (putWord64be (fromIntegral reqlen))
     hPut handle reqlenbs
     hPut handle req
