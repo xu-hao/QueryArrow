@@ -99,6 +99,23 @@ likeRegexBinding ns = BinaryBoolean ns "like_regex" TextType TextType (\(StringV
 notLikeRegexBinding :: String -> BinaryBoolean
 notLikeRegexBinding ns = BinaryBoolean ns "not_like_regex" TextType TextType (\(StringValue a) (StringValue b) -> not (T.unpack a =~ T.unpack b))
 
+-- example LikeRegexDB
+
+wildcardToRegex :: Char -> String -> String
+wildcardToRegex esc wc = ('^' : concatMap (\c -> case c of
+                                        '%' -> ".*"
+                                        '_' -> "."
+                                        '^' -> "\\^"
+                                        _ -> ['[',  c, ']']) wc) ++ "$"
+
+likeBinding :: String -> BinaryBoolean
+likeBinding ns = BinaryBoolean ns "like" TextType TextType (\(StringValue a) (StringValue b) -> T.unpack a =~ wildcardToRegex '\\' (T.unpack b))
+
+-- example NotLikeRegexDB
+
+notLikeBinding :: String -> BinaryBoolean
+notLikeBinding ns = BinaryBoolean ns "not_like" TextType TextType (\(StringValue a) (StringValue b) -> not (T.unpack a =~ wildcardToRegex '\\' (T.unpack b)))
+
 -- example EqDB
 
 eqBinding :: String -> UnaryIso
@@ -211,6 +228,11 @@ replaceBinding ns = TernaryFunction ns "replace" TextType TextType TextType Text
 regexReplaceBinding :: String -> TernaryFunction
 regexReplaceBinding ns = TernaryFunction ns "regex_replace" TextType TextType TextType TextType (\(StringValue a) (StringValue b) (StringValue c) -> StringValue (T.pack (subRegex (mkRegex (T.unpack b)) (T.unpack c) (T.unpack a))))
 
+-- example inBinding
+
+inBinding :: String -> BinaryBoolean
+inBinding ns = BinaryBoolean ns "in" TextType TextType (\(StringValue a) (StringValue b) -> not (T.null (snd (T.breakOn (T.snoc (T.cons '\'' a) '\'') b))))
+
 -- example ConcatDB
 
 concatBinding :: String -> BinaryMono
@@ -232,7 +254,6 @@ builtInDB dbname ns = BindingDatabase dbname [
                                 AbstractBinding (modBinding ns),
                                 AbstractBinding (expBinding ns),
                                 AbstractBinding (strlenBinding ns),
-                                AbstractBinding (encodeBinding ns),
                                 AbstractBinding (geBinding ns),
                                 AbstractBinding (leBinding ns),
                                 AbstractBinding (gtBinding ns),
@@ -241,11 +262,13 @@ builtInDB dbname ns = BindingDatabase dbname [
                                 AbstractBinding (neBinding ns),
                                 AbstractBinding (likeRegexBinding ns),
                                 AbstractBinding (notLikeRegexBinding ns),
-                                AbstractBinding (sleepBinding ns),
                                 AbstractBinding (concatBinding ns),
                                 AbstractBinding (replaceBinding ns),
                                 AbstractBinding (regexReplaceBinding ns),
-                                AbstractBinding (substrBinding ns)]
+                                AbstractBinding (substrBinding ns),
+                                AbstractBinding (inBinding ns),
+                                AbstractBinding (encodeBinding ns),
+                                AbstractBinding (sleepBinding ns)]
 
 data ICATDBInfo = ICATDBInfo {
   db_namespace :: String
