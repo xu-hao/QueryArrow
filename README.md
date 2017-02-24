@@ -39,7 +39,7 @@ The queries are issued from the client in the QueryArrow Language. QAL is a unif
 
 ## How to build
 
-### ubuntu 16.04
+### ubuntu 16.04 and CentOS 7
 
 #### Install GHC 8.0.2
 
@@ -63,7 +63,13 @@ If you install from Ubuntu repo, make sure you run
 
 #### Build QueryArrow
 
+On `Ubuntu`
+
     apt-get install postgresql-server-dev-all libsqlite3-dev -y
+
+On `CentOS`
+
+    yum install postgresql-devel sqlite3-devel -y
 
     git clone http://github.com/xu-hao/QueryArrow
 
@@ -88,6 +94,8 @@ make a new directory
     cpack --config CPackConfig.cmake
 
 #### Install QueryArrow package
+
+On `Ubuntu`
 
     dpkg -i queryarrow-0.2-Linux-amd64.deb
 
