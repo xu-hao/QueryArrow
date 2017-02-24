@@ -1,7 +1,7 @@
 SET(CPACK_GENERATOR "DEB" "RPM")
 SET(CPACK_INSTALLED_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/lib" "/usr/lib" "${CMAKE_CURRENT_LIST_DIR}/include" "/usr/include" "${CMAKE_CURRENT_LIST_DIR}/bin" "/usr/bin" "${CMAKE_CURRENT_LIST_DIR}/etc" "/etc")
 SET(CPACK_PACKAGE_DESCRIPTION_FILE "LICENSE.txt")
-SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QueryArrow is a semantically unified SQL and NoSQL query system")
+SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QueryArrow is a semantically unified SQL and NoSQL query and update system")
 # SET(CPACK_PACKAGE_EXECUTABLES "QueryArrow")
 SET(CPACK_PACKAGE_FILE_NAME "queryarrow-0.2-Linux-amd64")
 SET(CPACK_PACKAGE_INSTALL_DIRECTORY "queryarrow-0.2")
