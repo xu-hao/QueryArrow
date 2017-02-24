@@ -236,7 +236,7 @@ inBinding ns = BinaryBoolean ns "in" TextType TextType (\(StringValue a) (String
 -- example ConcatDB
 
 concatBinding :: String -> BinaryMono
-concatBinding ns = BinaryMono ns "concat" NumberType NumberType NumberType (\(StringValue a) (StringValue b) -> StringValue (T.append a b))
+concatBinding ns = BinaryMono ns "concat" TextType TextType TextType (\(StringValue a) (StringValue b) -> StringValue (T.append a b))
                     (\(StringValue b) (StringValue c) ->
                         if T.length c >= T.length b && T.drop (T.length c - T.length b) c == b
                             then Just (StringValue (T.take (T.length c - T.length b) c))
