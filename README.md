@@ -17,22 +17,22 @@ QueryArrow provides a systematic solution to shared namespace and unshared names
 
 A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs). Each plugin provides interface with one data store. Currently, the implemented QAPs include
 
-|        Name       |           Description          |
-|:-----------------:|:------------------------------:|
-|      Sum      |           aggregation          |
-|  Translation  |         policy support         |
-|     Cache     |             caching            |
-|      Remote/TCP   |            remoting            |
-| FileSystem | interfacing with file system |
-| ElasticSearch/ElasticSearch | interfacing with ElasticSearch |
-|     Cypher/Neo4j     |     interfacing with Neo4j     |
-|   SQL/HDBC/PostgreSQL  |    interfacing with Postgres   |
-|    SQL/HDBC/SQLite3    |    interfacing with SQLite3    |
-|  SQL/HDBC/CockroachDB   |  interfacing with CockroachDB  |
-|  Include   |  include other JSON files  |
-|  InMemory/StateMap  |      in-memory mutable map     |
-| InMemory/Map |     in-memory immutable map    |
-|       InMemory/BuiltIn      |   built-in predicates: `like_regex`, `not_like_regex`, `eq`, `ne`, `le`, `ge`, `lt`, `gt`, `concat`, `substr`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `like`, `not_like`, `in`, `replace`, `regex_replace`, `sleep`, `encode`     |
+|        Name       |           Description          | `db_config`       |
+|:-----------------:|:------------------------------:|:------------:|
+|      Sum      |           aggregation          |`summands`, `db_namespace`|
+|  Translation  |         policy support         |`rewriting_file_path`, `include_file_path`,`trans_db_plugin`|
+|     Cache     |             caching            |`max_cc`, `cache_db_plugin`|
+|      Remote/TCP   |            remoting            |`db_host`, `db_port`|
+| FileSystem | interfacing with file system | `fs_host`, `fs_port`, `fs_root`, `fs_hostmap`, `db_namespace`|
+| ElasticSearch/ElasticSearch | interfacing with ElasticSearch | `db_name`, `db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
+|     Cypher/Neo4j     |     interfacing with Neo4j     |`db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
+|   SQL/HDBC/PostgreSQL  |    interfacing with Postgres   |`db_name`, `db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
+|    SQL/HDBC/SQLite3    |    interfacing with SQLite3    |`db_file_path`, `db_namespace`, `db_predicates`, `db_sql_mapping`|
+|  SQL/HDBC/CockroachDB   |  interfacing with CockroachDB  |`db_name`, `db_namespace`, `db_predicates`, `db_sql_mapping`, `db_host`, `db_port`, `db_username`, `db_password`|
+|  Include   |  include other JSON files  |`include`|
+|  InMemory/StateMap  |      in-memory mutable map     |`db_namespace2`,`predicate_name`,`db_map`|
+| InMemory/Map |     in-memory immutable map    |`db_namespace2`,`predicate_name`,`db_map`|
+|       InMemory/BuiltIn      |   built-in predicates: `like_regex`, `not_like_regex`, `eq`, `ne`, `le`, `ge`, `lt`, `gt`, `concat`, `substr`, `strlen`, `add`, `sub`, `mul`, `div`, `mod`, `exp`, `like`, `not_like`, `in`, `replace`, `regex_replace`, `sleep`, `encode`     |`db_namespace`|
 
 
 The queries are issued from the client in the QueryArrow Language. QAL is a unified querying language for SQL and noSQL databases.
@@ -101,7 +101,62 @@ On `Ubuntu`
 
 ## QueryArrow Configuration
 
-By default QueryArrow Configuration files are stored in the `/etc/QueryArrow/tdb-plugin-gen-abs.json` file.
+By default QueryArrow Configuration files are stored in the `/etc/QueryArrow/tdb-plugin-gen-abs.yaml` file.
+
+An exmaple is
+
+~~~yaml
+db_plugin:
+  qap_name: cache
+  catalog_database_type: Cache
+  db_config:
+    max_cc: 1024
+    cache_db_plugin:
+      qap_name: trans
+      catalog_database_type: Translation
+      db_config:
+        rewriting_file_path: "../QueryArrow-gen/rewriting-plugin-gen.rules"
+        include_file_path:
+        - "../QueryArrow-gen"
+        trans_db_plugin:
+          qap_name: sum
+          catalog_database_type: Sum
+          db_config:
+            summands:
+            - qap_name: ICAT
+              catalog_database_type: SQL/HDBC/PostgreSQL
+              db_config:
+                db_port: 5432
+                db_name: ICAT
+                db_password: testpassword
+                db_host: localhost
+                db_username: irods
+                db_predicates: "../QueryArrow-gen/gen/ICATGen"
+                db_namespace: ICAT
+                db_sql_mapping: "../QueryArrow-gen/gen/SQL/ICATGen"
+            - qap_name: ''
+              catalog_database_type: FileSystem
+              db_config:
+                fs_port: 0
+                db_namespace: FileSystem
+                fs_host: ''
+                fs_root: "/tmp"
+                fs_hostmap:
+                - - ''
+                  - 0
+                  - "/tmp"
+            - qap_name: ''
+              catalog_database_type: InMemory/BuiltIn
+              db_config:
+                db_namespace: BuiltIn
+servers:
+- server_protocol: service/tcp
+  server_config:
+    tcp_server_addr: "*"
+    tcp_server_port: 12345
+~~~
+
+You can also use `JSON`.
 
 An exmaple is
 
@@ -134,21 +189,21 @@ An exmaple is
                                     "fs_port" : 0,
                                     "db_namespace" : "FileSystem",
                                     "fs_host" : "",
-                                    "fs_root" : ["/tmp"],
+                                    "fs_root" : "/tmp",
                                     "fs_hostmap" : [["", 0, "/tmp"]]
                                 },
                                 "db_name" : "",
                                 "catalog_database_type" : "FileSystem"
                             }, {
                                 "db_config" : {
-                                    "db_namespace" : "BuiltIn",
+                                    "db_namespace" : "BuiltIn"
                                 },
                                 "qap_name" : "",
                                 "catalog_database_type" : "InMemory/BuiltIn"
                             }]
                         },
                         "qap_name" : "sum",
-                        "catalog_database_type" : "Sum",
+                        "catalog_database_type" : "Sum"
                     }
                 },
                 "qap_name" : "trans",
