@@ -45,9 +45,9 @@ library
                    QueryArrow-common,
                    QueryArrow-db-trans,
                    QueryArrow-ffi-service,
-                   QueryArrow-db-sql-common,
+                   QueryArrow-db-sql-hdbc-common,
                    QueryArrow-gen,
-                   QueryArrow-db-sql-postgresql,
+                   QueryArrow-db-sql-hdbc-postgresql,
                    template-haskell
   ghc-options:     -Wall -fPIC -shared -dynamic
   other-modules:

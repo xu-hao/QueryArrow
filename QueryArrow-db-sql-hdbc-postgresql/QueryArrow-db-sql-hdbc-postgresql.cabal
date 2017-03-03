@@ -1,4 +1,4 @@
-name:           QueryArrow-db-sql-postgresql
+name:           QueryArrow-db-sql-hdbc-postgresql
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -14,6 +14,6 @@ library
                    HDBC-postgresql,
                    heterogeneous-list,
                    QueryArrow-common,
-                   QueryArrow-db-sql-common
+                   QueryArrow-db-sql-hdbc-common
   ghc-options:     -Wall -fPIC
   other-modules:

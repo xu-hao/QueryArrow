@@ -53,10 +53,10 @@ packages:
     - QueryArrow-ffi-genquery
     - QueryArrow-db-elastic/
     - QueryArrow-db-cypher/
-    - QueryArrow-db-sql-common/
-    - QueryArrow-db-sql-cockroachdb/
-    - QueryArrow-db-sql-postgresql/
-    - QueryArrow-db-sql-sqlite3/
+    - QueryArrow-db-sql-hdbc-common/
+    - QueryArrow-db-sql-hdbc-cockroachdb/
+    - QueryArrow-db-sql-hdbc-postgresql/
+    - QueryArrow-db-sql-hdbc-sqlite3/
     - QueryArrow-db-inmemory/
     - QueryArrow-db-remote
     - QueryArrow-db-filesystem

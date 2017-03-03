@@ -1,4 +1,4 @@
-name:           QueryArrow-db-sql-cockroachdb
+name:           QueryArrow-db-sql-hdbc-cockroachdb
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -12,6 +12,6 @@ library
                    base >= 4,
                    HDBC-postgresql,
                    QueryArrow-common,
-                   QueryArrow-db-sql-postgresql
+                   QueryArrow-db-sql-hdbc-postgresql
   ghc-options:     -Wall -fPIC
   other-modules:

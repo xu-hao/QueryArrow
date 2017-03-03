@@ -30,7 +30,7 @@ library
                    lattices,
                    semibounded-lattices,
                    QueryArrow-common,
-                   QueryArrow-db-sql-common
+                   QueryArrow-db-sql-hdbc-common
   ghc-options:     -Wall -fPIC
   other-modules:
 Test-Suite Test
