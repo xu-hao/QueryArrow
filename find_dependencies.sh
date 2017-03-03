@@ -12,7 +12,7 @@ mkdir etc
 cp $ROOT/CPackConfig.cmake $ROOT/LICENSE.txt $ROOT/README.md .
 
 ROOTS=$(find $ROOT -name "*libHSQueryArrow-ffi-c*.so" | grep "install")
-ROOT0="$ROOT/.stack-work/install/x86_64-linux/lts-7.9/8.0.1/bin/QueryArrow $ROOT/.stack-work/install/x86_64-linux/lts-7.9/8.0.1/bin/QueryArrowServer"
+ROOT0="$ROOT/.stack-work/install/x86_64-linux/lts-8.3/8.0.2/bin/QueryArrow $ROOT/.stack-work/install/x86_64-linux/lts-8.3/8.0.2/bin/QueryArrowServer"
 ROOTS2="$ROOTS $ROOT0"
 LIBS1=$(ldd -v $ROOTS2 | grep "=>" | grep libHS | awk '/=>/{print $(NF-1)}' | sort -u | grep "install")
 LIBS3=$(ldd -v $ROOTS2 | grep "=>" | grep libHS | awk '/=>/{print $(NF-1)}' | sort -u | grep "snapshots")
