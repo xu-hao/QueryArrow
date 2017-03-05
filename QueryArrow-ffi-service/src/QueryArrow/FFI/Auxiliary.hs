@@ -3,6 +3,7 @@
 module QueryArrow.FFI.Auxiliary where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)

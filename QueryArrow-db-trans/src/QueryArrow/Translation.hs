@@ -4,14 +4,13 @@ module QueryArrow.Translation where
 import QueryArrow.DB.DB
 import QueryArrow.FO.Data
 import QueryArrow.FO.Types
+import QueryArrow.FO.Utils
 import QueryArrow.QueryPlan
 import QueryArrow.Rewriting
 import QueryArrow.Config
 import QueryArrow.Utils
 import QueryArrow.ListUtils
 import QueryArrow.Plugin
-import QueryArrow.Data.Heterogeneous.List
-import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.RuleParser
 
 import Prelude hiding (lookup)
@@ -31,7 +30,6 @@ import Data.Monoid
 import Data.Aeson
 import GHC.Generics
 import System.Log.Logger (debugM)
-import Data.Maybe
 import Language.Preprocessor.Cpphs (runCpphs, defaultCpphsOptions, CpphsOptions(..), defaultBoolOptions, BoolOptions(..))
 -- exec query from dbname
 
@@ -62,32 +60,24 @@ defaultRewritingLimit = 100
 
 type RewritingRuleSets = ([InsertRewritingRule],  [InsertRewritingRule], [InsertRewritingRule])
 
-rewriteQuery :: [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> MSet Var -> Formula -> Set Var -> Formula
+type RewritingRuleTSets = ([InsertRewritingRuleT],  [InsertRewritingRuleT], [InsertRewritingRuleT])
+
+rewriteQuery :: [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> MSet Var -> FormulaT -> Set Var -> FormulaT
 rewriteQuery  qr ir dr vars form ext = runNew (do
     registerVars (toAscList ((case vars of
         Include vs -> vs
         Exclude vs -> vs)  \/ freeVars form))
     rewrites defaultRewritingLimit ext   qr ir dr form)
 
-data TransDB db = TransDB String db [Pred] RewritingRuleSets
+data TransDB db = TransDB String db [Pred] RewritingRuleTSets
 
-instance (IDatabaseUniformDBFormula Formula db) => IDatabase0 (TransDB db) where
-    type DBFormulaType (TransDB db) = Formula
+instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase0 (TransDB db) where
+    type DBFormulaType (TransDB db) = FormulaT
     getName (TransDB name _ _ _ ) = name
     getPreds (TransDB _ _ predmap _ ) = predmap
     supported _ _ _ _ = True
-    checkQuery (TransDB _ _ preds _) vars2 qu vars = do
-      let ptm = constructPredTypeMap preds
-      let effective = runNew (runReaderT (evalStateT (runEitherT (do
-                                          initTCMonad (unionWithKey (\k l r -> if l == r then l else error ("translateQuery: input output var has different types" ++ show k)) vars2 vars)
-                                          typecheck qu
-                                          )) (mempty, mempty)) ptm)
-      return (case effective of
-              Left errmsg -> Left (errmsg ++ ": " ++ serialize qu)
-              Right _ -> Right ())
 
-
-instance (IDatabaseUniformDBFormula Formula db) => IDatabase1 (TransDB db) where
+instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db _ (qr, ir, dr) ) vars2 qu vars =
                   let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
@@ -98,7 +88,7 @@ instance (IDatabase db) => IDatabase2 (TransDB db) where
     newtype ConnectionType (TransDB db) = TransDBConnection (ConnectionType db)
     dbOpen (TransDB _ db  _ _ ) = TransDBConnection <$> dbOpen db
 
-instance IDatabaseUniformDBFormula Formula db => IDatabase (TransDB db)
+instance IDatabaseUniformDBFormula FormulaT db => IDatabase (TransDB db)
 
 instance (IDatabase db) => IDBConnection0 (ConnectionType (TransDB db)) where
     dbClose (TransDBConnection db ) = dbClose db
@@ -122,22 +112,23 @@ getRewriting predmap ps = do
         Right actions ->
             return (processActions predmap actions)
 
-typecheckRules :: PredTypeMap -> RewritingRuleSets -> Either String ()
+typecheckRules :: PredTypeMap -> RewritingRuleSets -> Either String RewritingRuleTSets
 typecheckRules ptm (qr, ir, dr) = do
-  mapM_ (\r ->
+  qr' <- mapM (\r ->
       case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
-          Right () -> return ()
+          Right a -> return a
           Left err -> Left ("typecheckRules: rewrite rule " ++ show r ++ " type error\n" ++ err)) qr
-  mapM_ (\r ->
+  ir' <- mapM (\r ->
       case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
-          Right () -> return ()
+          Right a -> return a
           Left err -> Left ("typecheckRules: insert rewrite rule " ++ show r ++ " type error\n" ++ err)) ir
-  mapM_ (\r ->
+  dr' <- mapM (\r ->
       case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
-          Right () -> return ()
+          Right a -> return a
           Left err -> Left ("typecheckRules: delete rewrite rule " ++ show r ++ " type error\n" ++ err)) dr
+  return (qr', ir', dr')
 
-transDB :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => String -> db -> ICATTranslationConnInfo -> IO (TransDB db)
+transDB :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => String -> db -> ICATTranslationConnInfo -> IO (TransDB db)
 transDB name sumdb transinfo = do
             let predmap0 = constructDBPredMap sumdb
             -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
@@ -179,8 +170,8 @@ transDB name sumdb transinfo = do
             mapM_ checkNoOutput dr
             case typecheckRules ptm rules1 of
               Left err -> error err
-              Right _ ->
-                return (TransDB name sumdb exportedpreds rules1)
+              Right rules1' ->
+                return (TransDB name sumdb exportedpreds rules1')
 
 data ICATTranslationConnInfo = ICATCacheConnInfo {
   rewriting_file_path :: String,

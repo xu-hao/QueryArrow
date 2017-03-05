@@ -3,6 +3,7 @@
 module QueryArrow.Binding.Binding where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.Utils
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB
@@ -70,33 +71,32 @@ argsToIOs row =
     _ -> ([I], [evalExpr row arg], []))
 
 instance IDatabase0 BindingDatabase where
-    type DBFormulaType BindingDatabase = Formula
+    type DBFormulaType BindingDatabase = FormulaT
     getName (BindingDatabase n _) = n
     getPreds (BindingDatabase _ bs) = map bindingPred bs
-    supported (BindingDatabase _ db) _ (FAtomic (Atom predname args)) env = bindingSupport (getBindingByPredName predname db) (argsToIO env args)
-    supported (BindingDatabase _ db) _ (FInsert (Lit Pos (Atom predname _))) _ = bindingSupportInsert (getBindingByPredName predname db)
-    supported (BindingDatabase _ db) _ (FInsert (Lit Neg (Atom predname _))) _ = bindingSupportDelete (getBindingByPredName predname db)
+    supported (BindingDatabase _ db) _ (FAtomic2 _ (Atom predname args)) env = bindingSupport (getBindingByPredName predname db) (argsToIO env args)
+    supported (BindingDatabase _ db) _ (FInsert2 _ (Lit Pos (Atom predname _))) _ = bindingSupportInsert (getBindingByPredName predname db)
+    supported (BindingDatabase _ db) _ (FInsert2 _ (Lit Neg (Atom predname _))) _ = bindingSupportDelete (getBindingByPredName predname db)
     supported _ _ _ _ = False
-    checkQuery _ _ _ _ = return (Right ())
 
 instance IDatabase1 BindingDatabase where
-    type DBQueryType BindingDatabase = ( Set Var, Formula,  Set Var)
+    type DBQueryType BindingDatabase = ( Set Var, FormulaT,  Set Var)
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 instance INoConnectionDatabase2 BindingDatabase where
-    type NoConnectionQueryType BindingDatabase = (Set Var, Formula, Set Var)
+    type NoConnectionQueryType BindingDatabase = (Set Var, FormulaT, Set Var)
     type NoConnectionRowType BindingDatabase = MapResultRow
-    noConnectionDBStmtExec (BindingDatabase _ db) (_,  FAtomic (Atom predname args), _) stream = do
+    noConnectionDBStmtExec (BindingDatabase _ db) (_,  FAtomic2 _ (Atom predname args), _) stream = do
         row <- stream
         let (ios, ivals, ovars) = argsToIOs row args
         rs <- liftIO $ bindingExec (getBindingByPredName predname db) ios ivals
         listResultStream (map (\ovals -> fromList (zip ovars ovals)) rs)
-    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert (Lit Pos (Atom predname as)), _) stream = do
+    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Pos (Atom predname as)), _) stream = do
         row <- stream
         let avals = map (evalExpr row) as
         liftIO $ bindingInsert (getBindingByPredName predname db) avals
         return mempty
-    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert (Lit Neg (Atom predname as)), _) stream = do
+    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Neg (Atom predname as)), _) stream = do
         row <- stream
         let avals = map (evalExpr row) as
         liftIO $ bindingDelete (getBindingByPredName predname db) avals

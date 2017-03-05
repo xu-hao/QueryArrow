@@ -2,6 +2,7 @@
 module QueryArrow.InMemory.BuiltIn where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin
@@ -208,7 +209,7 @@ data ICATDBInfo = ICATDBInfo {
 instance ToJSON ICATDBInfo
 instance FromJSON ICATDBInfo
 
-data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ Formula) => NoConnectionDatabasePlugin (String -> String -> db)
+data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin (String -> String -> db)
 
 instance Plugin (NoConnectionDatabasePlugin db) MapResultRow where
   getDB (NoConnectionDatabasePlugin db) _ ps = do

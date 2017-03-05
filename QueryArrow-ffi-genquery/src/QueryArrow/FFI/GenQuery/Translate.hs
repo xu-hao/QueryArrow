@@ -2,7 +2,8 @@
 
 module QueryArrow.FFI.GenQuery.Translate where
 
-import QueryArrow.FO.Data (Pred, Formula(..), Var(..), Expr(..), Atom(..), Aggregator(..), Summary(..), Lit(..), Sign(..), (.+.), (.*.), (@@), CastType(..))
+import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 
 import Prelude hiding (lookup)
 import Data.Text (Text, pack)

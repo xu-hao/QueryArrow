@@ -17,14 +17,12 @@ class INoTranslationDatabase01 db where
   ntGetName :: db -> String
   ntGetPreds :: db -> [Pred]
   ntSupported :: db -> Set Var -> NTDBFormulaType db -> Set Var -> Bool
-  ntCheckQuery :: db -> VarTypeMap -> NTDBFormulaType db -> VarTypeMap -> IO (Either String ())
 
 instance (INoTranslationDatabase01 db) => IDatabase0 (NoTranslationDatabase db) where
   type DBFormulaType (NoTranslationDatabase db) = NTDBFormulaType db
   getName (NoTranslationDatabase db) = ntGetName db
   getPreds (NoTranslationDatabase db) = ntGetPreds db
   supported (NoTranslationDatabase db) = ntSupported db
-  checkQuery (NoTranslationDatabase db) vars2 form vars = ntCheckQuery db vars2 form vars
 
 instance (INoTranslationDatabase01 db) => IDatabase1 (NoTranslationDatabase db) where
   type DBQueryType (NoTranslationDatabase db) = NTDBQuery (NTDBFormulaType db)

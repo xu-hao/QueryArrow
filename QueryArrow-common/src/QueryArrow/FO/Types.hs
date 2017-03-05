@@ -1,12 +1,12 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving #-}
 
 module QueryArrow.FO.Types where
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith)
+import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty)
 import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
-import Data.Set (Set, (\\), toAscList)
+import Data.Set (Set, (\\), toAscList, member)
 import qualified Data.Set as Set
 import QueryArrow.FO.Data
 import QueryArrow.FO.Domain
@@ -23,8 +23,15 @@ type VarTypeMap = Map Var ParamType
 type TVarMap = Map String CastType
 
 type TCMonad = EitherT String (StateT (VarTypeMap, TVarMap) (ReaderT PredTypeMap NewEnv))
-class Typecheck a where
-  typecheck :: a -> TCMonad ()
+type FormulaT = Formula1 Tie (Annotated VarTypeMap)
+
+
+deriving instance Show FormulaT
+deriving instance Eq FormulaT
+deriving instance Ord FormulaT
+
+class Typecheck a b where
+  typecheck :: a -> TCMonad b
 
 initTCMonad :: VarTypeMap -> TCMonad ()
 initTCMonad vtm = do
@@ -72,6 +79,9 @@ instance TCSubst ParamType where
 instance TCSubst b => TCSubst (Map a b) where
   tcsubst m tvm = Map.map (tcsubst m) tvm
 
+instance TCSubst FormulaT where
+  tcsubst m (Annotated a f1) = Annotated (tcsubst m a) (fmap (tcsubst m) f1)
+
 class FreeTypeVars a where
   freeTypeVars :: a -> Set String
 
@@ -116,7 +126,7 @@ instantiatePredType pt = do
     let s = fromList (zip freetvs (map TypeVar newtvs))
     return (tcsubst s pt)
 
-instance Typecheck Atom where
+instance Typecheck Atom () where
   typecheck a@(Atom pn args) = do
       (vtm, _) <- lift get
       predtypemap <- lift . lift $ ask
@@ -147,10 +157,10 @@ instance Typecheck Atom where
                               NullExpr ->
                                   return ()) pts args
 
-instance Typecheck Lit where
-    typecheck  (Lit _ a) = typecheck  a
+instance Typecheck Lit () where
+    typecheck  (Lit s a) = typecheck  a
 
-instance Typecheck Aggregator where
+instance Typecheck Aggregator () where
   typecheck  (FReturn vars) = do
     (vtm, _) <- lift get
     let rvars = Set.fromList vars
@@ -187,29 +197,52 @@ instance Typecheck Aggregator where
   typecheck  (OrderByDesc _) = return ()
   typecheck  (OrderByAsc _) = return ()
   typecheck  Distinct = return ()
-  typecheck  (Limit _) = return ()
+  typecheck  (Limit n) = return ()
 
-instance Typecheck Formula where
-    typecheck  (FAtomic a) = typecheck  a
+instance Typecheck Formula FormulaT where
+    typecheck  (FAtomic a) = do
+      () <- typecheck  a
+      (vtm, _) <- lift get
+      let vars = freeVars a
+      let vtm' = filterWithKey (const . (`member` vars)) vtm
+      return (Annotated vtm' (FAtomic0 a))
     typecheck  (FInsert l) = do
       (vtm, _) <- lift get
       let vars = freeVars l
       let ub = unbounded vtm vars
       unless (null ub) $ throwError ("typecheck: insert unbounded vars " ++ intercalate ", " (map serialize (Set.toAscList ub)) ++ " dvars = " ++ show vtm )
-      typecheck  l
+      () <- typecheck  l
+      (vtm, _) <- lift get
+      let vtm' = filterWithKey (const . (`member` vars)) vtm
+      return (Annotated vtm' (FInsert0 l))
     typecheck  (FSequencing a b) = do
-        typecheck  a
-        typecheck  b
-    typecheck  (FChoice a b) = typecheck  a >> typecheck  b
-    typecheck  (FPar a b) = typecheck  a >> typecheck  b
-    typecheck  FZero = return ()
-    typecheck  FOne = return ()
+        a'@(Annotated vtma _) <- typecheck  a
+        b'@(Annotated vtmb _) <- typecheck  b
+        return (Annotated (vtma `union` vtmb) (FSequencing0 a' b'))
+    typecheck  (FChoice a b) = do
+        a'@(Annotated vtma _) <- typecheck  a
+        b'@(Annotated vtmb _) <- typecheck  b
+        return (Annotated (vtma `union` vtmb) (FChoice0 a' b'))
+    typecheck  (FPar a b) = do
+        a'@(Annotated vtma _) <- typecheck  a
+        b'@(Annotated vtmb _) <- typecheck  b
+        return (Annotated (vtma `union` vtmb) (FPar0 a' b'))
+    typecheck  FZero = do
+        (vtm, _) <- lift get
+        return (Annotated empty FZero0)
+    typecheck  FOne = do
+        (vtm, _) <- lift get
+        return (Annotated empty FOne0)
     typecheck  (Aggregate agg form) = do
         (vtm, _) <- lift get
-        typecheck form
-        typecheck agg
+        form' <- typecheck form
+        () <- typecheck agg
         (vtm2, _) <- lift get
         lift $ modify (const (unionWith (const id) vtm vtm2) *** id)
+        (vtm, _) <- lift get
+        let vars = freeVars agg
+        let vtm' = filterWithKey (const . (`member` vars)) vtm
+        return (Annotated vtm' (Aggregate0 agg form'))
 
 setToMap :: Set Var -> Set Var -> (VarTypeMap, VarTypeMap)
 setToMap vars vars2 =
@@ -241,3 +274,11 @@ setToMap2 vars vars2 =
     varstout = Map.union varst2i varst2o
   in
     (varstinp, varstout)
+
+typeCheckFormula :: PredTypeMap -> VarTypeMap -> Formula -> Either String (Formula1 Tie (Annotated VarTypeMap))
+typeCheckFormula ptm vtm form = runNew (runReaderT (evalStateT (runEitherT (do
+                                      initTCMonad vtm
+                                      qu' <- typecheck form
+                                      (_, tvm) <- lift $ get
+                                      return (tcsubst tvm qu')
+                                      )) (mempty, mempty)) ptm)

@@ -9,7 +9,7 @@ import Prelude hiding (lookup)
 import System.Log.Logger
 import QueryArrow.Logging
 import QueryArrow.Control.Monad.Logger.HSLogger ()
-import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import Options.Applicative hiding (Success)
 import Data.Maybe
 import Data.Map.Strict
@@ -46,7 +46,7 @@ serviceMap = fromList [
     ("file system/tcp", AbstractRPCService FileSystemRPCService)
     ]
 
-runtcpmulti :: AbstractDatabase MapResultRow Formula -> [DBServer] -> IO ()
+runtcpmulti :: AbstractDatabase MapResultRow FormulaT -> [DBServer] -> IO ()
 runtcpmulti db pss = mapM_ (\ps0 -> do
     let protocol = server_protocol ps0
     case lookup protocol serviceMap of

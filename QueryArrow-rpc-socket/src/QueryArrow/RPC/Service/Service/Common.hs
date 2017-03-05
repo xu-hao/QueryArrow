@@ -11,9 +11,9 @@ import QueryArrow.RPC.Message
 import Control.Monad.Trans.Either
 import QueryArrow.RPC.DB
 import System.IO (Handle)
-import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 
-worker :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
+worker :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
 worker handle tdb conn = do
                 t0 <- getCurrentTime
                 req <- receiveMsgPack handle

@@ -6,7 +6,9 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cwhere, creturn) where
 
-import QueryArrow.FO.Data (ResultValue(..), Serialize(..), New(..), Sign(..), Var(..), PredName, PredTypeMap, NewEnv, Formula(..), Atom(..), Lit(..), Expr(..), CastType(..), Aggregator(..), registerVars, FreeVars(..), runNew, layeredF, StringWrapper(..))
+import QueryArrow.FO.Data hiding (Subst(..), var)
+import QueryArrow.FO.Types
+import QueryArrow.FO.Utils
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
 import QueryArrow.ListUtils
@@ -721,13 +723,12 @@ translateableCypher trans (Aggregate _ _)  = lift $ Nothing
 
 instance IGenericDatabase01 CypherTrans where
     type GDBQueryType CypherTrans = CypherQuery
-    type GDBFormulaType CypherTrans = Formula
+    type GDBFormulaType CypherTrans = FormulaT
 
-    gCheckQuery trans vars query env = return (Right ())
     gTranslateQuery trans vars query env =
         let (CypherTrans builtin predtablemap ptm) = trans in
-            return (runNew (evalStateT (translateQueryToCypher query ) (builtin, predtablemap, mempty, toAscList vars, toAscList env, ptm)))
-    gSupported trans ret form vars = layeredF form && isJust (evalStateT (translateableCypher trans form ) (CypherState False False (toAscList ret)))
+            return (runNew (evalStateT (translateQueryToCypher (stripAnnotations query) ) (builtin, predtablemap, mempty, toAscList vars, toAscList env, ptm)))
+    gSupported trans ret form vars = layeredF form && isJust (evalStateT (translateableCypher trans (stripAnnotations form) ) (CypherState False False (toAscList ret)))
 
 instance New CypherVar CypherExpr where
     new _ = CypherVar <$> new (StringWrapper "var")

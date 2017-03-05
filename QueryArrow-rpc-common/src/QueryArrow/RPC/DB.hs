@@ -19,7 +19,7 @@ import Control.Monad.Trans.Either
 import Data.Set (Set)
 import Text.Parsec
 
-run3 :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
+run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
 run3 hdr commands params tdb conn = do
     r <- liftIO $ runResourceT $ dbCatch $ do
                                 concat <$> mapM (\command -> case command of
@@ -55,7 +55,7 @@ run3 hdr commands params tdb conn = do
         Right rows ->  right rows
         Left e ->  left (show e)
 
-run :: (IDatabase db, DBFormulaType db ~ Formula, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
+run :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
 run hdr query par tdb conn =
     case runParser progp () "" query of
                             Left err -> throwError (show err)

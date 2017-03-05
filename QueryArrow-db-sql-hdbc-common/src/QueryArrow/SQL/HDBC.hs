@@ -59,8 +59,8 @@ instance IPSDBStatement HDBCStatement where
         psdbStmtClose (HDBCStatement ret vars stmt params) = finish stmt
 
 
-prepareHDBCStatement :: (IConnection conn) => conn -> (Bool, [Var], String, [Var]) -> IO HDBCStatement
-prepareHDBCStatement conn (ret, retvars, query, params) = do
+prepareHDBCStatement :: (IConnection conn) => conn -> (Bool, [Var], [CastType], String, [Var]) -> IO HDBCStatement
+prepareHDBCStatement conn (ret, retvars, retvartypes, query, params) = do
   -- putStrLn ("prepareHDBCStatement: " ++ query)
   HDBCStatement ret retvars <$> prepare conn query <*> pure params
 
@@ -78,7 +78,7 @@ instance IDBConnection0 HDBCDBConnection  where
 
 instance IDBConnection HDBCDBConnection where
         type StatementType HDBCDBConnection = PSDBStatement HDBCStatement
-        type QueryType HDBCDBConnection = (Bool, [Var], String, [Var])
+        type QueryType HDBCDBConnection = (Bool, [Var], [CastType], String, [Var])
         prepareQuery (HDBCDBConnection conn) query = do
             infoM "SQL" ("prepare statement " ++ show query)
             PSDBStatement <$> prepareHDBCStatement conn query

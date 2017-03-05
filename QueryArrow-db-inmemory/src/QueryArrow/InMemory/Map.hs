@@ -2,6 +2,7 @@
 module QueryArrow.InMemory.Map where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin
@@ -91,7 +92,7 @@ data ICATMapDBInfo = ICATMapDBInfo {
 instance ToJSON ICATMapDBInfo
 instance FromJSON ICATMapDBInfo
 
-data NoConnectionDatabasePlugin2 db a = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ Formula) => NoConnectionDatabasePlugin2 (String -> String -> String -> a -> db)
+data NoConnectionDatabasePlugin2 db a = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin2 (String -> String -> String -> a -> db)
 
 instance Convertible Value (IO a) => Plugin (NoConnectionDatabasePlugin2 db a) MapResultRow where
   getDB (NoConnectionDatabasePlugin2 db) _ ps = do

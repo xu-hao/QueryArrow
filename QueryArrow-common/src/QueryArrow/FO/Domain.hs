@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, RankNTypes, FlexibleContexts, UndecidableInstances #-}
+
 module QueryArrow.FO.Domain where
 
 import QueryArrow.FO.Data
@@ -66,41 +68,42 @@ toDSP ptm vars (Atom p args) =
     Nothing -> error ("toDSP: cannot find predicate " ++ show p)
     Just pt -> fromList (map extractVar (filter isVar (outputComponents pt args)))) \/ vars
 
-class DeterminedVars a where
+class DeterminedVars a f where
   {-|
     This function must return all determined vars including those in the input set
   -}
-    determinedVars :: DomainSizeFunction Atom -> DomainSizeFunction a
+    determinedVars :: DomainSizeFunction (Atom1 f) -> DomainSizeFunction a
 
-instance DeterminedVars Atom where
+instance DeterminedVars (Atom1 f) f where
     determinedVars dsp vars a = dsp vars a \/ vars
 
-instance DeterminedVars Formula where
-    determinedVars dsp vars (FAtomic atom0) = determinedVars dsp vars atom0
-    determinedVars dsp vars (Aggregate (FReturn vars2) form) =
+instance Unannotate f (Formula0 a) => DeterminedVars (Formula1 a f) a where
+    determinedVars dsp vars f1 = case unannotate f1 of
+      (FAtomic0 atom0) -> determinedVars dsp vars atom0
+      (Aggregate0 (FReturn vars2) form) ->
         let vars1 = determinedVars dsp vars form in
         fromList vars2 /\ vars1
-    determinedVars _ vars (FInsert _) = vars
-    determinedVars dsp vars (FSequencing form1 form2) =
+      (FInsert0 _) -> vars
+      (FSequencing0 form1 form2) ->
         let map1 = determinedVars dsp vars form1 in
             determinedVars dsp map1 form2
-    determinedVars dsp vars (FChoice form1 form2) =
+      (FChoice0 form1 form2) ->
         let map1 = determinedVars dsp vars form1
             map2 = determinedVars dsp vars form2 in
             (map1 /\ map2)
-    determinedVars dsp vars (FPar form1 form2) =
+      (FPar0 form1 form2) ->
         let map1 = determinedVars dsp vars form1
             map2 = determinedVars dsp vars form2 in
             (map1 /\ map2)
-    determinedVars _ vars (Aggregate Not _) = vars
-    determinedVars dsp vars (Aggregate Distinct form) = determinedVars dsp vars form
-    determinedVars _ vars (Aggregate Exists _) = vars
-    determinedVars _ vars (Aggregate (Summarize funcs groupby) _) = (fromList (fst (unzip funcs))) \/ vars
-    determinedVars dsp vars (Aggregate (Limit _) form) = determinedVars dsp vars form
-    determinedVars dsp vars (Aggregate (OrderByAsc _) form) = determinedVars dsp vars form
-    determinedVars dsp vars (Aggregate (OrderByDesc _) form) = determinedVars dsp vars form
-    determinedVars _ vars FOne = vars
-    determinedVars _ vars FZero = vars
+      (Aggregate0 Not _) -> vars
+      (Aggregate0 Distinct form) -> determinedVars dsp vars form
+      (Aggregate0 Exists _) -> vars
+      (Aggregate0 (Summarize funcs groupby) _) -> (fromList (fst (unzip funcs))) \/ vars
+      (Aggregate0 (Limit _) form) -> determinedVars dsp vars form
+      (Aggregate0 (OrderByAsc _) form) -> determinedVars dsp vars form
+      (Aggregate0 (OrderByDesc _) form) -> determinedVars dsp vars form
+      FOne0 -> vars
+      FZero0 -> vars
 
 
 toOutputVarsFunction :: PredTypeMap -> OutputVarsFunction Atom

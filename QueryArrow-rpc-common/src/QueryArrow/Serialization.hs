@@ -11,6 +11,7 @@ import Data.ByteString.Base64 as B64
 import Data.Aeson
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 
 data ResultSet = ResultSet {
@@ -29,7 +30,9 @@ data DynCommand = Quit | Dynamic String | Static [Command] deriving (Generic, Sh
 deriving instance Generic Var
 deriving instance Generic ResultValue
 deriving instance Generic Command
+deriving instance Generic (Formula0 a f)
 deriving instance Generic Formula
+deriving instance Generic FormulaT
 deriving instance Generic Lit
 deriving instance Generic Sign
 deriving instance Generic Atom
@@ -37,6 +40,7 @@ deriving instance Generic Pred
 deriving instance Generic PredType
 deriving instance Generic PredKind
 deriving instance Generic ParamType
+deriving instance Generic (Expr0 a)
 deriving instance Generic Expr
 deriving instance Generic CastType
 deriving instance Generic Aggregator
@@ -54,7 +58,14 @@ instance (Ord a, MessagePack a) => MessagePack (Set a) where
     fromObject = fmap fromList . fromObject
     toObject = toObject . toAscList
 
+
+instance MessagePack a => MessagePack (Formula0 Tie a)
 instance MessagePack Formula
+instance MessagePack FormulaT
+-- (Annotated a (Formula0 Tie)) where
+--   toObject (Annotated a form) = ObjectArray [toObject a, toObject form]
+--   fromObject (ObjectArray [a, b]) = Annotated <$> fromObject a <*> fromObject b
+
 instance MessagePack Lit
 instance MessagePack Sign
 instance MessagePack Atom
@@ -62,6 +73,7 @@ instance MessagePack Pred
 instance MessagePack PredType
 instance MessagePack PredKind
 instance MessagePack ParamType
+instance MessagePack a => MessagePack (Expr0 a)
 instance MessagePack Expr
 instance MessagePack CastType
 instance MessagePack Aggregator
@@ -92,8 +104,12 @@ instance FromJSON ByteString where
       bs <- parseJSON str
       return (B64.decodeLenient (encodeUtf8 bs))
 
+instance FromJSON a => FromJSON (Formula0 Tie a)
+instance ToJSON a => ToJSON (Formula0 Tie a)
 instance FromJSON Formula
 instance ToJSON Formula
+instance FromJSON FormulaT
+instance ToJSON FormulaT
 instance FromJSON Lit
 instance ToJSON Lit
 instance FromJSON Sign
@@ -108,6 +124,8 @@ instance FromJSON PredKind
 instance ToJSON PredKind
 instance FromJSON ParamType
 instance ToJSON ParamType
+instance FromJSON a => FromJSON (Expr0 a)
+instance ToJSON a => ToJSON (Expr0 a)
 instance FromJSON Expr
 instance ToJSON Expr
 instance FromJSON CastType

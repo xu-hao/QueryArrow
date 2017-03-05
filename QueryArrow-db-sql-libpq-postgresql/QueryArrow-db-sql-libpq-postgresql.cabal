@@ -1,4 +1,4 @@
-name:           QueryArrow-db-sql-hdbc-common
+name:           QueryArrow-db-sql-libpq-postgresql
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -7,14 +7,16 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.SQL.HDBC
+                   QueryArrow.SQL.LibPQ.PostgreSQL
+                   QueryArrow.SQL.LibPQ
   build-depends:
                    base >= 4,
                    aeson,
+                   binary,
+                   bytestring,
                    containers,
                    mtl,
                    transformers,
-                   HDBC,
                    convertible,
                    text >= 1.2.1.1,
                    hslogger,
@@ -22,6 +24,7 @@ library
                    lattices,
                    semibounded-lattices,
                    QueryArrow-db-sql-common,
+                   postgresql-libpq,
                    QueryArrow-common
   ghc-options:     -Wall -fPIC
   other-modules:

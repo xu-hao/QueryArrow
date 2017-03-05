@@ -45,6 +45,7 @@ library
                    QueryArrow-common,
                    QueryArrow-db-trans,
                    QueryArrow-ffi-service,
+                   QueryArrow-db-sql-common,
                    QueryArrow-db-sql-hdbc-common,
                    QueryArrow-gen,
                    QueryArrow-db-sql-hdbc-postgresql,

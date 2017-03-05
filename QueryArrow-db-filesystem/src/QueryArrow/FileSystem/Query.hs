@@ -2,6 +2,7 @@
 module QueryArrow.FileSystem.Query where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FileSystem.Builtin
@@ -22,40 +23,40 @@ data FileSystemConn = FileSystemConn {hostMap :: [((String, String), Interpreter
 
 data FileSystemTrans = FileSystemTrans {fsHost :: String, rootDir :: String, predNS :: String}
 
-fsSupported :: String -> Formula -> Set Var -> Bool
-fsSupported _ (FAtomic (Atom (FilePathPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirPathPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileNamePredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirNamePredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileHostPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirHostPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileSizePredName _) _)) env = True
--- fsSupported _ (FAtomic (Atom (FileCreateTimePredName _) _)) env = True
--- fsSupported _ (FAtomic (Atom (DirCreateTimePredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileModifyTimePredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirModifyTimePredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (NewFileObjectPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (NewDirObjectPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirContentPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileContentPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (DirDirPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileDirPredName _) _)) env = True
-fsSupported _ (FAtomic (Atom (FileContentRangePredName _) _)) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileSizePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileNamePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (DirNamePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileHostPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (DirHostPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileContentPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (DirContentPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (DirDirPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileDirPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileNamePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (DirNamePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Pos (Atom (FileContentRangePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Neg (Atom (FileContentRangePredName _) _))) env = True
-fsSupported _ (FInsert (Lit Neg (Atom (FileObjectPredName _) _))) env = True
-fsSupported _ (FInsert (Lit Neg (Atom (DirObjectPredName _) _))) env = True
+fsSupported :: String -> FormulaT -> Set Var -> Bool
+fsSupported _ (FAtomic2 _ (Atom (FilePathPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (DirPathPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileNamePredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (DirNamePredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileHostPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (DirHostPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileSizePredName _) _)) env = True
+-- fsSupported _2 _ (FAtomic2 _ (Atom (FileCreateTimePredName _) _)) env = True
+-- fsSupported _2 _ (FAtomic2 _ (Atom (DirCreateTimePredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileModifyTimePredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (DirModifyTimePredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (NewFileObjectPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (NewDirObjectPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (DirContentPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileContentPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (DirDirPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileDirPredName _) _)) env = True
+fsSupported _ (FAtomic2 _ (Atom (FileContentRangePredName _) _)) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileSizePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileNamePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (DirNamePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileHostPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (DirHostPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileContentPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (DirContentPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (DirDirPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileDirPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileNamePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (DirNamePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Pos (Atom (FileContentRangePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Neg (Atom (FileContentRangePredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Neg (Atom (FileObjectPredName _) _))) env = True
+fsSupported _ (FInsert2 _ (Lit Neg (Atom (DirObjectPredName _) _))) env = True
 fsSupported _ _ _ = False
 
 data FileObject = NewFileObject String | ExistingFileObject File
@@ -264,200 +265,200 @@ setRef :: (Convertible a ResultValue) => Var -> a -> FSProgram ()
 setRef var o =
   setResultValue var (convert o)
 
-fsTranslateQuery :: FileSystemTrans -> Set Var -> Formula -> Set Var -> FSProgram ()
-fsTranslateQuery  _ ret (FAtomic (Atom (NewFileObjectPredName _) [arg1, VarExpr var])) env = do
+fsTranslateQuery :: FileSystemTrans -> Set Var -> FormulaT -> Set Var -> FSProgram ()
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (NewFileObjectPredName _) [arg1, VarExpr var])) env = do
   n <- T.unpack <$> evalText arg1
   setRef var (NewFileObject n)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (NewDirObjectPredName _) [arg1, VarExpr var])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (NewDirObjectPredName _) [arg1, VarExpr var])) env = do
   n <- T.unpack <$> evalText arg1
   setRef var (NewDirObject n)
 
-fsTranslateQuery  trans ret (FAtomic (Atom (FileNamePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (FileNamePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allFiles trans arg1 env
   let n = fsfileName file
   setText var2 (T.pack n)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (FileNamePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (FileNamePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   n <- T.unpack <$> evalText arg1
   files <- fsfindFilesByName n
   file <- foreach files
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery _ ret (FAtomic (Atom (FileNamePredName _) [arg1, arg2])) env = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (FileNamePredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   n2 <- T.unpack <$> evalText arg2
   file <- fileObjectPath o
   let n1 = fsfileName file
   unless (n1 == n2) stop
 
-fsTranslateQuery  trans ret (FAtomic (Atom (DirNamePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (DirNamePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allDirs trans arg1 env
   let n = fsfileName file
   setText var2 (T.pack n)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirNamePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirNamePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   n <- T.unpack <$> evalText arg1
   files <- fsfindDirsByName n
   file <- foreach files
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirNamePredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirNamePredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   n2 <- T.unpack <$> evalText arg2
   file <- dirObjectPath o
   let n1 = fsfileName file
   unless (n1 == n2) stop
 
-fsTranslateQuery  trans ret (FAtomic (Atom (FileHostPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (FileHostPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allFiles trans arg1 env
   setText var2 (T.pack (fHost file))
 
-fsTranslateQuery  (FileSystemTrans host root _) ret (FAtomic (Atom (FileHostPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  (FileSystemTrans host root _) ret (FAtomic2 _ (Atom (FileHostPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   host <- T.unpack <$> evalText arg1
   files <- fsfindFilesByHost host
   file <- foreach files
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery _ ret (FAtomic (Atom (FileHostPredName _) [arg1, arg2])) env = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (FileHostPredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   host2 <- T.unpack <$> evalText arg2
   file1 <- fileObjectPath o
   unless (fHost file1 == host2) stop
 
-fsTranslateQuery  trans ret (FAtomic (Atom (DirHostPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (DirHostPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allDirs trans arg1 env
   setText var2 (T.pack (fHost file))
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirHostPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirHostPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   host <- T.unpack <$> evalText arg1
   files <- fsfindDirsByHost host
   file <- foreach files
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirHostPredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirHostPredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   host2 <- T.unpack <$> evalText arg2
   file <- dirObjectPath o
   unless (fHost file == host2) stop
 
-fsTranslateQuery  trans ret (FAtomic (Atom (FileSizePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (FileSizePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   absp <- allFiles trans arg1 env
   s <- fssize absp
   setInteger var2 s
 
-fsTranslateQuery (FileSystemTrans host root _ ) ret (FAtomic (Atom (FileSizePredName _) [VarExpr var1, arg2])) env | not (var1 `Set.member` env) = do
+fsTranslateQuery (FileSystemTrans host root _ ) ret (FAtomic2 _ (Atom (FileSizePredName _) [VarExpr var1, arg2])) env | not (var1 `Set.member` env) = do
   a <- evalInteger arg2
   files <- fsfindFilesBySize (fromInteger a)
   file <- foreach files
   setRef var1 (ExistingFileObject file)
 
-fsTranslateQuery _  ret (FAtomic (Atom (FileSizePredName _) [arg1, arg2])) env = do
+fsTranslateQuery _  ret (FAtomic2 _ (Atom (FileSizePredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   absp <- fileObjectPath o
   s <- fssize absp
   a <- evalInteger arg2
   unless (s == a) stop
 
-fsTranslateQuery  trans ret (FAtomic (Atom (FileModifyTimePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (FileModifyTimePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   absp <- allFiles trans arg1 env
   mt <- fsmodificationTime absp
   setInteger var2 (floor (utcTimeToPOSIXSeconds mt))
 
-fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic (Atom (FileModifyTimePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic2 _ (Atom (FileModifyTimePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   mt <- evalInteger arg1
   files <- fsfindFilesByModificationTime (fromInteger mt)
   file <- foreach files
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (FileModifyTimePredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (FileModifyTimePredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   file <- fileObjectPath o
   mt1 <- fsmodificationTime file
   mt2 <- evalInteger arg1
   unless (floor (utcTimeToPOSIXSeconds mt1) == mt2) stop
 
-fsTranslateQuery trans ret (FAtomic (Atom (DirModifyTimePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery trans ret (FAtomic2 _ (Atom (DirModifyTimePredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   absp <- allDirs trans arg1 env
   mt <- fsmodificationTime absp
   setInteger var2 (floor (utcTimeToPOSIXSeconds mt))
 
-fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic (Atom (DirModifyTimePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic2 _ (Atom (DirModifyTimePredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   mt <- evalInteger arg1
   files <- fsfindDirsByModificationTime (fromInteger mt)
   file <- foreach files
   setRef var (ExistingDirObject file)
 
-fsTranslateQuery _ ret (FAtomic (Atom (DirModifyTimePredName _) [arg1, arg2])) env = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (DirModifyTimePredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   absp <- dirObjectPath o
   mt1 <- fsmodificationTime absp
   mt2 <- evalInteger arg1
   unless (floor (utcTimeToPOSIXSeconds mt1) == mt2) stop
 
-fsTranslateQuery trans ret (FAtomic (Atom (FilePathPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery trans ret (FAtomic2 _ (Atom (FilePathPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allFiles trans arg1 env
   let p = fsRelP file
   setText var2 (T.pack p)
 
-fsTranslateQuery  (FileSystemTrans _ _ _ ) ret (FAtomic (Atom (FilePathPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  (FileSystemTrans _ _ _ ) ret (FAtomic2 _ (Atom (FilePathPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   p <- T.unpack <$> evalText arg1
   files <- fsfindFilesByPath p
   file <- foreach files
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery _ ret (FAtomic (Atom (FilePathPredName _) [arg1, arg2])) env = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (FilePathPredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   p <- T.unpack <$> evalText arg2
   file <- fileObjectPath o
   unless (file == fsreplaceRelP p file) stop
 
-fsTranslateQuery trans ret (FAtomic (Atom (DirPathPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery trans ret (FAtomic2 _ (Atom (DirPathPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allDirs trans arg1 env
   let p = fsRelP file
   setText var2 (T.pack p)
 
-fsTranslateQuery  (FileSystemTrans _ _ _ ) ret (FAtomic (Atom (DirPathPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  (FileSystemTrans _ _ _ ) ret (FAtomic2 _ (Atom (DirPathPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   p <- T.unpack <$> evalText arg1
   files <- fsfindDirsByPath p
   file <- foreach files
   setRef var (ExistingDirObject file)
 
-fsTranslateQuery _ ret (FAtomic (Atom (DirPathPredName _) [arg1, arg2])) env = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (DirPathPredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   p <- T.unpack <$> evalText arg2
   file <- dirObjectPath o
   unless (file == fsreplaceRelP p file) stop
 
-fsTranslateQuery  trans ret (FAtomic (Atom (FileContentPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
+fsTranslateQuery  trans ret (FAtomic2 _ (Atom (FileContentPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env) = do
   file <- allFiles trans arg1 env
   setRef var2 (FileContent file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (FileContentPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (FileContentPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   FileContent file <- evalRef arg1
   setRef var (ExistingFileObject file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (FileContentPredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (FileContentPredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   file1 <- fileObjectPath o
   FileContent file2 <- evalRef arg1
   unless (file1 == file2) stop
 
-fsTranslateQuery trans ret (FAtomic (Atom (DirContentPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env)= do
+fsTranslateQuery trans ret (FAtomic2 _ (Atom (DirContentPredName _) [arg1, VarExpr var2])) env | not (var2 `Set.member` env)= do
   file <- allDirs trans arg1 env
   setRef var2 (DirContent file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirContentPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirContentPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   DirContent file <- evalRef arg1
   setRef var (ExistingDirObject file)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirContentPredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirContentPredName _) [arg1, arg2])) env = do
   o <- evalRef arg1
   file1 <- dirObjectPath o
   FileContent file2 <- evalRef arg1
   unless (file1 == file2) stop
 
-fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic (Atom (DirDirPredName _) [VarExpr var1, VarExpr var2])) env | not (var1 `Set.member` env || var2 `Set.member` env) = do
+fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic2 _ (Atom (DirDirPredName _) [VarExpr var1, VarExpr var2])) env | not (var1 `Set.member` env || var2 `Set.member` env) = do
   files <- fsallNonRootDirs
   file <- foreach files
   let absp2 = fsDir file
@@ -467,7 +468,7 @@ fsTranslateQuery  (FileSystemTrans host root _ ) ret (FAtomic (Atom (DirDirPredN
       setRef var1 (ExistingDirObject file)
       setRef var2 (ExistingDirObject absp2)
 
-fsTranslateQuery _ ret (FAtomic (Atom (DirDirPredName _) [arg1, VarExpr var])) env | not (var `Set.member` env) = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (DirDirPredName _) [arg1, VarExpr var])) env | not (var `Set.member` env) = do
   o <- evalRef arg1
   file <- dirObjectPath o
   let absp2 = fsDir file
@@ -476,21 +477,21 @@ fsTranslateQuery _ ret (FAtomic (Atom (DirDirPredName _) [arg1, VarExpr var])) e
     Just absp2 ->
       setRef var (ExistingDirObject absp2)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirDirPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirDirPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   o <- evalRef arg1
   file <- dirObjectPath o
   absp2s <- listDirDir file
   absp2 <- foreach absp2s
   setRef var (ExistingDirObject absp2)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (DirDirPredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (DirDirPredName _) [arg1, arg2])) env = do
   o <- evalRef arg2
   file <- dirObjectPath o
   o2 <- evalRef arg1
   file2 <- dirObjectPath o2
   unless (Just file == fsDir file2) stop
 
-fsTranslateQuery _ ret (FAtomic (Atom (FileDirPredName _) [VarExpr var1, VarExpr var2])) env | not (var1 `Set.member` env || var2 `Set.member` env) = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (FileDirPredName _) [VarExpr var1, VarExpr var2])) env | not (var1 `Set.member` env || var2 `Set.member` env) = do
   files <- fsallNonRootFiles
   file <- foreach files
   let absp2 = fsDir file
@@ -500,7 +501,7 @@ fsTranslateQuery _ ret (FAtomic (Atom (FileDirPredName _) [VarExpr var1, VarExpr
       setRef var1 (ExistingFileObject file)
       setRef var2 (ExistingDirObject absp2)
 
-fsTranslateQuery _ ret (FAtomic (Atom (FileDirPredName _) [arg1, VarExpr var])) env | not (var `Set.member` env) = do
+fsTranslateQuery _ ret (FAtomic2 _ (Atom (FileDirPredName _) [arg1, VarExpr var])) env | not (var `Set.member` env) = do
   o <- evalRef arg1
   file <- fileObjectPath o
   let absp2 = fsDir file
@@ -509,27 +510,27 @@ fsTranslateQuery _ ret (FAtomic (Atom (FileDirPredName _) [arg1, VarExpr var])) 
     Just absp2 ->
       setRef var (ExistingDirObject absp2)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (FileDirPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (FileDirPredName _) [VarExpr var, arg1])) env | not (var `Set.member` env) = do
   o <- evalRef arg1
   file <- fileObjectPath o
   absp2s <- listDirFile file
   absp2 <- foreach absp2s
   setRef var (ExistingFileObject absp2)
 
-fsTranslateQuery  _ ret (FAtomic (Atom (FileDirPredName _) [arg1, arg2])) env = do
+fsTranslateQuery  _ ret (FAtomic2 _ (Atom (FileDirPredName _) [arg1, arg2])) env = do
   o <- evalRef arg2
   file <- fileObjectPath o
   o2 <- evalRef arg1
   file2 <- fileObjectPath o2
   unless (Just file  == fsDir file2) stop
 
-fsTranslateQuery trans ret (FAtomic (Atom (FileContentRangePredName _) [arg1, arg2, arg3, VarExpr var4])) env | not (var4 `Set.member` env) = do
+fsTranslateQuery trans ret (FAtomic2 _ (Atom (FileContentRangePredName _) [arg1, arg2, arg3, VarExpr var4])) env | not (var4 `Set.member` env) = do
   absp <- allFileContents trans arg1 env
   (a, b) <- ranges absp arg2 arg3 env
   c <- fsread absp a b
   setByteString var4 c
 
-fsTranslateQuery trans ret (FAtomic (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4])) env = do
+fsTranslateQuery trans ret (FAtomic2 _ (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4])) env = do
   absp <- allFileContents trans arg1 env
   d <- evalByteString arg4
   let l = BS.length d
@@ -537,21 +538,21 @@ fsTranslateQuery trans ret (FAtomic (Atom (FileContentRangePredName _) [arg1, ar
   c <- fsread absp a b
   unless (c == d) stop
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileContentPredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (FileContentPredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   FileContent absp2 <- evalRef arg2
   case o of
     NewFileObject _ -> error "cannot add content to a new file object"
     ExistingFileObject absp -> fscopyFile absp2 absp
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirContentPredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (DirContentPredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   DirContent absp2 <- evalRef arg2
   case o of
     NewDirObject _ -> error "cannot add content to a new dir object"
     ExistingDirObject absp -> fscopyDir absp2 absp
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileNamePredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (FileNamePredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   n <- T.unpack <$> evalText arg2
   case o of
@@ -560,7 +561,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileNamePredName _) [arg1, arg2
       let file2 = fsreplaceFileName n file
       unless (file2 == file) $ moveFile file file2
 
-fsTranslateQuery _ ret (FInsert (Lit Pos (Atom (FileSizePredName _) [arg1, arg2]))) env = do
+fsTranslateQuery _ ret (FInsert2 _ (Lit Pos (Atom (FileSizePredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   s <- evalInteger arg2
   case o of
@@ -568,7 +569,7 @@ fsTranslateQuery _ ret (FInsert (Lit Pos (Atom (FileSizePredName _) [arg1, arg2]
     ExistingFileObject absp ->
       fstruncate absp s
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirNamePredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (DirNamePredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   n <- T.unpack <$> evalText arg2
   case o of
@@ -577,7 +578,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirNamePredName _) [arg1, arg2]
       let file2 = fsreplaceFileName n file
       unless (file2 == file) $ moveDir file file2
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileHostPredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (FileHostPredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   n <- T.unpack <$> evalText arg2
   case o of
@@ -586,7 +587,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileHostPredName _) [arg1, arg2
       let file2 = fsreplaceFileName n file
       unless (file2 == file) $ moveFile file file2
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirHostPredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (DirHostPredName _) [arg1, arg2]))) env = do
   o <- evalRef arg1
   n <- T.unpack <$> evalText arg2
   case o of
@@ -595,7 +596,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirHostPredName _) [arg1, arg2]
       let file2 = fsreplaceFileName n file
       unless (file2 == file) $ moveDir file file2
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirDirPredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (DirDirPredName _) [arg1, arg2]))) env = do
   o <- evalRef arg2
   o2 <- evalRef arg1
   case o of
@@ -608,7 +609,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (DirDirPredName _) [arg1, arg2])
           let n2 = fsfileName file2
           moveDir file2 (fsreplaceFileName n2 file)
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileDirPredName _) [arg1, arg2]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (FileDirPredName _) [arg1, arg2]))) env = do
   o <- evalRef arg2
   o2 <- evalRef arg1
   case o of
@@ -621,7 +622,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileDirPredName _) [arg1, arg2]
           let n2 = fsfileName file2
           moveFile file2 (fsreplaceFileName n2 file)
 
-fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Pos (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4]))) env = do
   FileContent absp <- evalRef arg1
   a <- evalInteger arg2
   b <- evalInteger arg3
@@ -629,7 +630,7 @@ fsTranslateQuery  _ ret (FInsert (Lit Pos (Atom (FileContentRangePredName _) [ar
   unless (b - a == fromIntegral (BS.length c)) $ error "content length error"
   fswrite absp a c
 
-fsTranslateQuery  _ ret (FInsert (Lit Neg (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Neg (Atom (FileContentRangePredName _) [arg1, arg2, arg3, arg4]))) env = do
   FileContent absp <- evalRef arg1
   a <- evalInteger arg2
   b <- evalInteger arg3
@@ -640,14 +641,14 @@ fsTranslateQuery  _ ret (FInsert (Lit Neg (Atom (FileContentRangePredName _) [ar
   unless (c == buf) stop
   fstruncate absp a
 
-fsTranslateQuery  _ ret (FInsert (Lit Neg (Atom (FileObjectPredName _) [arg]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Neg (Atom (FileObjectPredName _) [arg]))) env = do
   o <- evalRef arg
   case o of
     NewFileObject _ -> error "cannot delete a new file object"
     ExistingFileObject absp ->
       unlinkFile absp
 
-fsTranslateQuery  _ ret (FInsert (Lit Neg (Atom (DirObjectPredName _) [arg]))) env = do
+fsTranslateQuery  _ ret (FInsert2 _ (Lit Neg (Atom (DirObjectPredName _) [arg]))) env = do
   o <- evalRef arg
   case o of
     NewDirObject _ -> error "cannot delete a new dir object"
@@ -658,7 +659,6 @@ fsTranslateQuery _ _ query _ = error ("fsTranslateQuery: cannot translate query"
 
 instance IGenericDatabase01 FileSystemTrans where
     type GDBQueryType FileSystemTrans = FSProgram ()
-    type GDBFormulaType FileSystemTrans = Formula
+    type GDBFormulaType FileSystemTrans = FormulaT
     gTranslateQuery trans ret query env = return (fsTranslateQuery trans ret query env)
-    gCheckQuery _ _ _ _ = return (Right ())
     gSupported (FileSystemTrans _ _ ns) ret form env = fsSupported ns form env

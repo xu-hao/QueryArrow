@@ -3,6 +3,7 @@
 module QueryArrow.FFI.C.Template where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Utils
 import QueryArrow.Rewriting
 import QueryArrow.Translation
 import QueryArrow.Config
@@ -106,7 +107,7 @@ queryFunction name inputtypes outputtypes = do
                     [IntType] -> [|getIntResult|]
                     _ -> [|getStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) svcptr session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryLongFunction :: String -> [Type2] -> [Type2] -> DecsQ
@@ -128,7 +129,7 @@ queryLongFunction name inputtypes outputtypes = do
     case outputtypes of
                   [StringType] -> do
                       runIO $ putStrLn ("generating function " ++ show fn)
-                      b <- [|getIntResult svcptr session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+                      b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
                   _ -> do
                       runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
@@ -154,7 +155,7 @@ querySomeFunction name inputtypes outputtypes = do
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = [|getSomeStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) svcptr session $(varE n) $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session $(varE n) $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
@@ -175,7 +176,7 @@ queryAllFunction name inputtypes outputtypes = do
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = [|getAllStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) svcptr session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 {-|
@@ -202,7 +203,7 @@ queryAll2Function name inputtypes outputtypes = do
     let func = [|getAllStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
     b <- [|let $(argListPat) = $(varE listarg) in
-                      $(func) svcptr session $(retList) ($(pn) @@ $(argList2)) (Map.fromList $(argList))|]
+                      $(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 hsQueryForeign :: String -> [Type2] -> [Type2] -> DecsQ
@@ -411,7 +412,7 @@ createFunction n a = do
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ($(pn) @@+ $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeign :: String -> Int -> DecQ
@@ -454,7 +455,7 @@ createFunctionArray n a = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ($(pn) @@+ $(argList2)) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ
@@ -491,7 +492,7 @@ deleteFunction n a = do
     let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ($(pn) @@- $(argList2)) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@- $(argList2))) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsDeleteForeign :: String -> Int -> DecQ

@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances #-}
 
 module QueryArrow.Rewriting where
 
@@ -22,11 +22,13 @@ type Pattern = Atom
 
 data InsertRewritingRule = InsertRewritingRule Pattern Formula
 
+data InsertRewritingRuleT = InsertRewritingRuleT Pattern FormulaT
+
 instance Show InsertRewritingRule where
   show (InsertRewritingRule pat form) = serialize pat ++ " -> " ++ serialize form
 
-instance Typecheck InsertRewritingRule where
-  typecheck r@(InsertRewritingRule (Atom pn args) form) =
+instance Typecheck InsertRewritingRule InsertRewritingRuleT where
+  typecheck r@(InsertRewritingRule atom0@(Atom pn args) form) =
     if all isVar args
       then if length (nub args) < length args
         then
@@ -40,11 +42,12 @@ instance Typecheck InsertRewritingRule where
               pt'@(PredType _ pts) <- instantiatePredType pt
               unless (length args == length pts) $ throwError ("typecheck: parameter count mismatch " ++ show r)
               initTCMonad (fromList (zip (map extractVar args) pts))
-              typecheck form
+              form' <- typecheck form
               (vtm, _) <- lift get
               let ovars = outputComponents pt' args
               let ub = unbounded vtm (Set.fromList (map extractVar ovars))
               unless (null ub) $ throwError ("typecheck: unbounded vars " ++ show ub ++ " rule " ++ show r ++ " bounded " ++ show vtm)
+              return (InsertRewritingRuleT atom0 form')
       else
         throwError ("typecheck: rule pattern are not all vars " ++ show r)
 
@@ -71,9 +74,9 @@ instance Match Atom Atom where
 
 
 
-rewriteAtomic1 :: Set Var -> Atom -> [InsertRewritingRule] -> NewEnv (Maybe Formula)
+rewriteAtomic1 :: Set Var -> Atom -> [InsertRewritingRuleT] -> NewEnv (Maybe FormulaT)
 rewriteAtomic1 _ _ [] = return Nothing
-rewriteAtomic1 ext a2 (InsertRewritingRule p form : rs) =
+rewriteAtomic1 ext a2 (InsertRewritingRuleT p form : rs) =
     case match p a2 of
         Nothing -> rewriteAtomic1 ext a2 rs
         Just sub -> do
@@ -84,35 +87,35 @@ rewriteAtomic1 ext a2 (InsertRewritingRule p form : rs) =
             let sub2 = fromList (zip fvold (map VarExpr fvnew))
             return (Just (subst (sub `union` sub2) form))
 
-rewrite1 :: Set Var ->[InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrite1 :: Set Var ->[InsertRewritingRuleT] -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> FormulaT -> NewEnv FormulaT
 rewrite1 ext  qr  ir dr form0 =
     case form0 of
-        FAtomic a2 -> do
+        FAtomic2 _ a2 -> do
             res <- rewriteAtomic1 ext a2 qr
             return (case res of
                 Nothing -> form0
                 Just form -> form)
-        FChoice disj1 disj2 ->
-            FChoice <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
-        FPar disj1 disj2 ->
-            FPar <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
-        FSequencing conj1 conj2 ->
-            FSequencing <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2
-        FOne ->
-            return FOne
-        FZero ->
-            return FZero
-        FInsert lit@(Lit s a) -> do
+        FChoice2 d disj1 disj2 ->
+            FChoice2 d <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
+        FPar2 d disj1 disj2 ->
+            FPar2 d <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
+        FSequencing2 d conj1 conj2 ->
+            FSequencing2 d <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2
+        FOne2 _ ->
+            return form0
+        FZero2 _ ->
+            return form0
+        FInsert2 d lit@(Lit s a) -> do
             res <- rewriteAtomic1 ext a (case s of
                             Pos -> ir
                             Neg -> dr)
             return (case res of
-                        Nothing -> FInsert lit
+                        Nothing -> form0
                         Just form -> form)
-        Aggregate agg form ->
-            Aggregate agg <$> rewrite1 ext  qr ir dr form
+        Aggregate2 d agg form ->
+            Aggregate2 d agg <$> rewrite1 ext  qr ir dr form
 
-rewrites    :: Int -> Set Var -> [InsertRewritingRule] -> [InsertRewritingRule] -> [InsertRewritingRule] -> Formula -> NewEnv Formula
+rewrites    :: Int -> Set Var -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> FormulaT -> NewEnv FormulaT
 rewrites n ext  rules  ir dr form | n < 0     = error "maximum number of rewrites reached"
                         | otherwise = do
                             form' <-  rewrite1 ext rules  ir dr form

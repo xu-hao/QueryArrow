@@ -5,6 +5,7 @@ module QueryArrow.Sum where
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.QueryPlan
 import QueryArrow.ListUtils
 import QueryArrow.Data.Heterogeneous.List
@@ -30,7 +31,7 @@ import Debug.Trace
 --     let (_, stream) = execQueryPlan ([], pure mempty) qp
 --     getAllResultsInStream stream
 
-queryPlan :: (HMapConstraint IDatabase l ) => HList l -> Formula ->  QueryPlan
+queryPlan :: (HMapConstraint IDatabase l ) => HList l -> FormulaT ->  QueryPlan
 queryPlan dbs formula =
     let qp = formulaToQueryPlan dbs formula
         qp1 = simplifyQueryPlan qp in
@@ -50,7 +51,7 @@ queryPlan dbs formula =
 --     liftIO $ infoM "QA" ("rewritten query: " ++ show qu)
 --     return qu
 --
-translate' :: (HMapConstraint (IDatabaseUniformDBFormula Formula) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> Formula -> Set Var -> IO (QueryPlanT l)
+translate' :: (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> FormulaT -> Set Var -> IO (QueryPlanT l)
 translate' dbs rvars qu0 vars =
     let insp = queryPlan dbs qu0
         qp2 = calculateVars vars rvars insp
@@ -75,12 +76,11 @@ data SumDB row l where
    SumDB :: String -> HList l -> SumDB row l
 
 instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need undecidable instance
-    type DBFormulaType (SumDB row l) = Formula
+    type DBFormulaType (SumDB row l) = FormulaT
     getName (SumDB name _ ) = name
     getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
     supported _ _ _ _ = True
-    checkQuery _ _ _ _ = return (Right ())
-instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula Formula) l) => IDatabase1 (SumDB row l) where
+instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula FormulaT) l) => IDatabase1 (SumDB row l) where
     type DBQueryType (SumDB row l) = QueryPlanT l
     translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include retvars) form vars
 
@@ -90,7 +90,7 @@ instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstr
     dbOpen (SumDB _ dbs) = SumDBConnection <$> hMapACULL @(IDatabaseUniformRow row) @ConnectionType dbOpen dbs
 
 instance (IResultRow row, HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                      (IDatabaseUniformDBFormula Formula) l, HMapConstraint
+                      (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDatabase (SumDB row l)
 
 instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) => IDBConnection0 (ConnectionType (SumDB row l )) where

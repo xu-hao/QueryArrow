@@ -3,9 +3,10 @@ module QueryArrow.DB.DB where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.FO.Utils
 
 import Prelude  hiding (lookup, null)
-import Data.Map.Strict (Map, empty, insert, lookup, singleton, keysSet)
+import Data.Map.Strict (Map, empty, insert, lookup, singleton, keysSet, unionWithKey)
 import Control.Monad.Except
 import Data.Convertible.Base
 import Data.Maybe
@@ -84,7 +85,6 @@ class IDatabase0 db where
     getName :: db -> String
     getPreds :: db -> [Pred]
     supported :: db -> Set Var -> DBFormulaType db -> Set Var -> Bool
-    checkQuery :: db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> IO (Either String ())
 
 class IDatabase0 db => IDatabase1 db where
     type DBQueryType db
@@ -104,18 +104,24 @@ instance IDatabase0 (AbstractDatabase row form) where
     getName (AbstractDatabase db) = getName db
     getPreds (AbstractDatabase db) = getPreds db
     supported (AbstractDatabase db) = supported db
-    checkQuery (AbstractDatabase db) = checkQuery db
 
-doQuery :: (IDatabase db) => db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+doQuery :: (IDatabase db, DBFormulaType db ~ FormulaT) => db -> VarTypeMap -> Formula -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQuery db vars2 qu vars rs =
         bracketPStream (dbOpen db) dbClose (\conn -> doQueryWithConn db conn vars2 qu vars rs)
 
-doQueryWithConn :: (IDatabase db) => db -> ConnectionType db -> VarTypeMap -> DBFormulaType db -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
+checkQuery :: (IDatabase db) => db -> VarTypeMap -> Formula -> VarTypeMap -> Either String FormulaT
+checkQuery db vars2 qu vars = do
+  let preds = getPreds db
+  let ptm = constructPredTypeMap preds
+  let vtm = unionWithKey (\k l r -> if l == r then l else error ("translateQuery: input output var has different types" ++ show k)) vars2 vars
+  typeCheckFormula ptm vtm qu
+
+doQueryWithConn :: (IDatabase db, DBFormulaType db ~ FormulaT) => db -> ConnectionType db -> VarTypeMap -> Formula -> VarTypeMap -> DBResultStream (RowType (StatementType (ConnectionType db))) -> DBResultStream (RowType (StatementType (ConnectionType db)))
 doQueryWithConn db conn vars2 qu vars rs = do
-  res <- liftIO $ checkQuery db vars2 qu vars
+  let res = checkQuery db vars2 qu vars
   case res of
     Left err -> error ("doQueryWithConn: " ++ err)
-    Right () -> do
+    Right qu -> do
       qu' <- liftIO $ translateQuery db (keysSet vars2) qu (keysSet vars)
       stmt <- liftIO $ prepareQuery conn qu'
       dbStmtExec stmt rs <|> do

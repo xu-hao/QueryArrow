@@ -19,7 +19,6 @@ instance (IDatabase0 db) => (IDatabase0 (NoConnectionDatabase db)) where
     getName (NoConnectionDatabase db) = getName db
     getPreds (NoConnectionDatabase db) = getPreds db
     supported (NoConnectionDatabase db) = supported db
-    checkQuery (NoConnectionDatabase db) = checkQuery db
 
 instance (IDatabase1 db) => (IDatabase1 (NoConnectionDatabase db)) where
     type DBQueryType (NoConnectionDatabase db) = DBQueryType db

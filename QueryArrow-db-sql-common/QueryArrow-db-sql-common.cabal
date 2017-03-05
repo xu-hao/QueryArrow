@@ -1,4 +1,4 @@
-name:           QueryArrow-db-cypher
+name:           QueryArrow-db-sql-common
 version:        0.2
 cabal-version:  >=1.2
 build-type:     Simple
@@ -7,30 +7,22 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.Cypher.Neo4j
-                   QueryArrow.Cypher.Neo4jConnection
-                   QueryArrow.Cypher.BuiltIn
-                   QueryArrow.Cypher.Cypher
-                   QueryArrow.Cypher.ICAT
-                   QueryArrow.Cypher.SQLToCypher
+                   QueryArrow.SQL.ICAT
+                   QueryArrow.SQL.SQL
+                   QueryArrow.SQL.BuiltIn
   build-depends:
                    base >= 4,
+                   aeson,
                    containers,
+                   mtl,
                    transformers,
-                   bytestring,
-                   haskell-neo4j-client,
-                   unordered-containers,
                    convertible,
                    text >= 1.2.1.1,
-                   scientific,
-                   aeson,
                    hslogger,
                    namespace >= 0.1.2.2,
-                   heterogeneous-list,
                    lattices,
                    semibounded-lattices,
-                   QueryArrow-common,
-                   QueryArrow-db-sql-common
+                   QueryArrow-common
   ghc-options:     -Wall -fPIC
   other-modules:
 Test-Suite Test
@@ -46,10 +38,10 @@ Test-Suite Test
                      parsec,
                      semigroupoids,
                      QuickCheck,
+                     HDBC,
                      aeson,
                      bytestring,
                      hspec,
-                     haskell-neo4j-client,
                      unordered-containers,
                      convertible,
                      text >= 1.2.1.1,
@@ -58,6 +50,7 @@ Test-Suite Test
                      process,
                      conduit-combinators,
                      conduit,
+                     http-conduit,
                      resourcet,
                      async,
                      time,

@@ -6,6 +6,7 @@
 module QueryArrow.RPC.Service.Service.HTTP where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.DBMap
 import QueryArrow.RPC.Config
@@ -36,7 +37,7 @@ import QueryArrow.RPC.Service
 
 
 data App = App {
-    appParameters :: AbstractDatabase MapResultRow Formula
+    appParameters :: AbstractDatabase MapResultRow FormulaT
 }
 
 mkYesod "App" [parseRoutes|
@@ -45,7 +46,7 @@ mkYesod "App" [parseRoutes|
 
 instance Yesod App
 
-runQuery :: (MonadIO m, MonadHandler m) => String -> AbstractDatabase MapResultRow Formula -> m Value
+runQuery :: (MonadIO m, MonadHandler m) => String -> AbstractDatabase MapResultRow FormulaT -> m Value
 runQuery method db = do
     liftIO $ infoM "QA" ("REST client connected")
     case db of

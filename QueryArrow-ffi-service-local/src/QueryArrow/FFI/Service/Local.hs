@@ -18,7 +18,7 @@ import QueryArrow.Config
 import QueryArrow.DBMap
 import QueryArrow.FO.Types
 
-data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow Formula db) => Session db (ConnectionType db)
+data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow FormulaT db) => Session db (ConnectionType db)
 
 localService :: QueryArrowService Session
 localService = QueryArrowService {

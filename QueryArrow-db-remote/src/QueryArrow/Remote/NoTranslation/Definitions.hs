@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, StaticPointers, RankNTypes, GADTs, ConstraintKinds, FlexibleContexts, TypeApplications, ScopedTypeVariables, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, StaticPointers, RankNTypes, GADTs, ConstraintKinds, FlexibleContexts, ScopedTypeVariables, FlexibleInstances #-}
 
 module QueryArrow.Remote.NoTranslation.Definitions where
 
@@ -12,15 +12,14 @@ import QueryArrow.FO.Types
 
 data RemoteCommand  = GetName
   | GetPreds
-  | Supported (Set Var) Formula (Set Var)
+  | Supported (Set Var) FormulaT (Set Var)
   | DBOpen
   | DBClose (Ptr ())
   | DBBegin (Ptr ())
   | DBPrepare (Ptr ())
   | DBCommit (Ptr ())
   | DBRollback (Ptr ())
-  | DBStmtExec (Ptr ()) (NTDBQuery Formula) [MapResultRow]
-  | CheckQuery VarTypeMap Formula VarTypeMap
+  | DBStmtExec (Ptr ()) (NTDBQuery FormulaT) [MapResultRow]
   | Quit
 
 data RemoteResultSet = StringResult String

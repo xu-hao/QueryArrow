@@ -1,8 +1,9 @@
-{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, TemplateHaskell , ForeignFunctionInterface #-}
+{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, ForeignFunctionInterface #-}
 
 module QueryArrow.FFI.C.Plugin where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Utils
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
 import QueryArrow.DB.ResultStream
@@ -154,7 +155,7 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
     let whereparam col val = (Var ("w_" ++ col), StringValue (pack val))
     let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
     let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execQuery svc session update params) (const (return ()))
+    processRes (execQuery svc session ( update) params) (const (return ()))
 
 foreign export ccall hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
 hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
@@ -182,7 +183,7 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
     let update = foldl (.*.) cond (map updateform updatecols)
     let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
     let params = Map.singleton (Var "w_coll_name") (StringValue (pack cn)) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execQuery svc session update params) (const (return ()))
+    processRes (execQuery svc session ( update) params) (const (return ()))
 
 mapResultRowToList :: [Var] -> MapResultRow -> [ResultValue]
 mapResultRowToList vars r =

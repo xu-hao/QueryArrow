@@ -6,6 +6,7 @@ import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import Foreign.Ptr
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
@@ -21,16 +22,10 @@ getQueryArrowClient chan = do
   return (QueryArrowClient chan name preds)
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => INoTranslationDatabase01 (QueryArrowClient a) where
-  type NTDBFormulaType (QueryArrowClient chan) = Formula
+  type NTDBFormulaType (QueryArrowClient chan) = FormulaT
   ntGetName (QueryArrowClient _ n _) = n
   ntGetPreds (QueryArrowClient _ _ ps) = ps
   ntSupported (QueryArrowClient chan _ _) ret form vars = True -- assuming that the server is running a TransDB
-  ntCheckQuery (QueryArrowClient chan _ _) ret form vars = do
-    res <- rpc chan (CheckQuery ret form vars)
-    case res of
-      UnitResult -> return (Right ())
-      ErrorResult (_, err) -> return (Left err)
-      _ -> fail ("ntCheckQuery: unsupported result type: " ++ show res)
 
 processRes :: RemoteResultSet -> IO ()
 processRes res =
@@ -59,8 +54,8 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
     res <- rpc chan (DBRollback connSP)
     processRes res
 
-instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBStatement (ConnectionType (QueryArrowClient  a), NTDBQuery Formula) where
-  type RowType (ConnectionType (QueryArrowClient  a), NTDBQuery Formula) = MapResultRow
+instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBStatement (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT) where
+  type RowType (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT) = MapResultRow
   dbStmtExec (QueryArrowClientDBConnection chan connSP, qu) rows = do
       row <- rows
       RowListResult rows' <- liftIO $ rpc chan (DBStmtExec connSP  qu  [row])
@@ -68,8 +63,8 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
   dbStmtClose _ = return ()
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBConnection (ConnectionType (QueryArrowClient  a)) where
-  type StatementType (ConnectionType (QueryArrowClient  a)) = (ConnectionType (QueryArrowClient  a), NTDBQuery Formula)
-  type QueryType (ConnectionType (QueryArrowClient  a)) = NTDBQuery Formula
+  type StatementType (ConnectionType (QueryArrowClient  a)) = (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT)
+  type QueryType (ConnectionType (QueryArrowClient  a)) = NTDBQuery FormulaT
   prepareQuery conn qu = return (conn, qu)
 
 

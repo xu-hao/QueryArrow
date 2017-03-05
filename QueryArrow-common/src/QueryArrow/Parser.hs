@@ -2,6 +2,7 @@
 module QueryArrow.Parser where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.Utils
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)

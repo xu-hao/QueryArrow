@@ -2,7 +2,7 @@
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Data
+import QueryArrow.FO.Types
 import QueryArrow.Config
 import QueryArrow.Translation
 import QueryArrow.Cache
@@ -52,6 +52,6 @@ dbMap0 = fromList [
     ];
 
 
-transDB :: TranslationInfo -> IO (AbstractDatabase MapResultRow Formula)
+transDB :: TranslationInfo -> IO (AbstractDatabase MapResultRow FormulaT)
 transDB transinfo =
     getDB2 dbMap0 (db_plugin transinfo)
