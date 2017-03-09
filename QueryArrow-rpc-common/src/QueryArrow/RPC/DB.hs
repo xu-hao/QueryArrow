@@ -36,7 +36,7 @@ run3 hdr commands params tdb conn = do
                                         liftIO $ dbRollback conn
                                         return []
                                     Execute qu -> do
-                                        let (varstinp, varstout) = setToMap2 (map typeOf params) hdr
+                                        let (varstinp, varstout) = setToMap2 (map (\(AbstractResultValue arv) -> castTypeOf arv) params) hdr
                                         getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb

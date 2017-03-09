@@ -97,7 +97,7 @@ queryFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -121,7 +121,7 @@ queryLongFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -148,7 +148,7 @@ querySomeFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : np : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -169,7 +169,7 @@ queryAllFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -194,7 +194,7 @@ queryAll2Function name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = [VarP s, VarP p, VarP listarg]
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     let argListPat = listP (map (\i -> (varP (mkName i))) args)
@@ -409,7 +409,7 @@ createFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
     b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList $(argList))|]
@@ -455,7 +455,7 @@ createFunctionArray n a = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList (zip $(argList) (map StringValue argarray)))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList (zip $(argList) (map (AbstractResultValue . StringValue) argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ
@@ -489,7 +489,7 @@ deleteFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = listE (map (\i -> [| (Var $(stringE i), StringValue $(varE (mkName i))) |]) args)
+    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
     b <- [|$(func) svcptr session ( ($(pn) @@- $(argList2))) (Map.fromList $(argList))|]
@@ -547,13 +547,13 @@ functions path = do
                         let n = map toLower (drop 2 n0)
                             (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
                             getInputOutputTypes [] = ([], [])
-                            getInputOutputTypes (ParamType _ _ False NumberType : t) = ((StringType :) *** id) (getInputOutputTypes t)
+                            getInputOutputTypes (ParamType _ _ False Int64Type : t) = ((StringType :) *** id) (getInputOutputTypes t)
                             getInputOutputTypes (ParamType _ _ False TextType : t) = ((StringType :) *** id) (getInputOutputTypes t)
-                            getInputOutputTypes (ParamType _ _ True NumberType : t) = ([], StringType : getTypes t)
+                            getInputOutputTypes (ParamType _ _ True Int64Type : t) = ([], StringType : getTypes t)
                             getInputOutputTypes (ParamType _ _ True TextType : t) = ([], StringType : getTypes t)
                             getInputOutputTypes t = error ("getInputOutputTypes: error unsupported type " ++ show t)
                             getTypes [] = []
-                            getTypes (ParamType _ _ True NumberType : t) = StringType : getTypes t
+                            getTypes (ParamType _ _ True Int64Type : t) = StringType : getTypes t
                             getTypes (ParamType _ _ True TextType : t) = StringType : getTypes t
                             getTypes t = error ("getTypes: error unsupported type " ++ show t)
                             (inputtypes, outputtypes) = getInputOutputTypes ts in

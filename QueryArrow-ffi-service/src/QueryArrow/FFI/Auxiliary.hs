@@ -32,7 +32,7 @@ execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT E
 execAbstract svc session form params =
   execQuery svc session form params
 
-getResultValues :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [ResultValue]
+getResultValues :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [AbstractResultValue]
 getResultValues svc session vars form params = do
   count <- getSomeResults svc session vars form params 1
   case count of
@@ -43,7 +43,7 @@ getResultValues svc session vars form params = do
                     throwError (eNULL, "error 1")
       _ -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
 
-getAllResultValues :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[ResultValue]]
+getAllResultValues :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
 getAllResultValues svc session vars form params = do
   count <- getAllResult svc session vars form params
   case count of
@@ -55,7 +55,7 @@ getAllResultValues svc session vars form params = do
                 liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
                 throwError (eNULL, "error 1")
 
-getSomeResultValues :: QueryArrowService b -> b -> Int -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[ResultValue]]
+getSomeResultValues :: QueryArrowService b -> b -> Int -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
 getSomeResultValues svc session n vars form params = do
   count <- getSomeResults svc session vars form params (n `div` length vars)
   case count of
@@ -92,17 +92,21 @@ getAllStringArrayResult svc session vars form params = do
     r <- getAllResultValues svc session vars form params
     return (map (map resultValueToString) r)
 
-resultValueToInt :: ResultValue -> Int64
-resultValueToInt (IntValue i) = fromIntegral i
-resultValueToInt (StringValue i) = read (Text.unpack i)
-resultValueToInt (ByteStringValue i) = read (BSUTF8.toString i)
+resultValueToInt :: AbstractResultValue -> Int64
+resultValueToInt rv = case rv of
+  AbstractResultValue arv -> case toConcreteResultValue arv of
+    (Int64Value i) -> fromIntegral i
+    (StringValue i) -> read (Text.unpack i)
+    (ByteStringValue i) -> read (BSUTF8.toString i)
 
-resultValueToString :: ResultValue -> Text
-resultValueToString (IntValue i) = Text.pack (show i)
-resultValueToString (StringValue i) = i
-resultValueToString (ByteStringValue i) = decodeUtf8 i
-resultValueToString (RefValue ty loc path) = Text.pack (show loc ++ "/" ++ show path)
-resultValueToString Null = Text.pack ""
+resultValueToString :: AbstractResultValue -> Text
+resultValueToString rv = case rv of
+  AbstractResultValue arv -> case toConcreteResultValue arv of
+    (Int64Value i) -> Text.pack (show i)
+    (StringValue i) -> i
+    (ByteStringValue i) -> decodeUtf8 i
+    (RefValue ty loc path) -> Text.pack (show loc ++ "/" ++ show path)
+    Null -> Text.pack ""
 
 
 processRes :: EitherT Error IO a -> (a -> IO ()) -> IO Int

@@ -32,24 +32,24 @@ import System.Log.Logger
 type Neo4jConnInfo = (String, Int, String, String)
 type Neo4jDatabase = Neo4jConnInfo
 
-instance Convertible ResultValue C.ParamValue where
-    safeConvert (IntValue i) = Right (C.newparam (fromIntegral i :: Int64))
+instance Convertible ConcreteResultValue C.ParamValue where
+    safeConvert (Int64Value i) = Right (C.newparam (fromIntegral i :: Int64))
     safeConvert (StringValue s) = Right (C.newparam s)
     safeConvert (ByteStringValue s) = Right (C.newparam (decodeUtf8 s))
     safeConvert e = Left (ConvertError (show e) "Expr" "ParamValue" "unsupported param value expr type")
 
 instance Convertible ([Var], [A.Value]) MapResultRow where
     safeConvert (vars, values) = Right (foldl (\row (var0, value) ->
-                insert var0 (case value of
+                insert var0 (AbstractResultValue (case value of
                         A.Number n -> case floatingOrInteger n of
                             Left r -> error ("floating not supported")
-                            Right i -> IntValue (fromIntegral i)
+                            Right i -> Int64Value (fromIntegral i)
                         A.String text -> StringValue text
                         A.Null -> StringValue "<null>"
-                        _ -> error ("unsupported json value: " ++ show value)) row) empty (zip vars values) )
+                        _ -> error ("unsupported json value: " ++ show value))) row) empty (zip vars values) )
 
 toCypherParams :: MapResultRow -> M.HashMap T.Text C.ParamValue
-toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert v) m) M.empty
+toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert (case v of AbstractResultValue arv -> toConcreteResultValue arv)) m) M.empty
 
 instance INoConnectionDatabase2 (GenericDatabase CypherTrans Neo4jDatabase ) where
         type NoConnectionRowType (GenericDatabase CypherTrans Neo4jDatabase ) = MapResultRow

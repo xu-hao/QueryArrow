@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances, RankNTypes, GADTs, OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances, RankNTypes, GADTs, OverloadedStrings, DeriveGeneric, StandaloneDeriving #-}
 module QueryArrow.SQL.LibPQ where
 
 import Prelude hiding (lookup)
@@ -21,6 +21,11 @@ import Data.Text.Encoding
 import Data.ByteString.Char8 (pack, unpack)
 import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.Monoid ((<>))
+import GHC.Generics
+import Data.Aeson (ToJSON(..), FromJSON(..))
+import Data.MessagePack (MessagePack(..))
+import Foreign.C.Types (CUInt(..))
+import Data.Typeable (cast)
 
 data LibPQStatement = LibPQStatement Connection Bool [Var] [Oid] ByteString [Var] -- return vars stmt param vars
 
@@ -36,30 +41,64 @@ varcharoid = Oid 1043
 byteaoid :: Oid
 byteaoid = Oid 17
 
-convertResultValueToSQL :: ResultValue -> (ByteString, Format)
-convertResultValueToSQL (IntValue i) = (toStrict (runPut (putWord64be (fromIntegral i))), Binary) -- int8oid
-convertResultValueToSQL (StringValue s) = (encodeUtf8 s, Binary) -- varcharoid
-convertResultValueToSQL (ByteStringValue s) = (s, Binary) -- byteaoid
-convertResultValueToSQL e = error ("unsupported expr type: " ++ show e)
+data LibPQValue = LibPQValue Oid ByteString deriving (Show, Generic)
 
-convertSQLToResultValue :: Oid -> ByteString -> ResultValue
-convertSQLToResultValue oid bs =
-  if oid == int8oid
-    then IntValue (fromIntegral (runGet getWord64be (fromStrict bs)))
-    else if oid == int4oid
-      then IntValue (fromIntegral (runGet getWord32be (fromStrict bs)))
-      else if oid == varcharoid
-        then StringValue (decodeUtf8 bs)
-        else error ("unsupported sql expr type: " ++ show oid)
-        -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
-        -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
+deriving instance Generic Oid
+deriving instance Generic CUInt
+instance MessagePack CUInt
+instance MessagePack Oid
+instance MessagePack LibPQValue
+
+instance ResultValue LibPQValue where
+  toConcreteResultValue (LibPQValue oid bs) =
+    if oid == int8oid
+      then Int64Value (fromIntegral (runGet getWord64be (fromStrict bs)))
+      else if oid == int4oid
+        then Int64Value (fromIntegral (runGet getWord32be (fromStrict bs)))
+        else if oid == varcharoid
+          then StringValue (decodeUtf8 bs)
+          else error ("toConcreteResultValue: unsupported sql expr type: " ++ show oid)
+          -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
+          -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
+  toNetworkResultValue (LibPQValue oid bs) =
+    NetworkResultValue (if oid == int8oid
+      then Just Int64Type
+      else if oid == int4oid
+        then Just Int32Type
+        else if oid == varcharoid
+          then Just TextType
+          else error ("toNetworkResultValue: unsupported sql expr type: " ++ show oid)) bs
+          -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
+          -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
+  castTypeOf (LibPQValue oid bs) =
+    if oid == int8oid
+      then Int64Type
+      else if oid == int4oid
+        then Int64Type
+        else if oid == varcharoid
+          then TextType
+          else if oid == byteaoid
+            then ByteStringType
+            else error ("typeOf: unsupported sql expr type: " ++ show oid)
+
+convertConcreteResultValueToSQL :: ConcreteResultValue -> (ByteString, Format)
+convertConcreteResultValueToSQL (Int64Value i) = (toStrict (runPut (putWord64be (fromIntegral i))), Binary) -- int8oid
+convertConcreteResultValueToSQL (StringValue s) = (encodeUtf8 s, Binary) -- varcharoid
+convertConcreteResultValueToSQL (ByteStringValue s) = (s, Binary) -- byteaoid
+convertConcreteResultValueToSQL e = error ("unsupported expr type: " ++ show e)
+
+convertResultValueToSQL :: AbstractResultValue -> (ByteString, Format)
+convertResultValueToSQL (AbstractResultValue arv) =
+    case cast arv of
+      Just (LibPQValue oid bs) -> (bs, Binary)
+      Nothing -> convertConcreteResultValueToSQL (toConcreteResultValue arv)
 
 convertSQLToResult :: [Var] -> [Oid] -> [Maybe ByteString] -> MapResultRow
 convertSQLToResult vars oids sqlvalues = foldl (\row (var0, oid, sqlvalue) ->
                 insert var0 (
                   case sqlvalue of
-                    Nothing  -> Null
-                    Just sqlvalue -> convertSQLToResultValue oid sqlvalue) row) empty (zip3 vars oids sqlvalues)
+                    Nothing  -> AbstractResultValue Null
+                    Just sqlvalue -> AbstractResultValue (LibPQValue oid sqlvalue)) row) empty (zip3 vars oids sqlvalues)
 
 allRowsResultStream :: [Var] -> [Oid] -> Result -> DBResultStream MapResultRow
 allRowsResultStream vars oids res = do
@@ -108,7 +147,7 @@ nextsid sid = atomicModifyIORef' sid (\a -> (a+1, a))
 
 castTypeToOid :: CastType -> Oid
 castTypeToOid TextType = varcharoid
-castTypeToOid NumberType = int8oid
+castTypeToOid Int64Type = int8oid
 castTypeToOid ByteStringType = byteaoid
 castTypeToOid ty = error ("castTypeToOid: cannot find oid for type " ++ show ty)
 

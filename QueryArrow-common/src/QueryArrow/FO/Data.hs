@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, StandaloneDeriving, DeriveFunctor, UndecidableInstances,
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, StandaloneDeriving, DeriveFunctor, UndecidableInstances, DeriveGeneric,
    RankNTypes, FlexibleContexts, GADTs, PatternSynonyms, ScopedTypeVariables #-}
 
 module QueryArrow.FO.Data where
@@ -18,6 +18,14 @@ import Algebra.Lattice
 import Control.Monad (foldM)
 import Data.ByteString (ByteString)
 import Data.Monoid ((<>))
+import Data.Text.Encoding
+import Data.MessagePack
+import GHC.Generics
+import Data.Int (Int64, Int32)
+import Data.Binary.Get
+import Data.ByteString.Lazy (fromStrict)
+import Data.Typeable (Typeable)
+
 
 -- predicate kinds
 data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
@@ -39,7 +47,7 @@ data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Or
 newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
 -- types
-data CastType = TextType | NumberType | RefType String | ByteStringType | TypeVar String deriving (Eq, Ord, Show, Read)
+data CastType = TextType | Int64Type | Int32Type | RefType String | ByteStringType | TypeVar String deriving (Eq, Ord, Show, Read)
 
 -- http://stackoverflow.com/questions/27157717/boilerplate-free-annotation-of-asts-in-haskell
 newtype Tie f = Tie (f (Tie f))
@@ -59,7 +67,7 @@ instance Functor f => Unannotate (Annotated a) f where
   mapA f (Annotated a b) = Annotated a (f (fmap (mapA f) b))
 
 -- expression
-data Expr0 a = VarExpr0 Var | IntExpr0 Int | StringExpr0 T.Text | PatternExpr0 T.Text | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
+data Expr0 a = VarExpr0 Var | IntExpr0 Integer | StringExpr0 T.Text | PatternExpr0 T.Text | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
 
 type Expr1 a = a Expr0
 
@@ -444,7 +452,7 @@ instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Expr1 a) wher
 
 instance Serialize CastType where
     serialize TextType = "Text"
-    serialize NumberType = "Integer"
+    serialize Int64Type = "Integer"
     serialize ByteStringType = "ByteString"
     serialize (RefType ty) = "ref " ++ ty
     serialize (TypeVar v) = v
@@ -807,34 +815,89 @@ type Location = [String]
 
 
 -- result value
-data ResultValue = StringValue T.Text | IntValue Int | ByteStringValue ByteString | RefValue String Location String | Null deriving (Eq , Ord, Show, Read)
+class (Typeable a, Show a) => ResultValue a where
+  toConcreteResultValue :: a -> ConcreteResultValue
+  toNetworkResultValue :: a -> NetworkResultValue
+  castTypeOf :: a -> CastType
 
-typeOf :: ResultValue -> CastType
-typeOf (IntValue _) = NumberType
-typeOf (StringValue _) = TextType
-typeOf (ByteStringValue _) = ByteStringType
-typeOf (RefValue reftype _ _) = RefType reftype
-typeOf Null = error "typeOf: null value"
+data AbstractResultValue = forall a . ResultValue a => AbstractResultValue a
 
-instance Num ResultValue where
-    IntValue a + IntValue b = IntValue (a + b)
-    IntValue a * IntValue b = IntValue (a * b)
-    abs (IntValue a) = IntValue (abs a)
-    signum (IntValue a) = IntValue (signum a)
-    negate (IntValue a) = IntValue (negate a)
-    fromInteger i = IntValue (fromInteger i)
+deriving instance Show AbstractResultValue
 
-instance Fractional ResultValue where
-    IntValue a / IntValue b = IntValue (round (fromIntegral a / fromIntegral b))
-    fromRational a = IntValue (round (fromRational a))
+instance Ord AbstractResultValue where
+  compare (AbstractResultValue a) (AbstractResultValue b) = compare (toConcreteResultValue a) (toConcreteResultValue b)
 
-instance Real ResultValue where
-  toRational (IntValue a) = fromIntegral a
+instance Eq AbstractResultValue where
+  AbstractResultValue a == AbstractResultValue b = toConcreteResultValue a == toConcreteResultValue b
 
-instance Enum ResultValue where
-  toEnum = IntValue
-  fromEnum (IntValue a) = a
+instance Num AbstractResultValue where
+  AbstractResultValue a + AbstractResultValue b = AbstractResultValue (toConcreteResultValue a + toConcreteResultValue b)
+  AbstractResultValue a * AbstractResultValue b = AbstractResultValue (toConcreteResultValue a * toConcreteResultValue b)
+  abs (AbstractResultValue a) = AbstractResultValue (abs (toConcreteResultValue a))
+  signum (AbstractResultValue a) = AbstractResultValue (signum (toConcreteResultValue a))
+  fromInteger i = AbstractResultValue (fromInteger i :: ConcreteResultValue)
+  negate (AbstractResultValue a) = AbstractResultValue (negate (toConcreteResultValue a))
 
-instance Integral ResultValue where
-  IntValue a `quotRem` IntValue b = let (q, r) = a `quotRem` b in (IntValue q, IntValue r)
-  toInteger (IntValue a) = toInteger a
+instance Fractional AbstractResultValue where
+  fromRational i = AbstractResultValue (fromRational i :: ConcreteResultValue)
+  recip (AbstractResultValue a) = AbstractResultValue (recip (toConcreteResultValue a))
+
+data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | RefValue String Location String | Null deriving (Eq , Ord, Show, Read)
+
+data NetworkResultValue = NetworkResultValue (Maybe CastType) ByteString deriving (Eq , Ord, Show, Read)
+
+deriving instance Generic NetworkResultValue
+deriving instance Generic CastType
+
+instance MessagePack CastType
+instance MessagePack NetworkResultValue
+
+instance MessagePack AbstractResultValue where
+  fromObject a = do
+    b <- fromObject a
+    return (AbstractResultValue (b :: NetworkResultValue))
+  toObject (AbstractResultValue a) = toObject (toNetworkResultValue a)
+
+instance ResultValue NetworkResultValue where
+  toConcreteResultValue (NetworkResultValue ty bs) =
+    case ty of
+      Just Int64Type -> Int64Value (fromIntegral (runGet getWord64be (fromStrict bs)))
+      Just Int32Type -> Int32Value (fromIntegral (runGet getWord32be (fromStrict bs)))
+      Just TextType -> StringValue (decodeUtf8 bs)
+      Just ByteStringType -> ByteStringValue bs
+      Nothing -> Null
+      _ -> error ("toConcreteResultValue: unsupported network value type: " ++ show ty)
+  toNetworkResultValue = id
+  castTypeOf (NetworkResultValue (Just ty) _) = ty
+  castTypeOf _ = error "typeOf: null value"
+
+instance ResultValue ConcreteResultValue where
+  toConcreteResultValue = id
+  castTypeOf (Int64Value _) = Int64Type
+  castTypeOf (StringValue _) = TextType
+  castTypeOf (ByteStringValue _) = ByteStringType
+  castTypeOf (RefValue reftype _ _) = RefType reftype
+  castTypeOf Null = error "typeOf: null value"
+
+instance Num ConcreteResultValue where
+    Int64Value a + Int64Value b = Int64Value (a + b)
+    Int64Value a * Int64Value b = Int64Value (a * b)
+    abs (Int64Value a) = Int64Value (abs a)
+    signum (Int64Value a) = Int64Value (signum a)
+    negate (Int64Value a) = Int64Value (negate a)
+    fromInteger i = Int64Value (fromInteger i)
+
+instance Fractional ConcreteResultValue where
+    Int64Value a / Int64Value b = Int64Value (round (fromIntegral a / fromIntegral b))
+    fromRational a = Int64Value (round (fromRational a))
+
+instance Real ConcreteResultValue where
+  toRational (Int64Value a) = fromIntegral a
+
+instance Enum ConcreteResultValue where
+  toEnum = Int64Value . fromIntegral
+  fromEnum (Int64Value a) = fromIntegral a
+
+instance Integral ConcreteResultValue where
+  Int64Value a `quotRem` Int64Value b = let (q, r) = a `quotRem` b in (Int64Value q, Int64Value r)
+  toInteger (Int64Value a) = toInteger a

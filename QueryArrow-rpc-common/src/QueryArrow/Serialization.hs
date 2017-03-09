@@ -7,8 +7,10 @@ import Data.Namespace.Path
 import Data.Set (Set, fromList, toAscList)
 import Data.ByteString (ByteString)
 import Data.Text.Encoding
-import Data.ByteString.Base64 as B64
 import Data.Aeson
+import Data.Int
+import qualified Data.ByteString.Base64 as B64
+import qualified Data.ByteString.Char8 as B8
 
 import QueryArrow.FO.Data
 import QueryArrow.FO.Types
@@ -28,7 +30,6 @@ data QuerySet = QuerySet {
 data DynCommand = Quit | Dynamic String | Static [Command] deriving (Generic, Show)
 
 deriving instance Generic Var
-deriving instance Generic ResultValue
 deriving instance Generic Command
 deriving instance Generic (Formula0 a f)
 deriving instance Generic Formula
@@ -42,9 +43,9 @@ deriving instance Generic PredKind
 deriving instance Generic ParamType
 deriving instance Generic (Expr0 a)
 deriving instance Generic Expr
-deriving instance Generic CastType
 deriving instance Generic Aggregator
 deriving instance Generic Summary
+deriving instance Generic ConcreteResultValue
 deriving instance Show Command
 
 instance (Key a, MessagePack a) => MessagePack (ObjectPath a) where
@@ -66,6 +67,10 @@ instance MessagePack FormulaT
 --   toObject (Annotated a form) = ObjectArray [toObject a, toObject form]
 --   fromObject (ObjectArray [a, b]) = Annotated <$> fromObject a <*> fromObject b
 
+instance MessagePack Integer where
+  toObject i = toObject (fromInteger i :: Int64)
+  fromObject a = (fromIntegral :: Int64 -> Integer) <$> fromObject a
+
 instance MessagePack Lit
 instance MessagePack Sign
 instance MessagePack Atom
@@ -75,10 +80,8 @@ instance MessagePack PredKind
 instance MessagePack ParamType
 instance MessagePack a => MessagePack (Expr0 a)
 instance MessagePack Expr
-instance MessagePack CastType
 instance MessagePack Aggregator
 instance MessagePack Summary
-instance MessagePack ResultValue
 instance MessagePack Var
 instance MessagePack Command
 instance MessagePack DynCommand
@@ -96,13 +99,6 @@ instance ToJSON (ObjectPath String) where
 instance FromJSONKey Var where
 
 instance ToJSONKey Var where
-
-instance ToJSON ByteString where
-    toJSON bs = toJSON (decodeUtf8 (B64.encode bs))
-instance FromJSON ByteString where
-    parseJSON str = do
-      bs <- parseJSON str
-      return (B64.decodeLenient (encodeUtf8 bs))
 
 instance FromJSON a => FromJSON (Formula0 Tie a)
 instance ToJSON a => ToJSON (Formula0 Tie a)
@@ -134,8 +130,6 @@ instance FromJSON Aggregator
 instance ToJSON Aggregator
 instance FromJSON Summary
 instance ToJSON Summary
-instance FromJSON ResultValue
-instance ToJSON ResultValue
 instance FromJSON Var
 instance ToJSON Var
 instance FromJSON Command
@@ -146,6 +140,23 @@ instance FromJSON ResultSet
 instance ToJSON ResultSet
 instance FromJSON QuerySet
 instance ToJSON QuerySet
+
+instance FromJSON ConcreteResultValue
+instance FromJSON AbstractResultValue where
+  parseJSON a = (AbstractResultValue :: ConcreteResultValue -> AbstractResultValue) <$> parseJSON a
+instance ToJSON ConcreteResultValue
+instance ToJSON AbstractResultValue where
+  toJSON (AbstractResultValue a) = toJSON (toConcreteResultValue a)
+
+instance FromJSON ByteString where
+  parseJSON a = do
+    bs <- parseJSON a
+    case B64.decode (B8.pack bs) of
+      Left err -> error err
+      Right bs -> return bs
+
+instance ToJSON ByteString where
+  toJSON a = toJSON (B8.unpack (B64.encode a))
 
 resultSet :: [MapResultRow] -> ResultSet
 resultSet rows =

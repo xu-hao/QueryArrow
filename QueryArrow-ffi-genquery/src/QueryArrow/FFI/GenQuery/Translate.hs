@@ -157,7 +157,7 @@ toCondPredicate :: Cond ->  Formula
 toCondPredicate  (Cond col (EqString str)) =
   "eq" @@ [CastExpr TextType (VarExpr (toVariable col)), StringExpr (pack str)]
 toCondPredicate  (Cond col (EqInteger str)) =
-  "eq" @@ [CastExpr NumberType (VarExpr (toVariable col)), IntExpr (fromIntegral str)]
+  "eq" @@ [CastExpr Int64Type (VarExpr (toVariable col)), IntExpr (fromIntegral str)]
 toCondPredicate  (Cond col (NotEqString str)) =
   Aggregate Not ("eq" @@ [VarExpr (toVariable col), StringExpr (pack str)])
 toCondPredicate  (Cond col (NotEqInteger str)) =

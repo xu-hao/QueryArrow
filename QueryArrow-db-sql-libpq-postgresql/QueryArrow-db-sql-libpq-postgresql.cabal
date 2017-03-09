@@ -21,6 +21,7 @@ library
                    text >= 1.2.1.1,
                    hslogger,
                    namespace >= 0.1.2.2,
+                   data-msgpack,
                    lattices,
                    semibounded-lattices,
                    QueryArrow-db-sql-common,

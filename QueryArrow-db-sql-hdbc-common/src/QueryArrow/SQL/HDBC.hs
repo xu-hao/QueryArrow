@@ -16,24 +16,24 @@ import Data.Convertible
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
 
-convertResultValueToSQL :: ResultValue -> SqlValue
-convertResultValueToSQL (IntValue i) = toSql i
+convertResultValueToSQL :: ConcreteResultValue -> SqlValue
+convertResultValueToSQL (Int64Value i) = toSql i
 convertResultValueToSQL (StringValue s) = toSql s
 convertResultValueToSQL (ByteStringValue s) = toSql s
 convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
 convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
-                insert var0 (case sqlvalue of
-                        SqlInt32 _ -> IntValue (fromSql sqlvalue)
-                        SqlInt64 _ -> IntValue (fromSql sqlvalue)
-                        SqlInteger _ -> IntValue (fromSql sqlvalue)
+                insert var0 (AbstractResultValue (case sqlvalue of
+                        SqlInt32 _ -> Int64Value (fromSql sqlvalue)
+                        SqlInt64 _ -> Int64Value (fromSql sqlvalue)
+                        SqlInteger _ -> Int64Value (fromSql sqlvalue)
                         SqlString _ -> StringValue (fromSql sqlvalue)
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
                         -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
                         -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
                         SqlNull -> Null
-                        _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
+                        _ -> error ("unsupported sql value: " ++ show sqlvalue))) row) empty (zip vars sqlvalues)
 
 instance IPSDBStatement HDBCStatement where
         type ParameterType HDBCStatement = MapResultRow
@@ -41,9 +41,10 @@ instance IPSDBStatement HDBCStatement where
         execWithParams (HDBCStatement ret vars stmt params) args = do
                 liftIO $ infoM "SQL" ("execute stmt")
                 -- liftIO $ putStrLn ("execHDBCStatement: params = " ++ show args)
-                rcode <- liftIO $ execute stmt (map (\v -> convertResultValueToSQL (case lookup v args of
+                rcode <- liftIO $ execute stmt (map (\v -> convertResultValueToSQL (case case lookup v args of
                     Just e -> e
-                    Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args))) params)
+                    Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args) of
+                                        AbstractResultValue arv -> toConcreteResultValue arv)) params)
                 if rcode == -1
                     then do
                         liftIO $ infoM "SQL" ("execute stmt: error ")

@@ -6,7 +6,6 @@ module QueryArrow.FileSystem.Serialization where
 import QueryArrow.FileSystem.LocalCommands
 import QueryArrow.Serialization ()
 import Data.MessagePack
-import Data.Int
 import Data.Time
 
 data LocalizedCommandWrapper m where
@@ -17,10 +16,6 @@ deriving instance Show (LocalizedCommandWrapper m)
 
 instance MessagePack File
 instance MessagePack Stats
-
-instance MessagePack Integer where
-  toObject i = toObject (fromInteger i :: Int64)
-  fromObject a = (fromIntegral :: Int64 -> Integer) <$> fromObject a
 
 instance MessagePack UTCTime where
   toObject (UTCTime (ModifiedJulianDay day) daytime) = ObjectArray [toObject day, toObject (diffTimeToPicoseconds daytime)]

@@ -152,8 +152,8 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
     let updateform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = updateatom "u_" wherecol
                             | otherwise = error ("cannot update " ++ wherecol)
     let update = foldl (.*.) cond (map updateform updatecols)
-    let whereparam col val = (Var ("w_" ++ col), StringValue (pack val))
-    let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
+    let whereparam col val = (Var ("w_" ++ col), AbstractResultValue (StringValue (pack val)))
+    let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
     let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
     processRes (execQuery svc session ( update) params) (const (return ()))
 
@@ -181,11 +181,11 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
               p @@+ [var "cid", wherecol]
     let updateform updatecol = updateatom updatecol
     let update = foldl (.*.) cond (map updateform updatecols)
-    let updateparam col val = (Var ("u_" ++ col), StringValue (pack val))
-    let params = Map.singleton (Var "w_coll_name") (StringValue (pack cn)) <> Map.fromList (zipWith updateparam updatecols updatevals)
+    let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
+    let params = Map.singleton (Var "w_coll_name") (AbstractResultValue (StringValue (pack cn))) <> Map.fromList (zipWith updateparam updatecols updatevals)
     processRes (execQuery svc session ( update) params) (const (return ()))
 
-mapResultRowToList :: [Var] -> MapResultRow -> [ResultValue]
+mapResultRowToList :: [Var] -> MapResultRow -> [AbstractResultValue]
 mapResultRowToList vars r =
     map (\v -> fromMaybe (error ("mapResultRowToList: cannot find var " ++ show v ++ show r)) (lookup v r)) vars
 

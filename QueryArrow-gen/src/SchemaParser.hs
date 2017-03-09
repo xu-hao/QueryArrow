@@ -174,7 +174,7 @@ colNameToPredName prefix colname =
 
 colTypeToQExp :: ColType -> Q Exp
 colTypeToQExp keytype = case keytype of
-                                    Number -> conE 'NumberType
+                                    Number -> conE 'Int64Type
                                     Text -> conE 'TextType
 generateICATDef :: Stmt2 -> Q Exp
 generateICATDef (Stmt tablename coldefs) = do

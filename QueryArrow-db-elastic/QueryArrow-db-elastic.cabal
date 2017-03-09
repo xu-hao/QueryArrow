@@ -61,7 +61,7 @@ library
                    fast-logger,
                    heterogeneous-list,
                    constraints,
-                   lrucache,
+                   data-msgpack,
                    QueryArrow-common,
                    template-haskell
   ghc-options:     -Wall -fPIC

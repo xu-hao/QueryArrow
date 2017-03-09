@@ -56,15 +56,15 @@ pattern FileHostPred ns = Pred (FileNamePredName ns) (PredType PropertyPred [PTK
 
 pattern DirHostPred ns = Pred (DirNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO TextType])
 
-pattern FileSizePred ns = Pred (FileSizePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO NumberType])
+pattern FileSizePred ns = Pred (FileSizePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO Int64Type])
 
--- pattern FileCreateTimePred ns = Pred (FileCreateTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO NumberType])
+-- pattern FileCreateTimePred ns = Pred (FileCreateTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "FileObject"), PTPropIO Int64Type])
 
--- pattern DirCreateTimePred ns = Pred (DirCreateTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "DirObject"), PTPropIO NumberType])
+-- pattern DirCreateTimePred ns = Pred (DirCreateTimePredName ns) (PredType PropertyPred [PTKeyI (RefType "DirObject"), PTPropIO Int64Type])
 
-pattern FileModifyTimePred ns = Pred (FileModifyTimePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO NumberType])
+pattern FileModifyTimePred ns = Pred (FileModifyTimePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO Int64Type])
 
-pattern DirModifyTimePred ns = Pred (DirModifyTimePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO NumberType])
+pattern DirModifyTimePred ns = Pred (DirModifyTimePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO Int64Type])
 
 pattern FileObjectPred ns = Pred (FileObjectPredName ns) (PredType ObjectPred [PTKeyIO (RefType "FileObject")])
 
@@ -82,4 +82,4 @@ pattern DirDirPred ns = Pred (DirDirPredName ns) (PredType PropertyPred [PTKeyIO
 
 pattern FileDirPred ns = Pred (FileDirPredName ns) (PredType PropertyPred [PTPropIO (RefType "FileObject"), PTPropIO (RefType "DirObject")])
 
-pattern FileContentRangePred ns = Pred (FileContentRangePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileContent"), PTPropIO NumberType, PTPropIO NumberType, PTPropIO ByteStringType])
+pattern FileContentRangePred ns = Pred (FileContentRangePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileContent"), PTPropIO Int64Type, PTPropIO Int64Type, PTPropIO ByteStringType])

@@ -31,14 +31,14 @@ instance IPSDBStatement stmt => IDBStatement (PSDBStatement stmt) where
                 let (sqlquery, var) = translateSequenceQuery trans
                 (PreparedStatement stmt) <- lift $ prepareQueryStatement conn sqlquery
                 nextidrow : _ <- lift $ getAllResultsInStream (execWithParams stmt mempty)
-                let (IntValue nextid) = nextidrow ! var
+                let (Int64Value nextid) = nextidrow ! var
                 return nextid
         case lookup v row of
             Nothing -> case toAscList vars of
                 [] -> return mempty
-                [v2] | v == v2 -> return (mappend row (singleton v (IntValue nextid)))
+                [v2] | v == v2 -> return (mappend row (singleton v (Int64Value nextid)))
                 _ -> error ("SequenceDB:doQuery: unsupported variables " ++ show vars)
-            Just (IntValue i) ->
+            Just (Int64Value i) ->
                 if i == nextid then
                     return mempty
                 else

@@ -64,7 +64,7 @@ class TCSubst a where
   tcsubst :: TVarMap -> a -> a
 
 instance TCSubst CastType where
-  tcsubst _ NumberType = NumberType
+  tcsubst _ Int64Type = Int64Type
   tcsubst _ TextType = TextType
   tcsubst _ ByteStringType = ByteStringType
   tcsubst _ ty@(RefType _) = ty
@@ -86,7 +86,7 @@ class FreeTypeVars a where
   freeTypeVars :: a -> Set String
 
 instance FreeTypeVars CastType where
-  freeTypeVars NumberType = mempty
+  freeTypeVars Int64Type = mempty
   freeTypeVars TextType = mempty
   freeTypeVars (RefType _) = mempty
   freeTypeVars ByteStringType = mempty
@@ -147,7 +147,7 @@ instance Typecheck Atom () where
                               VarExpr v ->
                                   context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ checkVarType v pt'
                               IntExpr _ ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' NumberType
+                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' Int64Type
                               StringExpr _ ->
                                   context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' TextType
                               PatternExpr _ ->
@@ -172,21 +172,21 @@ instance Typecheck Aggregator () where
     vtml <- mapM (\(v, s) ->
       case s of
         Max v2 -> do
-            checkVarType v2 (ParamType False True False NumberType)
-            return (v, ParamType False True False NumberType)
+            checkVarType v2 (ParamType False True False Int64Type)
+            return (v, ParamType False True False Int64Type)
         Min v2 -> do
-            checkVarType v2 (ParamType False True False NumberType)
-            return (v, ParamType False True False NumberType)
+            checkVarType v2 (ParamType False True False Int64Type)
+            return (v, ParamType False True False Int64Type)
         Average v2 -> do
-            checkVarType v2 (ParamType False True False NumberType)
-            return (v, ParamType False True False NumberType)
+            checkVarType v2 (ParamType False True False Int64Type)
+            return (v, ParamType False True False Int64Type)
         Sum v2 -> do
-            checkVarType v2 (ParamType False True False NumberType)
-            return (v, ParamType False True False NumberType)
+            checkVarType v2 (ParamType False True False Int64Type)
+            return (v, ParamType False True False Int64Type)
         Count ->
-            return (v, ParamType False True False NumberType)
+            return (v, ParamType False True False Int64Type)
         CountDistinct _ ->
-            return (v, ParamType False True False NumberType)
+            return (v, ParamType False True False Int64Type)
       ) cols
     let vtm = fromList vtml
     lift $ modify (const vtm *** id)

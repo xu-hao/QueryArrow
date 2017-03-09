@@ -42,7 +42,7 @@ type SQLQualifiedCol = (SQLVar, Col)
 type SQLOper = String
 
 data SQLExpr = SQLColExpr SQLQualifiedCol
-             | SQLIntConstExpr Int
+             | SQLIntConstExpr Integer
              | SQLStringConstExpr T.Text
              | SQLPatternExpr T.Text
              | SQLNullExpr
@@ -323,7 +323,7 @@ sqlExprFromArg arg = do
               Left e ->
                 return (Left (SQLCastExpr e (case t of
                                             TextType -> "text"
-                                            NumberType -> "integer")))
+                                            Int64Type -> "integer")))
               Right var ->
                 error ("unrepresented var in cast expr " ++ show var ++ " " ++ show (repmap ts))
 

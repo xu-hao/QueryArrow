@@ -59,27 +59,27 @@ neBinding ns = BinaryBoolean ns "ne" (TypeVar "a") (TypeVar "a") (/=)
 -- example LeDB
 
 leBinding :: String -> BinaryBoolean
-leBinding ns = BinaryBoolean ns "le" NumberType NumberType (<=)
+leBinding ns = BinaryBoolean ns "le" Int64Type Int64Type (<=)
 
 -- example GeDB
 
 geBinding :: String -> BinaryBoolean
-geBinding ns = BinaryBoolean ns "ge" NumberType NumberType (/=)
+geBinding ns = BinaryBoolean ns "ge" Int64Type Int64Type (/=)
 
 -- example LtDB
 
 ltBinding :: String -> BinaryBoolean
-ltBinding ns = BinaryBoolean ns "lt" NumberType NumberType (<)
+ltBinding ns = BinaryBoolean ns "lt" Int64Type Int64Type (<)
 
 -- example GtDB
 
 gtBinding :: String -> BinaryBoolean
-gtBinding ns = BinaryBoolean ns "gt" NumberType NumberType (>)
+gtBinding ns = BinaryBoolean ns "gt" Int64Type Int64Type (>)
 
 -- example SleepDB
 
 sleepBinding :: String -> UnaryProcedure
-sleepBinding ns = UnaryProcedure ns "sleep" NumberType  (\ (IntValue i) -> threadDelay i)
+sleepBinding ns = UnaryProcedure ns "sleep" Int64Type  (\ (Int64Value i) -> threadDelay (fromIntegral i))
 
 -- example EncodeDB
 
@@ -105,22 +105,22 @@ encodeBinding ns = BinaryParamIso ns "encode" TextType TextType ByteStringType (
 -- example StrlenDB
 
 strlenBinding :: String -> UnaryFunction
-strlenBinding ns = UnaryFunction ns "strlen" TextType NumberType ( \(StringValue s) -> IntValue (T.length s))
+strlenBinding ns = UnaryFunction ns "strlen" TextType Int64Type ( \(StringValue s) -> Int64Value (fromIntegral (T.length s)))
 
 -- example AddDB
 
 addBinding :: String -> BinaryIso
-addBinding ns = BinaryIso ns "add" NumberType NumberType NumberType (+) (\a c -> c - a) (\b c -> c - b)
+addBinding ns = BinaryIso ns "add" Int64Type Int64Type Int64Type (+) (\a c -> c - a) (\b c -> c - b)
 
 -- example ExpDB
 
 expBinding :: String -> BinaryFunction
-expBinding ns = BinaryFunction ns "exp" NumberType NumberType NumberType (^)
+expBinding ns = BinaryFunction ns "exp" Int64Type Int64Type Int64Type (^)
 
 -- example MulDB
 
 mulBinding :: String -> BinaryMono
-mulBinding ns = BinaryMono ns "mul" NumberType NumberType NumberType (*) (\a c ->
+mulBinding ns = BinaryMono ns "mul" Int64Type Int64Type Int64Type (*) (\a c ->
                                 if c `mod` a == 0
                                   then Just (c `div` a)
                                   else Nothing) (\b c ->
@@ -131,22 +131,22 @@ mulBinding ns = BinaryMono ns "mul" NumberType NumberType NumberType (*) (\a c -
 -- example DivDB
 
 divBinding :: String -> BinaryFunction
-divBinding ns = BinaryFunction ns "div" NumberType NumberType NumberType div
+divBinding ns = BinaryFunction ns "div" Int64Type Int64Type Int64Type div
 
 -- example ModDB
 
 modBinding :: String -> BinaryFunction
-modBinding ns = BinaryFunction ns "mod" NumberType NumberType NumberType mod
+modBinding ns = BinaryFunction ns "mod" Int64Type Int64Type Int64Type mod
 
 -- example SubDB
 
 subBinding :: String -> BinaryIso
-subBinding ns = BinaryIso ns "sub" NumberType NumberType NumberType (-) (-) (+)
+subBinding ns = BinaryIso ns "sub" Int64Type Int64Type Int64Type (-) (-) (+)
 
 -- example substrBinding
 
 substrBinding :: String -> TernaryFunction
-substrBinding ns = TernaryFunction ns "substr" TextType NumberType NumberType TextType (\(StringValue a) (IntValue b) (IntValue c) -> StringValue (T.drop b (T.take c a)))
+substrBinding ns = TernaryFunction ns "substr" TextType Int64Type Int64Type TextType (\(StringValue a) (Int64Value b) (Int64Value c) -> StringValue (T.drop (fromIntegral b) (T.take (fromIntegral c) a)))
 
 -- example replaceBinding
 

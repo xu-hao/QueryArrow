@@ -67,37 +67,37 @@ data FileContent = FileContent File
 
 data DirContent = DirContent File
 
-instance Convertible FileObject ResultValue where
+instance Convertible FileObject ConcreteResultValue where
   safeConvert (NewFileObject  n) = Right (RefValue "FileObject" ["*"] n)
   safeConvert (ExistingFileObject file) = Right (fileToResultValue "FileObject" file)
 
-instance Convertible ResultValue FileObject where
+instance Convertible ConcreteResultValue FileObject where
   safeConvert (RefValue "FileObject" ["*"] s) =
     Right (NewFileObject  s)
   safeConvert file =
     Right (ExistingFileObject (resultValueToFile file))
 
-instance Convertible DirObject ResultValue where
+instance Convertible DirObject ConcreteResultValue where
   safeConvert (NewDirObject  n) = Right (RefValue "DirObject" ["*"] n)
   safeConvert (ExistingDirObject file) = Right (fileToResultValue "DirObject" file)
 
-instance Convertible ResultValue DirObject where
+instance Convertible ConcreteResultValue DirObject where
   safeConvert (RefValue "DirObject" ["*"] s) =
     Right (NewDirObject  s)
   safeConvert file =
     Right (ExistingDirObject (resultValueToFile file))
 
-instance Convertible FileContent ResultValue where
+instance Convertible FileContent ConcreteResultValue where
   safeConvert (FileContent file) = Right (fileToResultValue "FileContent" file)
 
-instance Convertible ResultValue FileContent where
+instance Convertible ConcreteResultValue FileContent where
   safeConvert file =
     Right (FileContent (resultValueToFile file))
 
-instance Convertible DirContent ResultValue where
+instance Convertible DirContent ConcreteResultValue where
   safeConvert (DirContent file) = Right (fileToResultValue "DirContent" file)
 
-instance Convertible ResultValue DirContent where
+instance Convertible ConcreteResultValue DirContent where
   safeConvert file =
     Right (DirContent (resultValueToFile file))
 
@@ -215,28 +215,28 @@ rangesl  absp arg2 arg3 l _ = do
   unless (a >= 0 && b <= s && a + fromIntegral l == b) stop
   return (a, b)
 
-extractText :: ResultValue -> Text
+extractText :: ConcreteResultValue -> Text
 extractText a =  case a of
     StringValue s ->  s
     _ -> error ("FileSystem: not a string")
 
-extractInteger :: ResultValue -> Integer
+extractInteger :: ConcreteResultValue -> Integer
 extractInteger a = case a of
-    IntValue s -> fromIntegral s
+    Int64Value s -> fromIntegral s
     _ -> error ("FileSystem: not an integer")
 
-extractByteString :: ResultValue -> BS.ByteString
+extractByteString :: ConcreteResultValue -> BS.ByteString
 extractByteString a = case a of
     ByteStringValue s -> s
     _ -> error ("FileSystem: not a byte string")
 
-injectText :: Text -> ResultValue
+injectText :: Text -> ConcreteResultValue
 injectText a = StringValue a
 
-injectInteger :: Integer -> ResultValue
-injectInteger a = IntValue (fromIntegral a)
+injectInteger :: Integer -> ConcreteResultValue
+injectInteger a = Int64Value (fromIntegral a)
 
-injectByteString :: BS.ByteString -> ResultValue
+injectByteString :: BS.ByteString -> ConcreteResultValue
 injectByteString a = ByteStringValue a
 
 evalText :: Expr -> FSProgram Text
@@ -257,11 +257,11 @@ setInteger var int = setResultValue var (injectInteger int)
 setByteString :: Var -> BS.ByteString -> FSProgram ()
 setByteString var bs = setResultValue var (injectByteString bs)
 
-evalRef :: (Convertible ResultValue a) => Expr -> FSProgram a
+evalRef :: (Convertible ConcreteResultValue a) => Expr -> FSProgram a
 evalRef arg1 =
   convert <$> evalResultValue arg1
 
-setRef :: (Convertible a ResultValue) => Var -> a -> FSProgram ()
+setRef :: (Convertible a ConcreteResultValue) => Var -> a -> FSProgram ()
 setRef var o =
   setResultValue var (convert o)
 

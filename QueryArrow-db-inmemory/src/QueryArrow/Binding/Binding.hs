@@ -24,9 +24,9 @@ class Binding a where
   bindingSupport :: a -> [ParamIO] -> Bool
   bindingSupportInsert :: a -> Bool
   bindingSupportDelete :: a -> Bool
-  bindingExec :: a -> [ParamIO] -> [ResultValue] -> IO [[ResultValue]]
-  bindingInsert :: a -> [ResultValue] -> IO ()
-  bindingDelete :: a -> [ResultValue] -> IO ()
+  bindingExec :: a -> [ParamIO] -> [ConcreteResultValue] -> IO [[ConcreteResultValue]]
+  bindingInsert :: a -> [ConcreteResultValue] -> IO ()
+  bindingDelete :: a -> [ConcreteResultValue] -> IO ()
 
 data AbstractBinding = forall a. (Binding a) => AbstractBinding a
 
@@ -64,11 +64,11 @@ argsToIO row =
     VarExpr a | not (a `member` row) -> O
     _ -> I)
 
-argsToIOs :: MapResultRow -> [Expr] -> ([ParamIO], [ResultValue], [Var])
+argsToIOs :: MapResultRow -> [Expr] -> ([ParamIO], [ConcreteResultValue], [Var])
 argsToIOs row =
   mconcat . map (\arg -> case arg of
     VarExpr a | not (a `Map.member` row) -> ([O], [], [a])
-    _ -> ([I], [evalExpr row arg], []))
+    _ -> ([I], [case evalExpr row arg of AbstractResultValue arv -> toConcreteResultValue arv], []))
 
 instance IDatabase0 BindingDatabase where
     type DBFormulaType BindingDatabase = FormulaT
@@ -90,22 +90,22 @@ instance INoConnectionDatabase2 BindingDatabase where
         row <- stream
         let (ios, ivals, ovars) = argsToIOs row args
         rs <- liftIO $ bindingExec (getBindingByPredName predname db) ios ivals
-        listResultStream (map (\ovals -> fromList (zip ovars ovals)) rs)
+        listResultStream (map (\ovals -> fromList (zip ovars (map AbstractResultValue ovals))) rs)
     noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Pos (Atom predname as)), _) stream = do
         row <- stream
         let avals = map (evalExpr row) as
-        liftIO $ bindingInsert (getBindingByPredName predname db) avals
+        liftIO $ bindingInsert (getBindingByPredName predname db) (map (\(AbstractResultValue arv) -> toConcreteResultValue arv) avals)
         return mempty
     noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Neg (Atom predname as)), _) stream = do
         row <- stream
         let avals = map (evalExpr row) as
-        liftIO $ bindingDelete (getBindingByPredName predname db) avals
+        liftIO $ bindingDelete (getBindingByPredName predname db) (map (\(AbstractResultValue arv) -> toConcreteResultValue arv) avals)
         return mempty
 
     noConnectionDBStmtExec _ qu _ = error ("noConnectionDBStmtExec: unsupported Formula " ++ show qu)
 
 
-data UnaryFunction = UnaryFunction  String String CastType CastType (ResultValue -> ResultValue)
+data UnaryFunction = UnaryFunction  String String CastType CastType (ConcreteResultValue -> ConcreteResultValue)
 
 instance Binding UnaryFunction where
     bindingPred (UnaryFunction ns n t1 t2 _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyI t1, PTPropIO t2])
@@ -120,7 +120,7 @@ instance Binding UnaryFunction where
     bindingExec (UnaryFunction _ _ _ _ func) [I,O] [val1] =
       return [ [func val1] ]
 
-data BinaryFunction = BinaryFunction  String String CastType CastType CastType (ResultValue -> ResultValue -> ResultValue)
+data BinaryFunction = BinaryFunction  String String CastType CastType CastType (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue)
 
 instance Binding BinaryFunction where
     bindingPred (BinaryFunction ns n t1 t2 t3 _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyI t1, PTKeyI t2, PTPropIO t3])
@@ -135,7 +135,7 @@ instance Binding BinaryFunction where
     bindingExec (BinaryFunction _ _ _ _ _ func) [I,I,O] [val1, val2] =
       return [ [func val1 val2] ]
 
-data TernaryFunction = TernaryFunction  String String CastType CastType CastType CastType (ResultValue -> ResultValue -> ResultValue -> ResultValue)
+data TernaryFunction = TernaryFunction  String String CastType CastType CastType CastType (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue)
 
 instance Binding TernaryFunction where
     bindingPred (TernaryFunction ns n t1 t2 t3 t4 _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyI t1, PTKeyI t2, PTKeyI t3, PTPropIO t4])
@@ -150,7 +150,7 @@ instance Binding TernaryFunction where
     bindingExec (TernaryFunction _ _ _ _ _ _ func) [I,I,I,O] [val1, val2, val3] =
       return [ [func val1 val2 val3] ]
 
-data UnaryIso = UnaryIso String String CastType CastType (ResultValue -> ResultValue) (ResultValue -> ResultValue)
+data UnaryIso = UnaryIso String String CastType CastType (ConcreteResultValue -> ConcreteResultValue) (ConcreteResultValue -> ConcreteResultValue)
 
 instance Binding UnaryIso where
     bindingPred (UnaryIso ns n t1 t2 _ _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyIO t1, PTPropIO t2])
@@ -169,7 +169,7 @@ instance Binding UnaryIso where
     bindingExec (UnaryIso _ _ _ _ _ g) [O, I] [val2] =
       return [ [g val2] ]
 
-data BinaryIso = BinaryIso String String CastType CastType CastType (ResultValue -> ResultValue -> ResultValue) (ResultValue -> ResultValue -> ResultValue) (ResultValue -> ResultValue -> ResultValue)
+data BinaryIso = BinaryIso String String CastType CastType CastType (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue) (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue) (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue)
 
 instance Binding BinaryIso where
     bindingPred (BinaryIso ns n t1 t2 t3 _ _ _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyIO t1, PTKeyIO t2, PTPropIO t3])
@@ -191,7 +191,7 @@ instance Binding BinaryIso where
     bindingExec (BinaryIso _ _ _ _ _ _ _ h) [O,I,I] [b, c] =
         return [[h b c]]
 
-data BinaryParamIso = BinaryParamIso String String CastType CastType CastType (ResultValue -> ResultValue -> ResultValue) (ResultValue -> ResultValue -> ResultValue)
+data BinaryParamIso = BinaryParamIso String String CastType CastType CastType (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue) (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue)
 
 instance Binding BinaryParamIso where
     bindingPred (BinaryParamIso ns n t1 t2 t3 _ _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyIO t1, PTKeyI t2, PTPropIO t3])
@@ -210,7 +210,7 @@ instance Binding BinaryParamIso where
     bindingExec (BinaryParamIso _ _ _ _ _ _ g) [O,I,I] [b, c] =
         return [[g c b]]
 
-data UnaryMono = UnaryMono String String CastType CastType (ResultValue -> ResultValue) (ResultValue -> Maybe ResultValue)
+data UnaryMono = UnaryMono String String CastType CastType (ConcreteResultValue -> ConcreteResultValue) (ConcreteResultValue -> Maybe ConcreteResultValue)
 
 instance Binding UnaryMono where
     bindingPred (UnaryMono ns n t1 t2 _ _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyIO t1, PTKeyIO t2])
@@ -231,7 +231,7 @@ instance Binding UnaryMono where
         Just a -> [[a]]
         Nothing -> [])
 
-data BinaryMono = BinaryMono String String CastType CastType CastType (ResultValue -> ResultValue -> ResultValue) (ResultValue -> ResultValue -> Maybe ResultValue) (ResultValue -> ResultValue -> Maybe ResultValue)
+data BinaryMono = BinaryMono String String CastType CastType CastType (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue) (ConcreteResultValue -> ConcreteResultValue -> Maybe ConcreteResultValue) (ConcreteResultValue -> ConcreteResultValue -> Maybe ConcreteResultValue)
 
 instance Binding BinaryMono where
     bindingPred (BinaryMono ns n t1 t2 t3 _ _ _) = Pred (PredName [ns] n) (PredType PropertyPred [PTKeyIO t1, PTKeyIO t2, PTPropIO t3])
@@ -257,7 +257,7 @@ instance Binding BinaryMono where
         Just a -> [[a]]
         Nothing -> [])
 
-data UnaryBoolean = UnaryBoolean String String CastType (ResultValue -> Bool)
+data UnaryBoolean = UnaryBoolean String String CastType (ConcreteResultValue -> Bool)
 
 instance Binding UnaryBoolean where
     bindingPred (UnaryBoolean ns n t1 _) = Pred (PredName [ns] n) (PredType ObjectPred [PTKeyI t1])
@@ -270,7 +270,7 @@ instance Binding UnaryBoolean where
         then [[]]
         else [])
 
-data BinaryBoolean = BinaryBoolean String String CastType CastType (ResultValue -> ResultValue -> Bool)
+data BinaryBoolean = BinaryBoolean String String CastType CastType (ConcreteResultValue -> ConcreteResultValue -> Bool)
 
 instance Binding BinaryBoolean where
     bindingPred (BinaryBoolean ns n t1 t2 _) = Pred (PredName [ns] n) (PredType ObjectPred [PTKeyI t1, PTKeyI t2])
@@ -283,7 +283,7 @@ instance Binding BinaryBoolean where
         then [[]]
         else [])
 
-data TernaryBoolean = TernaryBoolean String String CastType CastType CastType (ResultValue -> ResultValue -> ResultValue -> Bool)
+data TernaryBoolean = TernaryBoolean String String CastType CastType CastType (ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue -> Bool)
 
 instance Binding TernaryBoolean where
     bindingPred (TernaryBoolean ns n t1 t2 t3 _) = Pred (PredName [ns] n) (PredType ObjectPred [PTKeyI t1, PTKeyI t2, PTKeyI t3])
@@ -296,7 +296,7 @@ instance Binding TernaryBoolean where
         then [[]]
         else [])
 
-data UnaryProcedure = UnaryProcedure String String CastType (ResultValue -> IO ())
+data UnaryProcedure = UnaryProcedure String String CastType (ConcreteResultValue -> IO ())
 
 instance Binding UnaryProcedure where
     bindingPred (UnaryProcedure ns n t1 _) = Pred (PredName [ns] n) (PredType ObjectPred [PTKeyI t1])

@@ -64,6 +64,9 @@ library
                    lrucache,
                    yaml,
                    filepath,
+                   data-msgpack,
+                   binary,
+                   base64-bytestring,
                    heterogeneous-list,
                    log-adapter
   ghc-options:     -Wall -fPIC

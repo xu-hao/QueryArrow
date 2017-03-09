@@ -665,28 +665,28 @@ var v = CypherVarExpr (CypherVar v)
 cnull = CypherNullExpr
 match m = Cypher [] (GraphPattern m) CypherTrueCond [] mempty []
 
-type CypherEnv = Map CypherVar CypherExpr
+type CypherEnv = Map CypherVar CypherValue
 
 instance Convertible Var CypherVar where
     safeConvert = Right . CypherVar . unVar
 instance Convertible MapResultRow CypherEnv where
-    safeConvert = Right . foldlWithKey (\map k v  -> insert (convert k) (convert v) map) empty
+    safeConvert = Right . foldlWithKey (\map k v  -> insert (convert k) (convert (case v of AbstractResultValue arv -> toConcreteResultValue arv)) map) empty
 
-instance Convertible ResultValue CypherExpr where
-    safeConvert (IntValue i) = Right (CypherIntConstExpr i)
-    safeConvert (StringValue i) = Right (CypherStringConstExpr i)
-    safeConvert (Null) = Right (CypherNullExpr)
+instance Convertible ConcreteResultValue CypherValue where
+    safeConvert (Int64Value i) = Right (CypherIntValue (fromIntegral i))
+    safeConvert (StringValue i) = Right (CypherStringValue (T.unpack i))
+    safeConvert (Null) = Right (CypherNullValue)
     safeConvert (ByteStringValue bs) = Left (ConvertError "" "" "" "")
     safeConvert (RefValue _ _ _) = Left (ConvertError "" "" "" "")
 
 instance Convertible Expr CypherExpr where
-    safeConvert (IntExpr i) = Right (CypherIntConstExpr i)
+    safeConvert (IntExpr i) = Right (CypherIntConstExpr (fromIntegral i))
     safeConvert (StringExpr i) = Right (CypherStringConstExpr i)
     safeConvert (VarExpr (Var i)) = Right (CypherVarExpr (CypherVar i))
     safeConvert (NullExpr) = Right (CypherNullExpr)
     safeConvert (PatternExpr p) = Right (CypherStringConstExpr p)
     safeConvert (CastExpr TextType e) = Right (CypherAppExpr "toString" [convert e])
-    safeConvert (CastExpr NumberType e) = Right (CypherAppExpr "toInt" [convert e])
+    safeConvert (CastExpr Int64Type e) = Right (CypherAppExpr "toInt" [convert e])
 
 instance Convertible [Expr] [CypherExpr] where
         safeConvert  = mapM safeConvert

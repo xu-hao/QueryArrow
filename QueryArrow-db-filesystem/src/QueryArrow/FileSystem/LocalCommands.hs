@@ -34,10 +34,10 @@ fsDir file = if equalFilePath [pathSeparator] (fRelP file)
 fsfileName :: File -> String
 fsfileName file = takeFileName (fRelP file)
 
-fileToResultValue :: String -> File -> ResultValue
+fileToResultValue :: String -> File -> ConcreteResultValue
 fileToResultValue ty (File host root path ) = RefValue ty [host, root] path
 
-resultValueToFile :: ResultValue -> File
+resultValueToFile :: ConcreteResultValue -> File
 resultValueToFile (RefValue _ [host, root] path) = File host root path
 resultValueToFile _ = error ""
 

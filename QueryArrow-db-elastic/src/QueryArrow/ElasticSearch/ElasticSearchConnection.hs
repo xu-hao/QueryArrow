@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, TypeFamilies, StandaloneDeriving, DeriveGeneric #-}
 
 module QueryArrow.ElasticSearch.ElasticSearchConnection where
 
@@ -8,10 +8,12 @@ import Prelude hiding (lookup)
 import Data.Map.Strict (Map, fromList, empty, foldrWithKey, insert, lookup)
 import Data.Text (unpack, Text)
 import Data.Convertible
-import Data.Scientific (toBoundedInteger)
-import Data.Aeson (Value (String, Number))
+import Data.Scientific (toBoundedInteger, Scientific, base10Exponent, coefficient, scientific)
+import Data.Aeson (Value (..))
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Applicative ((<|>))
+import GHC.Generics
+import Data.MessagePack (MessagePack(..))
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
@@ -78,12 +80,27 @@ convertExprToString (IntExpr i) = show i
 convertExprToString (StringExpr s) = unpack s
 convertExprToString _ = error ("unsupported param value expr type")
 
-instance Convertible Value ResultValue where
-    safeConvert (String s) = Right (StringValue s)
-    safeConvert (Number n) = case toBoundedInteger n of
-                                Just n1 -> Right (IntValue n1)
-                                Nothing -> Left (ConvertError "Value" "ResultValue" (show n) "")
-    safeConvert a = Left (ConvertError "Value" "ResultValue" (show a) "")
+
+instance ResultValue Value where
+    toConcreteResultValue (String s) = (StringValue s)
+    toConcreteResultValue (Number n) = case toBoundedInteger n of
+                                Just n1 -> (Int64Value n1)
+                                Nothing -> error ("ConvertError Value to ResultValue" ++ show n)
+    toConcreteResultValue a = error ("ConvertError: Value to ResultValue" ++ show a)
+    castTypeOf (String s) = TextType
+    castTypeOf (Number n) = Int64Type
+    castTypeOf a = error ("ConvertError: Value to ResultValue" ++ show a)
+    toNetworkResultValue a = toNetworkResultValue (toConcreteResultValue a)
+
+deriving instance Generic Value
+instance MessagePack Value
+instance MessagePack Scientific where
+  toObject a = toObject (fromIntegral (coefficient a) :: Int, base10Exponent a)
+  fromObject a = do
+    (baseobj, expobj) <- fromObject a
+    base <- fromObject baseobj
+    exp <- fromObject expobj
+    return (scientific (fromIntegral (base :: Int)) exp)
 
 convertHitToMapResultRow :: Text -> Map Text ElasticSearchQueryExpr -> ESHit -> MapResultRow
 convertHitToMapResultRow _ map2 eshit =
@@ -91,7 +108,7 @@ convertHitToMapResultRow _ map2 eshit =
         foldrWithKey (\key val map3 -> case val of
             ElasticSearchQueryVar var ->
                 case lookup key map1 of
-                    Just val2 -> insert var (convert val2) map3
+                    Just val2 -> insert var (AbstractResultValue val2) map3
                     Nothing -> map3
             _ -> map3) empty map2
 
@@ -100,9 +117,9 @@ extractQueryItem key val args = case val of
     ElasticSearchQueryParam i ->
         case lookup i args of
             Just expr ->
-                case expr of
+                case case expr of AbstractResultValue arv -> toConcreteResultValue arv of
                     StringValue s -> [ESQ.ESTermQuery (ESQ.ESStrTermQuery key s)]
-                    IntValue i -> [ESQ.ESTermQuery (ESQ.ESIntTermQuery key i)]
+                    Int64Value i -> [ESQ.ESTermQuery (ESQ.ESIntTermQuery key (fromIntegral i))]
                     _ -> error "unsupported expr type"
             Nothing -> error "no such argument"
     ElasticSearchQueryIntVal val ->
@@ -117,9 +134,9 @@ extractInsertItem key val args = case val of
     ElasticSearchQueryParam i ->
         case lookup i args of
             Just expr ->
-                case expr of
+                case case expr of AbstractResultValue arv -> toConcreteResultValue arv of
                     StringValue s -> (key, String s)
-                    IntValue i -> (key, Number (fromInteger (toInteger i)))
+                    Int64Value i -> (key, Number (fromInteger (toInteger i)))
                     _ -> error "unsupported expr type"
             Nothing -> error "no such argument"
     ElasticSearchQueryIntVal val ->

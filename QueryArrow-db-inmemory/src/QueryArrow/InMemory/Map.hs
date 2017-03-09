@@ -21,7 +21,7 @@ import GHC.Generics
 -- example MapDB
 
 
-data MapBinding = MapBinding String String [(ResultValue, ResultValue)] deriving Show
+data MapBinding = MapBinding String String [(ConcreteResultValue, ConcreteResultValue)] deriving Show
 instance Binding MapBinding where
     bindingPred (MapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
     bindingSupport _ [_,_] = True
@@ -39,14 +39,14 @@ instance Binding MapBinding where
     bindingExec (MapBinding _ _ rows) [O,O] [] =
         return (map (\(a,b)->[a,b]) rows)
 
-mapDB :: String -> String -> String -> [(ResultValue, ResultValue)] -> BindingDatabase
+mapDB :: String -> String -> String -> [(ConcreteResultValue, ConcreteResultValue)] -> BindingDatabase
 mapDB dbname ns n rows = BindingDatabase dbname [AbstractBinding (MapBinding ns n rows)]
 -- update mapdb
 
 instance Show (IORef a) where
     show _ = "ioref"
 
-data StateMapBinding = StateMapBinding String String (IORef [(ResultValue, ResultValue)]) deriving Show
+data StateMapBinding = StateMapBinding String String (IORef [(ConcreteResultValue, ConcreteResultValue)]) deriving Show
 
 instance Binding StateMapBinding where
     bindingPred (StateMapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
@@ -79,7 +79,7 @@ instance Binding StateMapBinding where
         let rows2 = remove rows (aval, bval)
         liftIO $ writeIORef map1 rows2
 
-stateMapDB :: String -> String -> String ->  IORef [(ResultValue, ResultValue)] -> BindingDatabase
+stateMapDB :: String -> String -> String ->  IORef [(ConcreteResultValue, ConcreteResultValue)] -> BindingDatabase
 stateMapDB dbname ns n map1 =
   BindingDatabase dbname [AbstractBinding (StateMapBinding ns n map1)]
 
@@ -100,16 +100,16 @@ instance Convertible Value (IO a) => Plugin (NoConnectionDatabasePlugin2 db a) M
       dbdata <- convert (db_map fsconf)
       return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace fsconf) (predicate_name fsconf) dbdata)))
 
-instance Convertible Value (IO [(ResultValue, ResultValue)]) where
+instance Convertible Value (IO [(ConcreteResultValue, ConcreteResultValue)]) where
   safeConvert a = case fromJSON a of
     Error err -> error err
     Success b -> Right (return (map (\(a,b) -> (StringValue a, StringValue b)) b))
 
-instance Convertible Value (IO (IORef [(ResultValue, ResultValue)])) where
+instance Convertible Value (IO (IORef [(ConcreteResultValue, ConcreteResultValue)])) where
   safeConvert a = Right (convert a >>= newIORef)
 
-mapPlugin :: NoConnectionDatabasePlugin2 BindingDatabase [(ResultValue, ResultValue)]
+mapPlugin :: NoConnectionDatabasePlugin2 BindingDatabase [(ConcreteResultValue, ConcreteResultValue)]
 mapPlugin = NoConnectionDatabasePlugin2 mapDB
 
-stateMapPlugin :: NoConnectionDatabasePlugin2 BindingDatabase (IORef [(ResultValue, ResultValue)])
+stateMapPlugin :: NoConnectionDatabasePlugin2 BindingDatabase (IORef [(ConcreteResultValue, ConcreteResultValue)])
 stateMapPlugin = NoConnectionDatabasePlugin2 stateMapDB

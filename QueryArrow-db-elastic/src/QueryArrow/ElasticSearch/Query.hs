@@ -41,7 +41,7 @@ data ESTermQuery = ESTermQuery {
     term :: ESTermQueryItem
 } deriving (Show, Generic)
 
-data ESTermQueryItem = ESIntTermQuery  Text.Text Int | ESStrTermQuery  Text.Text Text.Text deriving (Show)
+data ESTermQueryItem = ESIntTermQuery  Text.Text Integer | ESStrTermQuery  Text.Text Text.Text deriving (Show)
 
 instance ToJSON ESQuery
 instance ToJSON ESBoolQuery

@@ -18,7 +18,7 @@ import Debug.Trace
 data ElasticSearchQueryExpr =
     ElasticSearchQueryParam Var
     | ElasticSearchQueryVar Var
-    | ElasticSearchQueryIntVal Int
+    | ElasticSearchQueryIntVal Integer
     | ElasticSearchQueryStrVal Text deriving (Show, Read)
 
 data ElasticSearchQuery = ElasticSearchQuery Text (Map Text ElasticSearchQueryExpr)
