@@ -71,6 +71,11 @@ packages:
     - QueryArrow-gen
     - heterogeneous-list
     - log-adapter
+    - distributed-serialization
+    - distributed-serialization-common
+    - distributed-serialization-binary
+    - distributed-serialization-msgpack
+    - data-some
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.
@@ -84,6 +89,7 @@ extra-deps:
   - namespace-0.1.3.0
   - semibounded-lattices-0.1.0.1
   - async-pool-0.9.0.1
+  - trivial-constraint-0.4.0.0
 
 
 # Override default flag values for local packages and extra-deps

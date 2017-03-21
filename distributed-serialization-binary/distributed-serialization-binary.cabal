@@ -1,0 +1,25 @@
+name:                distributed-serialization-binary
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/githubuser/staticptr#readme
+author:              Hao Xu
+maintainer:          xuh@cs.unc.edu
+copyright:           2017 Hao Xu
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     QueryArrow.Distributed.Serializable.Binary.Serialization QueryArrow.Distributed.Serializable.Binary
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base, bytestring, constraints, binary, template-haskell, data-some, trivial-constraint, mtl, distributed-serialization, distributed-serialization-common
+  default-language:    Haskell2010
+
+executable main-exe
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base, bytestring, constraints, binary, distributed-serialization, distributed-serialization-binary, network, template-haskell, data-some, trivial-constraint
+  default-language:    Haskell2010
