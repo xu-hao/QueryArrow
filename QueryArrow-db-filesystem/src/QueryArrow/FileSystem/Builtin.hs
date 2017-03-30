@@ -8,6 +8,14 @@ pattern FilePathPredName ns = QPredName ns [] "FILE_PATH"
 
 pattern DirPathPredName ns = QPredName ns [] "DIR_PATH"
 
+pattern FileIdPredName ns = QPredName ns [] "FILE_ID"
+
+pattern DirIdPredName ns = QPredName ns [] "DIR_ID"
+
+pattern FileModePredName ns = QPredName ns [] "FILE_MODE"
+
+pattern DirModePredName ns = QPredName ns [] "DIR_MODE"
+
 pattern FileNamePredName ns = QPredName ns [] "FILE_NAME"
 
 pattern DirNamePredName ns = QPredName ns [] "DIR_NAME"
@@ -47,6 +55,14 @@ pattern FileContentRangePredName ns = QPredName ns [] "FILE_CONTENT_RANGE"
 pattern FilePathPred ns = Pred (FilePathPredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
 
 pattern DirPathPred ns = Pred (DirPathPredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO TextType])
+
+pattern FileIdPred ns = Pred (FileIdPredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO Int64Type])
+
+pattern DirIdPred ns = Pred (DirIdPredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO Int64Type])
+
+pattern FileModePred ns = Pred (FileModePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
+
+pattern DirModePred ns = Pred (DirModePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO TextType])
 
 pattern FileNamePred ns = Pred (FileNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
 
