@@ -27,7 +27,7 @@ instance Gettable BinaryGet Int64 where
   sGet b0 =
     case runGetOrFail getInt64be b0 of
       Left (_, _, e) ->
-        throwError ("sGet Int64: " ++ e ++ " bs = " ++ show b0)
+        throwError (userError ("sGet Int64: " ++ e ++ " bs = " ++ show b0))
       Right (b1, _, i64) ->
         return (i64, b1)
 
