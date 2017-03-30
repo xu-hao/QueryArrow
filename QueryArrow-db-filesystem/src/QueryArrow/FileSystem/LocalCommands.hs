@@ -66,10 +66,16 @@ data LocalizedFSCommand x where
     LFindDirsByName :: String -> LocalizedFSCommand [File]
     LFindFilesByPath :: String -> LocalizedFSCommand [File]
     LFindDirsByPath :: String -> LocalizedFSCommand [File]
+    LFindFileById :: Integer -> LocalizedFSCommand (Maybe File)
+    LFindDirById :: Integer -> LocalizedFSCommand (Maybe File)
+    LFindFilesByMode :: Integer -> LocalizedFSCommand [File]
+    LFindDirsByMode :: Integer -> LocalizedFSCommand [File]
     LFindFilesBySize :: Integer -> LocalizedFSCommand [File]
     LFindFilesByModificationTime :: Integer -> LocalizedFSCommand [File]
     LFindDirsByModficationTime :: Integer -> LocalizedFSCommand [File]
     LStat :: String -> LocalizedFSCommand (Maybe Stats)
+    LMode :: String -> LocalizedFSCommand Integer
+    LId :: String -> LocalizedFSCommand Integer
     LTruncate :: String -> Integer -> LocalizedFSCommand ()
     LSize :: String -> LocalizedFSCommand Integer
     LModificationTime :: String -> LocalizedFSCommand UTCTime

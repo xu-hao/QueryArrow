@@ -26,6 +26,8 @@ makeFileSystemDBAdapter ns rootDir host port hostmap1 conninfo = do
     [
       FileContentPred ns, DirContentPred ns,
       FilePathPred ns, DirPathPred ns,
+      FileModePred ns, DirModePred ns,
+      FileIdPred ns, DirIdPred ns,
       FileNamePred ns, DirNamePred ns,
       FileHostPred ns, DirHostPred ns,
       FileSizePred ns,

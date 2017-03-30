@@ -14,6 +14,7 @@ import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import System.FilePath ((</>), takeFileName, splitDirectories, joinPath)
 import System.PosixCompat.Files (setFileSize)
 import System.FilePath.Find
+import qualified System.Posix.Files as P
 import Data.Maybe
 import Network
 import QueryArrow.FileSystem.LocalCommands
@@ -126,6 +127,30 @@ localInterpreter (LFindDirsByPath p) = do
   let files0 = [File host root p]
   liftIO $ filterM (\(File _ root p) -> doesDirectoryExist (toAP root p)) files0
 
+localInterpreter (LFindFileById p) = do
+  (host, root) <- ask
+  ps <- liftIO $ find (return True) ((statusType <$> fileStatus) ==? RegularFile &&? fileID ==? fromInteger p) root
+  return (case ps of 
+	[] -> Nothing
+	[a] -> Just (File host root (toRelP root a)))
+
+localInterpreter (LFindDirById p) = do
+  (host, root) <- ask
+  ps <- liftIO $ find (return True) ((statusType <$> fileStatus) ==? Directory &&? fileID ==? fromInteger p) root
+  return (case ps of 
+	[] -> Nothing
+	[a] -> Just (File host root (toRelP root a)))
+
+localInterpreter (LFindFilesByMode p) = do
+  (host, root) <- ask
+  ps <- liftIO $ find (return True) ((statusType <$> fileStatus) ==? RegularFile &&? fileMode ==? fromInteger p) root
+  return (map (File host root . toRelP root) ps)
+
+localInterpreter (LFindDirsByMode p) = do
+  (host, root) <- ask
+  ps <- liftIO $ find (return True) ((statusType <$> fileStatus) ==? Directory &&? fileMode ==? fromInteger p) root
+  return (map (File host root . toRelP root) ps)
+
 localInterpreter (LFindFilesByName n ) = do
   (host, root) <- ask
   ps <- liftIO $ find (return True) ((statusType <$> fileStatus) ==? RegularFile &&? fileName ==? n) root
@@ -183,6 +208,16 @@ localInterpreter (LSize fn ) = do
   (host, root) <- ask
   let absp = toAP root fn
   liftIO $ getFileSize absp
+
+localInterpreter (LId fn ) = do
+  (host, root) <- ask
+  let absp = toAP root fn
+  liftIO $ fromIntegral . P.fileID <$> P.getFileStatus absp
+
+localInterpreter (LMode fn ) = do
+  (host, root) <- ask
+  let absp = toAP root fn
+  liftIO $ fromIntegral . P.fileMode <$> P.getFileStatus absp 
 
 localInterpreter (LTruncate fn i ) = do
   (host, root) <- ask

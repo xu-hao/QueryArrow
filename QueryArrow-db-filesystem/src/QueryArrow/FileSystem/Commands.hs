@@ -3,9 +3,9 @@ module QueryArrow.FileSystem.Commands (
     File(fHost), fsreplaceFileName, fsfileName, fsRelP, fsDir, fsreplaceRelP,
     fileToResultValue, resultValueToFile,
     Stats(..), FSProgram,
-    stat, fswrite, fsread, fileExists, dirExists, fsfindFilesByPath, fsfindDirsByPath,
+    fsid, fsmode, stat, fswrite, fsread, fileExists, dirExists, fsfindFilesByPath, fsfindDirsByPath,
     fstruncate, unlinkFile, removeDir, makeFile, makeDir, moveFile, moveDir, fsmodificationTime, fssize, evalResultValue, setResultValue, foreach,
-    fscopyFile, fscopyDir, listDirDir, listDirFile, fsallFiles, fsallDirs, fsallNonRootFiles, fsallNonRootDirs, fsfindFilesByName, fsfindDirsByName,
+    fscopyFile, fscopyDir, listDirDir, listDirFile, fsallFiles, fsallDirs, fsallNonRootFiles, fsallNonRootDirs, fsfindFilesByName, fsfindDirsByName, fsfindFileById, fsfindDirById, fsfindFilesByMode, fsfindDirsByMode,
     fsfindFilesByHost, fsfindDirsByHost, fsfindFilesBySize, fsfindFilesByModificationTime, fsfindDirsByModificationTime, stop,
     interpret,
     makeLocalInterpreter, makeRemoteInterpreter,
@@ -52,12 +52,18 @@ data FSCommand x where
    FindDirsByName :: String -> ([File] -> x) -> FSCommand x
    FindFilesByPath :: String -> ([File] -> x) -> FSCommand x
    FindDirsByPath :: String -> ([File] -> x) -> FSCommand x
+   FindFileById :: Integer -> (Maybe File -> x) -> FSCommand x
+   FindDirById :: Integer -> (Maybe File -> x) -> FSCommand x
+   FindFilesByMode :: Integer -> ([File] -> x) -> FSCommand x
+   FindDirsByMode :: Integer -> ([File] -> x) -> FSCommand x
    FindFilesByHost :: String -> ([File] -> x) -> FSCommand x
    FindDirsByHost :: String -> ([File] -> x) -> FSCommand x
    FindFilesBySize :: Integer -> ([File] -> x) -> FSCommand x
    FindFilesByModificationTime :: Integer -> ([File] -> x) -> FSCommand x
    FindDirsByModficationTime :: Integer -> ([File] -> x) -> FSCommand x
    Stat :: File -> (Maybe Stats -> x) -> FSCommand x
+   Mode :: File -> (Integer -> x) -> FSCommand x
+   Id :: File -> (Integer -> x) -> FSCommand x
    Truncate :: File -> Integer -> x -> FSCommand x
    Size :: File -> (Integer -> x) -> FSCommand x
    ModificationTime :: File -> (UTCTime -> x) -> FSCommand x
@@ -126,6 +132,18 @@ fsfindFilesByPath n = liftF (FindFilesByPath n id)
 fsfindDirsByPath :: String -> FSProgram [File]
 fsfindDirsByPath n = liftF (FindDirsByPath n id)
 
+fsfindFileById :: Integer -> FSProgram (Maybe File)
+fsfindFileById n = liftF (FindFileById n id)
+
+fsfindDirById :: Integer -> FSProgram (Maybe File)
+fsfindDirById n = liftF (FindDirById n id)
+
+fsfindFilesByMode :: Integer -> FSProgram [File]
+fsfindFilesByMode n = liftF (FindFilesByMode n id)
+
+fsfindDirsByMode :: Integer -> FSProgram [File]
+fsfindDirsByMode n = liftF (FindDirsByMode n id)
+
 fsfindFilesByHost :: String -> FSProgram [File]
 fsfindFilesByHost n = liftF (FindFilesByHost n id)
 
@@ -152,6 +170,12 @@ foreach as = liftF (Foreach as id)
 
 stat :: File -> FSProgram (Maybe Stats)
 stat a = liftF (Stat a id)
+
+fsmode :: File -> FSProgram Integer
+fsmode a = liftF (Mode a id)
+
+fsid :: File -> FSProgram Integer
+fsid a = liftF (Id a id)
 
 fssize :: File -> FSProgram Integer
 fssize a = liftF (Size a id)
@@ -191,11 +215,21 @@ redirect2 cmd hosta roota hostb rootb = do
   let i = fromMaybe (error "cannot find host or root") (lookup (hosta, roota, hostb, rootb) hostmap2)
   interpreter2 i cmd
 
-runPredicate :: (MessagePack a) => LocalizedFSCommand [a] -> InterMonad [a]
+runPredicate :: (MessagePack a, Monoid a) => LocalizedFSCommand a -> InterMonad a
 runPredicate predicate = do
   (hostmap, _) <- lift ask
-  concat <$> mapM (\(_, ia) -> interpreter ia predicate) hostmap
+  mconcat <$> mapM (\(_, ia) -> interpreter ia predicate) hostmap
 
+runPredicateMaybe :: (MessagePack a) => LocalizedFSCommand (Maybe a) -> InterMonad (Maybe a)
+runPredicateMaybe predicate = do
+  (hostmap, _) <- lift ask
+  rpm hostmap where
+    rpm [] = return Nothing
+    rpm ((_, ia) : hm2) = do 
+      a <- interpreter ia predicate
+      case a of
+        Nothing -> rpm hm2
+        Just a -> return (Just a)
 
 interpret :: FSCommand ( InterMonad ()) ->  InterMonad ()
 interpret (DirExists (File hosta roota a) next) = do
@@ -240,6 +274,14 @@ interpret (ListDirFile (File hosta roota a) next) = do
 
 interpret (Stat (File hosta roota a) next) = do
   st <- redirect (LStat a ) hosta roota
+  next st
+
+interpret (Mode (File hosta roota a) next) = do
+  st <- redirect (LMode a ) hosta roota
+  next st
+
+interpret (Id (File hosta roota a) next) = do
+  st <- redirect (LId a ) hosta roota
   next st
 
 interpret (Size (File hosta roota fn) next) = do
@@ -292,6 +334,22 @@ interpret (FindFilesByPath p next) = do
 
 interpret (FindDirsByPath p next) = do
   fs <- runPredicate (LFindDirsByPath p)
+  next fs
+
+interpret (FindFilesByMode p next) = do
+  fs <- runPredicate (LFindFilesByMode p)
+  next fs
+
+interpret (FindDirsByMode p next) = do
+  fs <- runPredicate (LFindDirsByMode p)
+  next fs
+
+interpret (FindFileById p next) = do
+  fs <- runPredicateMaybe (LFindFileById p)
+  next fs
+
+interpret (FindDirById p next) = do
+  fs <- runPredicateMaybe (LFindDirById p)
   next fs
 
 interpret (FindFilesByName n next) = do

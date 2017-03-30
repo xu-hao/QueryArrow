@@ -60,9 +60,9 @@ pattern FileIdPred ns = Pred (FileIdPredName ns) (PredType PropertyPred [PTKeyIO
 
 pattern DirIdPred ns = Pred (DirIdPredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO Int64Type])
 
-pattern FileModePred ns = Pred (FileModePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
+pattern FileModePred ns = Pred (FileModePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO Int64Type])
 
-pattern DirModePred ns = Pred (DirModePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO TextType])
+pattern DirModePred ns = Pred (DirModePredName ns) (PredType PropertyPred [PTKeyIO (RefType "DirObject"), PTPropIO Int64Type])
 
 pattern FileNamePred ns = Pred (FileNamePredName ns) (PredType PropertyPred [PTKeyIO (RefType "FileObject"), PTPropIO TextType])
 

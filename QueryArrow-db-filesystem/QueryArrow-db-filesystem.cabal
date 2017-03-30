@@ -44,6 +44,7 @@ library
                    resource-pool,
                    async-pool,
                    vector,
-                   network
+                   network,
+                   unix
   ghc-options:     -Wall -fPIC
   other-modules:
