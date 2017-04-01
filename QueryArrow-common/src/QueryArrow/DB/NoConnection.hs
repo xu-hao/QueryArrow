@@ -1,14 +1,17 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
 module QueryArrow.DB.NoConnection where
 
 import QueryArrow.DB.DB
+import QueryArrow.Semantics.ResultSet
 
 -- interface
 
-class INoConnectionDatabase2 db where
+class (ResultSet (NoConnectionResultSetType db)) => INoConnectionDatabase2 db where
     type NoConnectionQueryType db
-    type NoConnectionRowType db
-    noConnectionDBStmtExec :: db -> NoConnectionQueryType db -> DBResultStream (NoConnectionRowType db) -> DBResultStream (NoConnectionRowType db)
+    type NoConnectionResultSetType db
+    type NoConnectionInputRowType db
+    noConnectionDBStmtExec :: (ResultSet a, NoConnectionInputRowType db ~ ResultSetRowType a) =>
+      db -> NoConnectionQueryType db -> a -> IO (NoConnectionResultSetType db)
 
 -- instance for IDatabase
 
@@ -49,6 +52,8 @@ instance (INoConnectionDatabase2 db) => IDBConnection (ConnectionType (NoConnect
 data NoConnectionDBStatement db = NoConnectionDBStatement db (NoConnectionQueryType db)
 
 instance (INoConnectionDatabase2 db) => IDBStatement (NoConnectionDBStatement db) where
-    type RowType (NoConnectionDBStatement db) = NoConnectionRowType db
+    type RowType (NoConnectionDBStatement db) = ResultSetRowType (NoConnectionResultSetType db)
+    type InputRowType (NoConnectionDBStatement db) = NoConnectionInputRowType db
+    type ResultSetType (NoConnectionDBStatement db) = NoConnectionResultSetType db
     dbStmtClose _ = return ()
     dbStmtExec (NoConnectionDBStatement db  qu ) = noConnectionDBStmtExec db  qu

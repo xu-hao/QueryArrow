@@ -2,26 +2,34 @@
    RankNTypes, FlexibleContexts, GADTs #-}
 module QueryArrow.Utils where
 
-import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Syntax.Data
 import QueryArrow.ListUtils
 import QueryArrow.DB.DB
+import QueryArrow.Data.Some
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys)
-import qualified Data.Map.Strict as M
+import Data.Map.Strict (Map, empty, alter, lookup)
 import Data.List ((\\), intercalate, transpose)
 import Control.Monad.Catch
 import Data.Maybe
 import Data.Tree
-import Data.Text (Text, pack, unpack)
-import Data.Text.Encoding
+import Data.Text (pack, unpack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultRow
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultHeader
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
 import Data.Int (Int64)
-
 import Data.Namespace.Namespace
+import qualified Data.Vector as V
 
-intResultStream :: (Monad m) => Int64 -> ResultStream m MapResultRow
-intResultStream i = return (insert (Var "i") (AbstractResultValue (Int64Value i)) empty)
+intResultStream :: (Monad m) => Int64 -> ResultStream m (VectorResultRow AbstractResultValue)
+intResultStream i =
+  let hdr = V.fromList [Var "i"] in
+      listResultStream [newRow hdr (V.fromList [Some (Int64Value i)])]
 
 -- map from predicate name to database names
 type PredDBMap = Map Pred [String]
@@ -33,9 +41,9 @@ constructDBPredMap db = foldr addPredToMap mempty preds where
         preds = getPreds db
 
 -- construct map from predicates to db names
-constructPredDBMap :: [AbstractDatabase row form] -> PredDBMap
+constructPredDBMap :: [AbstractDatabase trans row form] -> PredDBMap
 constructPredDBMap = foldr addPredFromDBToMap empty where
-        addPredFromDBToMap :: AbstractDatabase row form -> PredDBMap -> PredDBMap
+        addPredFromDBToMap :: AbstractDatabase trans row form -> PredDBMap -> PredDBMap
         addPredFromDBToMap (AbstractDatabase db) predmap = foldr addPredToMap predmap preds where
             dbname = getName db
             addPredToMap thepred = alter alterValue thepred
@@ -65,13 +73,9 @@ dbCatch :: (MonadCatch m) => m a -> m (Either SomeException a)
 dbCatch action =
         try action
 
-pprint2 :: Bool -> [String] -> [Map String String] -> String
+pprint2 :: Bool -> [String] -> [[String]] -> String
 pprint2 showhdr vars rows =
-  pprint3 showhdr (vars, map (\row -> map (g row) vars) rows) where
-    g::Map String String ->String->  String
-    g row var0  = case lookup var0 row of
-        Nothing -> "null"
-        Just e -> e
+  pprint3 showhdr (vars, rows)
 
 pprint3 :: Bool -> ([String], [[String]]) -> String
 pprint3 showhdr (vars, rows) = (if showhdr then join vars ++ "\n" else "") ++ intercalate "\n" rowstrs ++ "\n" where
@@ -87,48 +91,41 @@ pprint3 showhdr (vars, rows) = (if showhdr then join vars ++ "\n" else "") ++ in
                 | length s < n  = s ++ replicate (n - length s) ' '
                 | otherwise     = s
 
-pprint :: Bool -> Bool -> [Var] -> [MapResultRow] -> String
-pprint showhdr showdetails vars rows =
-    pprint2 showhdr (map unVar vars) (map (mapKeys unVar . M.map (if showdetails then show else show2)) rows) where 
-             show2 a =
-                 case a of 
-                     AbstractResultValue a2 ->
-                         case toConcreteResultValue a2 of
-                             Int64Value i -> show i
-                             Int32Value i -> show i
-                             StringValue i -> show i
-                             _ -> show a2
+pprint :: Bool -> [Var] -> [VectorResultRow AbstractResultValue] -> String
+pprint showhdr vars rows =
+    pprint2 showhdr (map unVar vars) (map (\row -> map (\a -> case a of
+                                                                  Some rv -> show (toConcreteResultValue rv)) (V.toList row)) rows)
 
-evalExpr :: MapResultRow -> Expr -> AbstractResultValue
-evalExpr _ (StringExpr s) = AbstractResultValue (StringValue s)
-evalExpr _ (IntExpr s) = AbstractResultValue (Int64Value (fromIntegral s))
-evalExpr row (VarExpr v) = case lookup v row of
-    Nothing -> AbstractResultValue Null
+evalExpr :: ResultHeader -> VectorResultRow AbstractResultValue -> Expr -> AbstractResultValue
+evalExpr _ _ (StringExpr s) = Some (StringValue s)
+evalExpr _ _ (IntExpr s) = Some (Int64Value (fromIntegral s))
+evalExpr hdr row (VarExpr v) = case ext v hdr row of
+    Nothing -> Some Null
     Just r -> r
-evalExpr row (CastExpr TextType e) =
-    AbstractResultValue (StringValue (case evalExpr row e of
-      AbstractResultValue r -> case toConcreteResultValue r of
+evalExpr hdr row (CastExpr TextType e) =
+    Some (StringValue (case evalExpr hdr row e of
+      Some r -> case toConcreteResultValue r of
         Int64Value i -> pack (show i)
         StringValue s -> s
         ByteStringValue bs -> decodeUtf8 bs
         _ -> error "cannot cast"))
-evalExpr row (CastExpr ByteStringType e) =
-    AbstractResultValue (ByteStringValue (case evalExpr row e of
-      AbstractResultValue r -> case toConcreteResultValue r of
+evalExpr hdr row (CastExpr ByteStringType e) =
+    Some (ByteStringValue (case evalExpr hdr row e of
+      Some r -> case toConcreteResultValue r of
         Int64Value i -> encodeUtf8 (pack (show i))
         StringValue s -> encodeUtf8 s
         ByteStringValue bs -> bs
         _ -> error "cannot cast"))
-evalExpr row (CastExpr Int64Type e) =
-    AbstractResultValue (Int64Value (case evalExpr row e of
-      AbstractResultValue r -> case toConcreteResultValue r of
+evalExpr hdr row (CastExpr Int64Type e) =
+    Some (Int64Value (case evalExpr hdr row e of
+      Some r -> case toConcreteResultValue r of
         Int64Value i -> i
         StringValue s -> read (unpack s)
         ByteStringValue bs -> read (unpack (decodeUtf8 bs))
         _ -> error "cannot cast"))
 
 
-evalExpr _ expr = error ("evalExpr: unsupported expr " ++ show expr)
+evalExpr _ _ expr = error ("evalExpr: unsupported expr " ++ show expr)
 
 showPredMap :: PredMap -> String
 showPredMap workspace =

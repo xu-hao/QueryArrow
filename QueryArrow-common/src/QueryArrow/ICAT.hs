@@ -2,7 +2,7 @@ module QueryArrow.ICAT where
 
 import System.IO (FilePath, readFile)
 import Text.Read (readMaybe)
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 
 standardPredMap standardPreds = constructPredMap standardPreds
 

@@ -73,10 +73,10 @@ printQueryPlan qp = do
     infoM "QA" ("query plan:")
     infoM "QA" (drawTree (toTree  qp))
 
-instance (IResultRow row, Num (ElemType row), Ord (ElemType row)) => IDBStatement (QueryPlan3 row) where
+instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, Num (ElemType row), Ord (ElemType row)) => IDBStatement (QueryPlan3 row) where
     type RowType (QueryPlan3 row) = row
     dbStmtClose qp = closeQueryPlan qp
-    dbStmtExec qp rs = execQueryPlan rs qp
+    dbStmtExec qp hdr rs hdr2 = execQueryPlan hdr rs qp hdr2
 
 data SumDB row l where
    SumDB :: String -> HList l -> SumDB row l
@@ -90,12 +90,12 @@ instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula 
     type DBQueryType (SumDB row l) = QueryPlanT l
     translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include retvars) form vars
 
-instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
+instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDatabase2 (SumDB row l) where
     data ConnectionType (SumDB row l ) = SumDBConnection (HList' ConnectionType l)
     dbOpen (SumDB _ dbs) = SumDBConnection <$> hMapACULL @(IDatabaseUniformRow row) @ConnectionType dbOpen dbs
 
-instance (IResultRow row, HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
+instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
                       (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDatabase (SumDB row l)
 
@@ -106,7 +106,7 @@ instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) 
     dbPrepare (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbPrepare dbs
     dbRollback (SumDBConnection dbs  ) = hMapACUL'_ @IDBConnection dbRollback dbs
 
-instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
+instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDBConnection (ConnectionType (SumDB row l )) where
     type QueryType (ConnectionType (SumDB row l )) = QueryPlanT l
     type StatementType (ConnectionType (SumDB row l )) = QueryPlan3 row
@@ -122,7 +122,7 @@ data SumPluginConfig = SumPluginConfig {
 instance FromJSON SumPluginConfig
 instance ToJSON SumPluginConfig
 
-instance (IResultRow row) => Plugin SumPlugin row where
+instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader) => Plugin SumPlugin row where
   getDB _  getDB0 ps0 = do
     let ps = case fromJSON (fromJust (db_config ps0)) of
                 Error err -> error err

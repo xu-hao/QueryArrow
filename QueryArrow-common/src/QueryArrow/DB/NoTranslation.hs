@@ -2,10 +2,8 @@
 
 module QueryArrow.DB.NoTranslation where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import QueryArrow.DB.DB
-import Data.Map.Strict
-import QueryArrow.FO.Types
 
 import Data.Set
 

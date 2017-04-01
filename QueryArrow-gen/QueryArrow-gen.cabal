@@ -4,6 +4,12 @@ cabal-version:  >=1.2
 build-type:     Custom
 author:         Hao Xu
 
+custom-setup
+  setup-depends:  base >= 4,
+                  Cabal,
+                  directory,
+                  process
+
 executable schema_parser_main
   hs-source-dirs:  src
   main-is:         schema_parser_main.hs

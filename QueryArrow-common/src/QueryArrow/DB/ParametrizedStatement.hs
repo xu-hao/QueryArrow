@@ -1,27 +1,44 @@
-{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables, PartialTypeSignatures, UndecidableInstances #-}
 module QueryArrow.DB.ParametrizedStatement where
 
 import QueryArrow.DB.DB
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Semantics.ResultSet.ResultSetResultStreamResultSet
+import QueryArrow.Semantics.ResultStream
 
 import Data.Convertible
+import Control.Monad.IO.Class
+import Data.Conduit
+import QueryArrow.Data.Monoid.Action
 
 -- interface
-class (Convertible (PSRowType stmt) (ParameterType stmt)) => IPSDBStatement stmt where
-    type PSRowType stmt
+class (ResultSet (PSResultSetType stmt)) => IPSDBStatement stmt where
     type ParameterType stmt   -- Map Var Expr
-    execWithParams :: stmt -> ParameterType stmt -> DBResultStream (PSRowType stmt)
+    type PSResultSetType stmt
+    execWithParams :: stmt -> ParameterType stmt -> IO (PSResultSetType stmt)
+    psdbGetHeader :: stmt -> HeaderType (ResultSetRowType (PSResultSetType stmt))
     psdbStmtClose :: stmt -> IO ()
 
 -- statement
 
 newtype PSDBStatement stmt = PSDBStatement stmt
 
-instance IPSDBStatement stmt => IDBStatement (PSDBStatement stmt) where
-    type RowType (PSDBStatement stmt) = PSRowType stmt
+instance forall stmt . (IPSDBStatement stmt, Convertible (HeaderType (ResultSetRowType (PSResultSetType stmt)), ResultSetRowType (PSResultSetType stmt)) (ParameterType stmt)) => IDBStatement (PSDBStatement stmt) where
+    type RowType (PSDBStatement stmt) = ResultSetRowType (PSResultSetType stmt)
+    type InputRowType (PSDBStatement stmt) = ResultSetRowType (PSResultSetType stmt)
+    type ResultSetType (PSDBStatement stmt) = ResultSetResultStreamResultSet (ResultSetTransType (PSResultSetType stmt)) (PSResultSetType stmt)
     dbStmtClose (PSDBStatement stmt) = psdbStmtClose stmt
-    dbStmtExec (PSDBStatement stmt) stream = do
-        row <- stream
-        execWithParams stmt (convert row)
+    dbStmtExec (PSDBStatement stmt) rset = do
+        let hdr = getHeader rset
+        let stream = toResultStream rset
+        let hdr2 = psdbGetHeader stmt
+        return (ResultSetResultStreamResultSet mempty hdr2 (ResultStream (case stream of
+                                                        ResultStream rs -> rs =$=
+                                                                  awaitForever (\row -> do
+                                                                    -- liftIO $ infoM "QA" ("current row " ++ show row)
+                                                                    -- liftIO $ infoM "QA" ("returns row")
+                                                                    rset2 <- liftIO $ execWithParams stmt (convert (hdr, row :: ResultSetRowType (PSResultSetType stmt)))
+                                                                    yield (act (combineRow hdr row hdr2 :: ResultSetTransType (PSResultSetType stmt)) rset2)))))
 
 
 {- instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where

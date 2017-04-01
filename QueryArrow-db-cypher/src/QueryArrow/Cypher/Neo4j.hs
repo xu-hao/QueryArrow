@@ -5,12 +5,9 @@ import QueryArrow.Config
 import QueryArrow.DB.DB
 import QueryArrow.Cypher.ICAT
 import QueryArrow.Plugin
-import QueryArrow.DB.AbstractDatabaseList
-import QueryArrow.Data.Heterogeneous.List
 
 import Data.Aeson
 import GHC.Generics
-import Data.Maybe
 
 instance FromJSON ICATDBConnInfo2
 instance ToJSON ICATDBConnInfo2
@@ -30,7 +27,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 -- db
 data Neo4jPlugin = Neo4jPlugin
 
-instance Plugin Neo4jPlugin MapResultRow where
+instance Plugin Neo4jPlugin VectorResultRow where
   getDB _ _ ps = do
       let fsconf = getDBSpecificConfig ps
       let conn = (db_host fsconf, db_port fsconf, db_username fsconf, db_password fsconf)

@@ -3,15 +3,15 @@ module QueryArrow.Plugin where
 
 import QueryArrow.Config
 import QueryArrow.DB.DB
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Data.Heterogeneous.List
 
-type GetDBFunction row = ICATDBConnInfo -> IO (AbstractDatabase row FormulaT)
+type GetDBFunction trans row = ICATDBConnInfo -> IO (AbstractDatabase trans row FormulaT)
 
 
-getDBs :: GetDBFunction row -> [ICATDBConnInfo] -> IO (AbstractDBList row)
+getDBs :: GetDBFunction trans row -> [ICATDBConnInfo] -> IO (AbstractDBList trans row)
 getDBs _ [] = return (AbstractDBList HNil)
 getDBs getDB0 (transinfo : l) = do
     db0 <- getDB0 transinfo
@@ -22,7 +22,7 @@ getDBs getDB0 (transinfo : l) = do
           AbstractDBList dbs -> return (AbstractDBList (HCons db dbs))
 
 
-class Plugin a row where
-  getDB :: a -> GetDBFunction row -> GetDBFunction row
+class Plugin a trans row where
+  getDB :: a -> GetDBFunction trans row -> GetDBFunction trans row
 
-data AbstractPlugin row = forall a. (Plugin a row) => AbstractPlugin a
+data AbstractPlugin trans row = forall a. (Plugin a trans row) => AbstractPlugin a

@@ -1,20 +1,23 @@
-{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables, TypeApplications, DataKinds, DeriveFunctor, PatternSynonyms #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables, TypeApplications, DataKinds, DeriveFunctor, PatternSynonyms, ConstraintKinds #-}
 module QueryArrow.QueryPlan where
 
-import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import Algebra.SemiBoundedLattice
 import QueryArrow.DB.DB
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Semantics.ResultHeader
+import QueryArrow.Semantics.ResultSet.AbstractResultSet
+import QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+import QueryArrow.Semantics.ResultSet.ResultSetResultStreamResultSet
 import QueryArrow.Data.Heterogeneous.List
 
-import Prelude  hiding (lookup, null)
+import Prelude  hiding (lookup, null, take)
 import Data.List (elem, sortBy, groupBy, nub)
 import qualified Data.List as List
 import Control.Monad.Except
-import Control.Applicative ((<|>))
 import Data.Maybe
-import Data.Monoid  ((<>))
 import Data.Tree
 import Data.Conduit
 import Control.Concurrent.Async.Lifted
@@ -22,7 +25,11 @@ import System.Log.Logger
 import Algebra.Lattice
 import Data.Set (Set, fromList, toAscList)
 import Data.Ord (comparing, Down(..))
+import Data.Proxy
+import QueryArrow.Data.Monoid.Action
 import Debug.Trace
+import Data.Foldable
+import Data.Conduit.List (sourceList, sinkNull, isolate)
 
 type MSet a = Complemented (Set a)
 
@@ -115,7 +122,7 @@ instance ToTree' QueryPlan2 where
     toTree' (QPOne2 qpd) = Node ("one"++ show qpd ) []
     toTree' (QPAggregate2 qpd agg qp1) = Node ("aggregate " ++ show agg ++ " " ++ show qpd) [toTree' qp1]
 
-type QueryPlan3 row = QueryPlan1 (AbstractDBStatement row, String) (Annotated QueryPlanData)
+type QueryPlan3 trans row = QueryPlan1 (AbstractDBStatement trans row row, String) (Annotated QueryPlanData)
 
 type QueryPlanT l = QueryPlan1 (HVariant' DBQueryTypeIso l, String) (Annotated QueryPlanData)
 
@@ -513,7 +520,7 @@ translateQueryPlan dbs (Exec2 qpd (form, x)) = do
         let vars = paramvs qpd
             vars2 = returnvs qpd
             trans :: (IDatabaseUniformDBFormula FormulaT db) => db ->  IO (DBQueryTypeIso db)
-            trans db =  -- trace ("translateQueryPlan: " ++ show form) $ 
+            trans db =  -- trace ("translateQueryPlan: " ++ show form) $
                 DBQueryTypeIso <$> (translateQuery db vars2 form vars)
         qu <-  fromMaybe (error "index out of range") <$> (hApplyACULV @(IDatabaseUniformDBFormula FormulaT) @(DBQueryTypeIso) trans x dbs)
         return (Exec2 qpd (qu, (serialize form)))
@@ -541,21 +548,25 @@ hDbOpen dbs =
         dbo db = dbOpen db in
         hMapACULL @IDatabase @ConnectionType dbo dbs
 
-class (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDatabaseUniformRow row conn
-instance (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDatabaseUniformRow row conn
 
-class (IDatabase conn, DBFormulaType conn ~ form) => IDatabaseUniformDBFormula form conn
-instance (IDatabase conn, DBFormulaType conn ~ form) => IDatabaseUniformDBFormula form conn
+type CDatabaseUniformRow trans row conn = (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row, InputRowType (StatementType (ConnectionType conn)) ~ row, ResultSetTransType (ResultSetType (StatementType (ConnectionType conn))) ~ trans)
+class CDatabaseUniformRow trans row conn => IDatabaseUniformRow trans row conn
+instance CDatabaseUniformRow trans row conn => IDatabaseUniformRow trans row conn
 
-class (IDatabaseUniformRow row db, IDatabaseUniformDBFormula formula db) => IDatabaseUniformRowAndDBFormula row formula db
-instance (IDatabaseUniformRow row db, IDatabaseUniformDBFormula formula db) => IDatabaseUniformRowAndDBFormula row formula db
+type CDatabaseUniformDBFormula form conn = (IDatabase conn, DBFormulaType conn ~ form)
+class CDatabaseUniformDBFormula form conn => IDatabaseUniformDBFormula form conn
+instance CDatabaseUniformDBFormula form conn => IDatabaseUniformDBFormula form conn
 
-prepareQueryPlan :: forall (row :: *) (l :: [*]). (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l,
-                HMapConstraint IDBConnection (HMap ConnectionType l)) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlan3 row )
+type CDatabaseUniformRowAndDBFormula trans row formula db = (IDatabaseUniformRow trans row db, IDatabaseUniformDBFormula formula db)
+class CDatabaseUniformRowAndDBFormula trans row formula db => IDatabaseUniformRowAndDBFormula trans row formula db
+instance CDatabaseUniformRowAndDBFormula trans row formula db => IDatabaseUniformRowAndDBFormula trans row formula db
+
+prepareQueryPlan :: forall trans (row :: *) (l :: [*]). (IResultRow row, HMapConstraint (IDatabaseUniformRow trans row) l,
+                HMapConstraint IDBConnection (HMap ConnectionType l)) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlan3 trans row )
 prepareQueryPlan conns (Exec2 qpd (qu, stmtshow)) = do
-            let pq :: (IDatabaseUniformRow row conn) => ConnectionType conn -> DBQueryTypeIso conn -> IO (AbstractDBStatement row)
+            let pq :: (IDatabaseUniformRow trans row conn) => ConnectionType conn -> DBQueryTypeIso conn -> IO (AbstractDBStatement trans row row)
                 pq conn (DBQueryTypeIso qu') = AbstractDBStatement <$> prepareQuery conn qu'
-            stmt <- hApply2CULV' @(IDatabaseUniformRow row) @ConnectionType @DBQueryTypeIso pq conns qu
+            stmt <- hApply2CULV' @(IDatabaseUniformRow trans row) @ConnectionType @DBQueryTypeIso pq conns qu
             return (Exec2 qpd (stmt, stmtshow))
 prepareQueryPlan dbs  (QPChoice2 qpd qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1
@@ -578,113 +589,157 @@ prepareQueryPlan dbs  (QPAggregate2 qpd agg qp1) = do
 addCleanupRS :: Monad m => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
 addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
 
-execQueryPlan :: (IResultRow row) =>  DBResultStream row -> QueryPlan3 row -> DBResultStream row
-execQueryPlan  rs (Exec2 qpd (stmt, stmtshow)) =
+oneRowResultSet :: (Monoid trans) => HeaderType row -> row -> ResultStreamResultSet trans row
+oneRowResultSet hdr row = ResultStreamResultSet mempty hdr (ResultStream (yield row))
+
+execQueryPlan :: forall a trans row . (ResultSet a, ResultSetTransType a ~ trans, ResultSetRowType a ~ row) =>
+                  a -> QueryPlan3 trans row -> IO (AbstractResultSet trans row)
+execQueryPlan rset (Exec2 qpd (stmt, stmtshow)) =
     case stmt of
-        AbstractDBStatement stmt0 -> {- bracketPStream (return ()) (\_ -> dbStmtClose stmt0) (\_ -> -} do
-                        row <- rs
-                        liftIO $ infoM "QA" ("current row " ++ show row)
-                        liftIO $ infoM "QA" ("execute " ++ stmtshow)
-                        -- liftIO $ putStrLn ("execute " ++ stmtshow)
-                        row2 <- dbStmtExec stmt0 (pure row)
-                        liftIO $ infoM "QA" ("returns row")
-                        return (transform (combinedvs qpd) (row <> row2)){- ) -}
+        AbstractDBStatement stmt0 -> do
+          liftIO $ infoM "QA" ("execute " ++ stmtshow)
+          rset2 <- dbStmtExec stmt0 rset
+          let hdr2 = getHeader rset2
+          let trans2 = filterRow (Proxy :: Proxy row) (combinedvs qpd) hdr2 :: trans
+          return (AbstractResultSet (act trans2 rset2))
 
-execQueryPlan  r (QPSequencing2 _ qp1 qp2) =
-        let r1 = execQueryPlan  r qp1
-            rs2 = execQueryPlan  r1 qp2 in
-            rs2
+execQueryPlan r (QPSequencing2 _ qp1 qp2) = do
+        r1 <- execQueryPlan r qp1
+        execQueryPlan r1 qp2
 
-execQueryPlan  rs (QPChoice2 _ qp1 qp2) = do
-    row <- rs
-    let rs1 = execQueryPlan  (pure row) qp1
-        rs2 = execQueryPlan  (pure row) qp2 in
-        rs1 <|> rs2
+execQueryPlan  rset (QPChoice2 qpd qp1 qp2)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultSetResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+        let rset2 = oneRowResultSet hdr row
+        rset3 <- liftIO $ execQueryPlan rset2 qp1
+        rset4 <- liftIO $ execQueryPlan rset2 qp2
+        let hdr3 = getHeader rset3
+        let hdr4 = getHeader rset4
+        let trans3 = alignHeaders (Proxy :: Proxy row) hdrout hdr3 :: trans
+        let trans4 = alignHeaders (Proxy :: Proxy row) hdrout hdr4 :: trans
+        yield (AbstractResultSet (act trans3 rset3))
+        yield (AbstractResultSet (act trans4 rset4)))))))
 
-execQueryPlan rs (QPPar2 _ qp1 qp2) = do
-    row <- rs
-    let rs1 = execQueryPlan  (pure row) qp1
-        rs2 = execQueryPlan  (pure row) qp2
-    (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
-    listResultStream rs1' <|> listResultStream rs2'
+execQueryPlan  rset (QPPar2 qpd qp1 qp2)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultSetResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+        let rset2 = oneRowResultSet hdr row
+        (rset3, rset4) <- liftIO $ concurrently (execQueryPlan rset2 qp1) (execQueryPlan rset2 qp2)
+        let hdr3 = getHeader rset3
+        let hdr4 = getHeader rset4
+        let trans3 = alignHeaders (Proxy :: Proxy row) hdrout hdr3 :: trans
+        let trans4 = alignHeaders (Proxy :: Proxy row) hdrout hdr4 :: trans
+        yield (AbstractResultSet (act trans3 rset3))
+        yield (AbstractResultSet (act trans4 rset4)))))))
 
-execQueryPlan r (QPOne2 _) = r
-execQueryPlan rs (QPZero2 _) = closeResultStream rs
-execQueryPlan rs (QPAggregate2 qpd (FReturn vars) qp) =
-      transformResultStream (combinedvs qpd) (execQueryPlan rs qp)
-execQueryPlan rs (QPAggregate2 qpd Not qp) =
-    transformResultStream (combinedvs qpd) (filterResultStream rs (\row -> do
-        let rs2 = execQueryPlan (pure row) qp
-        isResultStreamEmpty rs2))
-execQueryPlan rs (QPAggregate2 qpd Exists qp) =
-    transformResultStream (combinedvs qpd) (filterResultStream rs (\row -> do
-        let rs2 = execQueryPlan (pure row) qp
-        emp <- isResultStreamEmpty rs2
-        return (not emp)))
-execQueryPlan rs (QPAggregate2 qpd (Summarize funcs groupby) qp) =
-    transformResultStream (combinedvs qpd) (do
-        row <- rs
-        let rs2 = execQueryPlan (pure row) qp
-        rows <- lift $ getAllResultsInStream rs2
-        let groups = groupBy (\a b -> all (\var -> ext var a == ext var b) groupby) rows
-        let rows2 = map (\rows -> mconcat (reverse (map (\(v1, func1) ->
-                      let m = case func1 of
-                                Max v2 ->
-                                    if List.null rows
-                                        then error "max of empty list"
-                                        else maximum (map (ext v2) rows)
-                                Min v2 ->
-                                    if List.null rows
-                                        then error "min of empty list"
-                                        else minimum (map (ext v2) rows)
-                                Sum v2 ->
-                                    sum (map (ext v2) rows)
-                                Average v2 ->
-                                    if List.null rows
-                                        then error "min of empty list"
-                                        else average (map (ext v2) rows)
-                                Count ->
-                                    fromIntegral (length rows)
-                                CountDistinct v2 ->
-                                    fromIntegral (length (List.nub (map (ext v2) rows)))
-                                Random v2 ->
-                                    if List.null rows
-                                        then error "random of empty list"
-                                        else head (map (ext v2) rows) in
-                          ret v1 m) funcs))) groups where
-                              average :: Fractional a => [a] -> a
-                              average n = sum n / fromIntegral (length n)
+execQueryPlan  r (QPOne2 _)  = return (AbstractResultSet r)
+execQueryPlan  rset (QPZero2 qpd)  =
+  let hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= sinkNull))))
+execQueryPlan  rs (QPAggregate2 qpd (FReturn vars) qp)  =
+    execQueryPlan  rs qp  -- if combinedvs is calculated correctly, this should not need further transformation
+execQueryPlan  rset (QPAggregate2 qpd Not qp)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          b <- lift $ isResultStreamEmpty rs3
+          when b $ yield row)))))
+execQueryPlan  rset (QPAggregate2 qpd Exists qp)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          b <- lift $ isResultStreamEmpty rs3
+          when (not b) $ yield row)))))
+execQueryPlan  rset (QPAggregate2 qpd (Summarize funcs groupby) qp) =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          rows <- lift $ getAllResultsInStream rs3
+          let groups = groupBy (\a b -> all (\var -> ext var hdr a == ext var hdr b) groupby) (rows :: [row])
+          let updatess = map (\rows ->  map (\(v1, func1) ->
+                        let m = case func1 of
+                                  Max v2 ->
+                                      if List.null rows
+                                          then error "max of empty list"
+                                          else maximum (map (fromMaybe (error "max empty value") . ext v2 hdr) rows)
+                                  Min v2 ->
+                                      if List.null rows
+                                          then error "min of empty list"
+                                          else minimum (map (fromMaybe (error "min empty value") . ext v2 hdr) rows)
+                                  Sum v2 ->
+                                      sum (map (fromMaybe (error "sum empty value") . ext v2 hdr) rows)
+                                  Average v2 ->
+                                      if List.null rows
+                                          then error "average of empty list"
+                                          else average (map (fromMaybe (error "average empty value") . ext v2 hdr) rows)
+                                  Count ->
+                                      fromIntegral (length rows)
+                                  CountDistinct v2 ->
+                                      fromIntegral (length (List.nub (concatMap (\row -> case ext v2 hdr row of
+                                                                                      Nothing -> []
+                                                                                      Just a -> [a]) rows))) in
+                                  Random v2 ->
+                                      if List.null rows
+                                          then error "random of empty list"
+                                          else head (map (fromMaybe (error "average empty value") . ext v2 hdr) rows) in
+                            (v1, m)) funcs) groups where
+                                average :: Fractional b => [b] -> b
+                                average n = let (s,c) = average2 n in s/fromIntegral c
+                                average2 n = foldl' (\(s0, c0) a -> (s0 + a, c0 + 1)) (0,0) n
 
-        listResultStream (map (<> row) rows2))
-execQueryPlan rs (QPAggregate2 qpd (Limit n) qp) =
-    transformResultStream (combinedvs qpd) (do
-        row <- rs
-        liftIO $ infoM "QueryPlan" ("limit " ++ show n ++ " input = " ++ show row)
-        let rs2 = execQueryPlan (pure row) qp
-        takeResultStream n rs2)
-execQueryPlan rs (QPAggregate2 qpd Distinct qp) =
-    transformResultStream (combinedvs qpd) (do
-        row <- rs
-        liftIO $ infoM "QueryPlan" ("distinct input = " ++ show row)
-        let rs2 = execQueryPlan (pure row) qp
-        l <- lift $ getAllResultsInStream rs2
-        listResultStream (nub l))
-execQueryPlan rs (QPAggregate2 qpd (OrderByAsc v1) qp) =
-    transformResultStream (combinedvs qpd) (do
-        row <- rs
-        let rs2 = execQueryPlan (pure row) qp
-        rows <- lift $ getAllResultsInStream rs2
-        let rows' = sortBy (\row1 row2 -> compare (ext v1 row1) (ext v1 row2)) rows
-        listResultStream rows')
-execQueryPlan rs (QPAggregate2 qpd (OrderByDesc v1) qp) =
-    transformResultStream (combinedvs qpd) (do
-        row <- rs
-        let rs2 = execQueryPlan (pure row) qp
-        rows <- lift $ getAllResultsInStream rs2
-        let rows' = sortBy (\row1 row2 -> comparing Down (ext v1 row1) (ext v1 row2)) rows
-        trace ("executeQueryPlan: OrderByDesc " ++ show rows ++ show rows') $ listResultStream rows')
+          sourceList  (map (\updates -> updateRow updates hdr row) updatess))))))
+execQueryPlan rset (QPAggregate2 qpd (Limit n) qp)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          runResultStream rs3 =$= do
+            isolate n
+            sinkNull)))))
+execQueryPlan  rset (QPAggregate2 qpd Distinct qp)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          l <- lift $ getAllResultsInStream rs3
+          sourceList (nub l))))))
+execQueryPlan  rset (QPAggregate2 qpd (OrderByAsc v1) qp)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          rows <- lift $ getAllResultsInStream rs3
+          let rows' = sortBy (\row1 row2 -> compare (ext v1 hdr row1) (ext v1 hdr row2)) rows
+          sourceList rows')))))
+execQueryPlan  rset (QPAggregate2 qpd (OrderByDesc v1) qp)  =
+  let hdr = getHeader rset
+      hdrout = toHeader (combinedvs qpd) in
+      return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
+          let rset2 = oneRowResultSet hdr row
+          rset3 <- liftIO $ execQueryPlan rset2 qp
+          let rs3 = toResultStream rset3
+          rows <- lift $ getAllResultsInStream rs3
+          let rows' = sortBy (\row1 row2 -> comparing Down (ext v1 hdr row1) (ext v1 hdr row2)) rows
+          sourceList rows')))))
 
-closeQueryPlan :: QueryPlan3 row -> IO ()
+closeQueryPlan :: QueryPlan3 trans row -> IO ()
 closeQueryPlan (Exec2 _ (stmt, _)) =
     case stmt of
         AbstractDBStatement stmt0 -> dbStmtClose stmt0
