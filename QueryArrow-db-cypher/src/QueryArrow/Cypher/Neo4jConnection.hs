@@ -2,6 +2,7 @@
 module QueryArrow.Cypher.Neo4jConnection where
 
 import QueryArrow.FO.Data
+import QueryArrow.FO.ResultValue
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
@@ -17,11 +18,13 @@ import qualified Database.Neo4j.Transactional.Cypher as TC
 import Database.Neo4j (withAuthConnection)
 import qualified Data.HashMap.Strict as M
 import Data.ByteString.Char8(pack)
-import Data.Text.Encoding
+import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Text as T
 import Data.Aeson.Types as A
 import Data.Int
 import Data.Scientific
+import qualified Data.Vector as V
+import QueryArrow.Data.Some
 
 import System.Log.Logger
 
@@ -32,35 +35,34 @@ import System.Log.Logger
 type Neo4jConnInfo = (String, Int, String, String)
 type Neo4jDatabase = Neo4jConnInfo
 
-instance Convertible ConcreteResultValue C.ParamValue where
-    safeConvert (Int64Value i) = Right (C.newparam (fromIntegral i :: Int64))
-    safeConvert (StringValue s) = Right (C.newparam s)
-    safeConvert (ByteStringValue s) = Right (C.newparam (decodeUtf8 s))
-    safeConvert e = Left (ConvertError (show e) "Expr" "ParamValue" "unsupported param value expr type")
+toParamValue :: ConcreteResultValue -> C.ParamValue
+toParamValue (Int64Value i) =  C.newparam (fromIntegral i :: Int64)
+toParamValue  (StringValue s) =  C.newparam s
+toParamValue  (ByteStringValue s) =  C.newparam (decodeUtf8 s)
+toParamValue  e = error  (show e ++ "Expr to ParamValue unsupported param value expr type")
 
-instance Convertible ([Var], [A.Value]) MapResultRow where
-    safeConvert (vars, values) = Right (foldl (\row (var0, value) ->
-                insert var0 (AbstractResultValue (case value of
+toResultRow :: [A.Value] -> VectorResultRow
+toResultRow values = V.map (\value -> Some (case value of
                         A.Number n -> case floatingOrInteger n of
                             Left r -> error ("floating not supported")
                             Right i -> Int64Value (fromIntegral i)
                         A.String text -> StringValue text
                         A.Null -> StringValue "<null>"
-                        _ -> error ("unsupported json value: " ++ show value))) row) empty (zip vars values) )
+                        _ -> error ("unsupported json value: " ++ show value))) (V.fromList values)
 
-toCypherParams :: MapResultRow -> M.HashMap T.Text C.ParamValue
-toCypherParams = foldlWithKey (\m (Var k) v-> M.insert (T.pack k) (convert (case v of AbstractResultValue arv -> toConcreteResultValue arv)) m) M.empty
+toCypherParams :: ResultStreamHeader -> VectorResultRow -> M.HashMap T.Text C.ParamValue
+toCypherParams hdr row = V.foldl (\m (Var k, v) -> M.insert (T.pack k) (toParamValue (case v of Some arv -> toConcreteResultValue arv)) m) M.empty (V.zip (V.map fst hdr) row)
 
 instance INoConnectionDatabase2 (GenericDatabase CypherTrans Neo4jDatabase ) where
-        type NoConnectionRowType (GenericDatabase CypherTrans Neo4jDatabase ) = MapResultRow
+        type NoConnectionRowType (GenericDatabase CypherTrans Neo4jDatabase ) = VectorResultRow
         type NoConnectionQueryType (GenericDatabase CypherTrans Neo4jDatabase ) = CypherQuery
-        noConnectionDBStmtExec :: GenericDatabase CypherTrans Neo4jDatabase -> CypherQuery -> DBResultStream MapResultRow -> DBResultStream MapResultRow
-        noConnectionDBStmtExec (GenericDatabase  _  (host, port, username, password) _ _) stmt@(CypherQuery vars _ _) rs = do
+        noConnectionDBStmtExec :: GenericDatabase CypherTrans Neo4jDatabase -> CypherQuery -> ResultStreamHeader -> DBResultStream VectorResultRow -> ResultStreamHeader -> DBResultStream VectorResultRow
+        noConnectionDBStmtExec (GenericDatabase  _  (host, port, username, password) _ _) stmt hdr rs hdr2 = do
                 args <- rs
                 resp <- liftIO $ withAuthConnection (pack host) port (pack username, pack password) $ do
                     liftIO $ infoM "Cypher" (serialize stmt ++ " with " ++ show args)
                     -- liftIO $ putStrLn ("Cypher: execute " ++ serialize stmt ++ " with " ++ show args)
-                    TC.runTransaction $ TC.cypher (T.pack (serialize stmt)) (toCypherParams args)
+                    TC.runTransaction $ TC.cypher (T.pack (serialize stmt)) (toCypherParams hdr args)
                 case resp of
                     Left t -> do
                         let errmsg = "code: " ++ T.unpack (fst t) ++ ", msg: " ++ T.unpack (snd t)
@@ -68,4 +70,4 @@ instance INoConnectionDatabase2 (GenericDatabase CypherTrans Neo4jDatabase ) whe
                         error errmsg
                     Right (TC.Result cols rows _ _) -> do
                         liftIO $ infoM "Cypher" ("query returns " ++  show cols ++ show rows)
-                        listResultStream (map (\row -> convert (vars, row)) rows)
+                        listResultStream (map toResultRow rows)

@@ -128,7 +128,7 @@ typecheckRules ptm (qr, ir, dr) = do
           Left err -> Left ("typecheckRules: delete rewrite rule " ++ show r ++ " type error\n" ++ err)) dr
   return (qr', ir', dr')
 
-transDB :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => String -> db -> ICATTranslationConnInfo -> IO (TransDB db)
+transDB :: (IDatabase db, DBFormulaType db ~ FormulaT) => String -> db -> ICATTranslationConnInfo -> IO (TransDB db)
 transDB name sumdb transinfo = do
             let predmap0 = constructDBPredMap sumdb
             -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
@@ -184,7 +184,7 @@ instance FromJSON ICATTranslationConnInfo
 
 data TransPlugin = TransPlugin
 
-instance Plugin TransPlugin MapResultRow where
+instance Plugin TransPlugin row where
   getDB _ getDB0 ps = do
     let fsconf = getDBSpecificConfig ps
     db0 <- getDB0 (trans_db_plugin fsconf)

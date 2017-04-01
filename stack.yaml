@@ -71,10 +71,6 @@ packages:
     - QueryArrow-gen
     - heterogeneous-list
     - log-adapter
-    - distributed-serialization
-    - distributed-serialization-common
-    - distributed-serialization-binary
-    - distributed-serialization-msgpack
     - data-some
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages

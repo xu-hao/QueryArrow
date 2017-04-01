@@ -1,8 +1,7 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleContexts, ExistentialQuantification, FlexibleInstances, OverloadedStrings #-}
 module QueryArrow.Parser where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Data
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)

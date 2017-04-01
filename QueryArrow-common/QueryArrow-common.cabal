@@ -1,5 +1,5 @@
 name:           QueryArrow-common
-version:        0.2
+version:        0.3
 cabal-version:  >=1.2
 build-type:     Simple
 author:         Hao Xu
@@ -7,16 +7,31 @@ author:         Hao Xu
 library
   hs-source-dirs:  src
   exposed-modules:
-                   QueryArrow.FO.Data
-                   QueryArrow.FO.Types
-                   QueryArrow.FO.Domain
-                   QueryArrow.FO.Utils
+                   QueryArrow.Syntax.Data
+                   QueryArrow.Syntax.Types
+                   QueryArrow.Syntax.Domain
+                   QueryArrow.Syntax.Utils
+                   QueryArrow.Semantics.Sendable
+                   QueryArrow.Semantics.ResultValue
+                   QueryArrow.Semantics.ResultValue.BinaryResultValue
+                   QueryArrow.Semantics.ResultValue.AbstractResultValue
+                   QueryArrow.Semantics.ResultSet
+                   QueryArrow.Semantics.ResultSet.AbstractResultSet
+                   QueryArrow.Semantics.ResultSet.ResultSetResultStreamResultSet
+                   QueryArrow.Semantics.ResultSet.HandleResultSet
+                   QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+                   QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+                   QueryArrow.Semantics.ResultHeader
+                   QueryArrow.Semantics.ResultHeader.VectorResultHeader
+                   QueryArrow.Semantics.ResultRow
+                   QueryArrow.Semantics.ResultRow.VectorResultRow
+                   QueryArrow.Semantics.ResultStream
                    QueryArrow.DB.DB
+                   QueryArrow.DB.Utils
                    QueryArrow.DB.NoTranslation
                    QueryArrow.DB.GenericDatabase
                    QueryArrow.DB.NoConnection
                    QueryArrow.DB.ParametrizedStatement
-                   QueryArrow.DB.ResultStream
                    QueryArrow.DB.AbstractDatabaseList
                    QueryArrow.ICAT
                    QueryArrow.BuiltIn
@@ -27,6 +42,7 @@ library
                    QueryArrow.ListUtils
                    QueryArrow.Utils
                    QueryArrow.Plugin
+                   QueryArrow.Data.Monoid.Action
   build-depends:
                    base >= 4,
                    containers,
@@ -64,11 +80,13 @@ library
                    lrucache,
                    yaml,
                    filepath,
-                   data-msgpack,
                    binary,
+                   vector,
+                   vector-binary-instances,
                    base64-bytestring,
                    heterogeneous-list,
-                   log-adapter
+                   log-adapter,
+                   data-some
   ghc-options:     -Wall -fPIC
   other-modules:
 Test-Suite Test

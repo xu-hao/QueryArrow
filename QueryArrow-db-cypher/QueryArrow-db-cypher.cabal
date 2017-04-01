@@ -24,11 +24,13 @@ library
                    text >= 1.2.1.1,
                    scientific,
                    aeson,
+                   vector,
                    hslogger,
                    namespace >= 0.1.2.2,
                    heterogeneous-list,
                    lattices,
                    semibounded-lattices,
+                   data-some,
                    QueryArrow-common,
                    QueryArrow-db-sql-common
   ghc-options:     -Wall -fPIC

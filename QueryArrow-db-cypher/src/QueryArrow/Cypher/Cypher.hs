@@ -9,6 +9,7 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
 import QueryArrow.FO.Data hiding (Subst(..), var)
 import QueryArrow.FO.Types
 import QueryArrow.FO.Utils
+import QueryArrow.FO.ResultValue
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
 import QueryArrow.ListUtils
@@ -665,15 +666,16 @@ var v = CypherVarExpr (CypherVar v)
 cnull = CypherNullExpr
 match m = Cypher [] (GraphPattern m) CypherTrueCond [] mempty []
 
-type CypherEnv = Map CypherVar CypherValue
+-- type CypherEnv = Map CypherVar CypherValue
 
 instance Convertible Var CypherVar where
     safeConvert = Right . CypherVar . unVar
-instance Convertible MapResultRow CypherEnv where
-    safeConvert = Right . foldlWithKey (\map k v  -> insert (convert k) (convert (case v of AbstractResultValue arv -> toConcreteResultValue arv)) map) empty
+-- instance Convertible MapResultRow CypherEnv where
+--     safeConvert = Right . foldlWithKey (\map k v  -> insert (convert k) (convert (case v of AbstractResultValue arv -> toConcreteResultValue arv)) map) empty
 
 instance Convertible ConcreteResultValue CypherValue where
     safeConvert (Int64Value i) = Right (CypherIntValue (fromIntegral i))
+    safeConvert (Int32Value i) = Right (CypherIntValue (fromIntegral i))
     safeConvert (StringValue i) = Right (CypherStringValue (T.unpack i))
     safeConvert (Null) = Right (CypherNullValue)
     safeConvert (ByteStringValue bs) = Left (ConvertError "" "" "" "")

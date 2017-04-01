@@ -1,9 +1,8 @@
 module QueryArrow.BuiltIn where
 
-import System.IO (FilePath, readFile)
-import Text.Read (readMaybe)
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 
+standardBuiltInPreds :: [Pred]
 standardBuiltInPreds = [
         Pred (UQPredName "le") (PredType ObjectPred [ParamType True True False Int64Type, ParamType True True False Int64Type]),
         Pred (UQPredName "lt") (PredType ObjectPred [ParamType True True False Int64Type, ParamType True True False Int64Type]),
@@ -30,9 +29,11 @@ standardBuiltInPreds = [
         ]
 
 
+standardBuiltInPredsMap :: PredMap
 standardBuiltInPredsMap = constructPredMap standardBuiltInPreds
 
 qStandardBuiltInPreds :: String -> [Pred]
 qStandardBuiltInPreds ns = map (setPredNamespace ns) standardBuiltInPreds
 
+qStandardBuiltInPredsMap :: String -> PredMap
 qStandardBuiltInPredsMap ns = constructPredMap (qStandardBuiltInPreds ns)
