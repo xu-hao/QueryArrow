@@ -598,10 +598,13 @@ instance Subst Summary where
     subst s (Sum v) = Sum (subst s v)
     subst s (CountDistinct v) = CountDistinct (subst s v)
 
+instance Subst (Atom1 a) => Subst (Lit1 a) where
+    subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
+ 
 instance (Unannotate b (Formula0 a), Subst (Atom1 a)) => Subst (Formula1 a b) where
     subst s = mapA (\f -> case f of
       FAtomic0 a -> FAtomic0 (subst s a)
-      FInsert0 lits -> FInsert0 lits
+      FInsert0 lits -> FInsert0 (subst s lits)
       FSequencing0 form1 form2 -> FSequencing0 form1 form2
       FChoice0 form1 form2 -> FChoice0 form1 form2
       FPar0 form1 form2 -> FPar0 form1 form2
