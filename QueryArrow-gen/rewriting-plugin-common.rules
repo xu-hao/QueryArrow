@@ -274,7 +274,9 @@ rewrite insert D_USER_PASSWORD_BY_USER_ZONE_AND_NAME(zn, un, pw, expiryts, cts, 
 
 predicate D_USER_PASSWORD_BY_USER property (key input int64, input text, input text)
 rewrite insert D_USER_PASSWORD_BY_USER(uid, pw, mts)
-    insert USER_PASSWORD_OBJ(uid, pw) USER_PASSWORD_MODIFY_TS(uid, pw, mts)
+    USER_PASSWORD_PASS_EXPIRY_TS(uid, pw2, exp) 
+    delete USER_PASSWORD_OBJ(uid, pw2)
+    insert USER_PASSWORD_OBJ(uid, pw) USER_PASSWORD_MODIFY_TS(uid, pw, mts) USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, exp)
 
 
 predicate D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_CREATE_TS object (key input text, key input text, key input text, key input text)
@@ -378,7 +380,7 @@ rewrite D_USER_ID2(zn, un, uid)
     USER_NAME(uid, un) USER_ZONE_NAME(uid, zn)
 
 predicate D_USER_ID_WITH_PASSWORD property (key input text, key input text, input output int64)
-rewrite D_USER_ID_WITH_PASSWORD(zn, un, uid2)
+rewrite D_USER_ID_WITH_PASSWORD(zn, un, uid)
     USER_NAME(uid, un) USER_ZONE_NAME(uid, zn) USER_PASSWORD_OBJ(uid, pw)
 
 predicate D_META_ID property (key input text, key input text, key input text, input output int64)
