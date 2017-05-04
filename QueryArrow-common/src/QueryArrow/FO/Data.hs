@@ -25,6 +25,7 @@ import Data.Int (Int64, Int32)
 import Data.Binary.Get
 import Data.ByteString.Lazy (fromStrict)
 import Data.Typeable (Typeable)
+import Debug.Trace
 
 
 -- predicate kinds
@@ -601,23 +602,24 @@ instance Subst Summary where
 instance Subst (Atom1 a) => Subst (Lit1 a) where
     subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
  
-instance (Unannotate b (Formula0 a), Subst (Atom1 a)) => Subst (Formula1 a b) where
-    subst s = mapA (\f -> case f of
-      FAtomic0 a -> FAtomic0 (subst s a)
-      FInsert0 lits -> FInsert0 (subst s lits)
-      FSequencing0 form1 form2 -> FSequencing0 form1 form2
-      FChoice0 form1 form2 -> FChoice0 form1 form2
-      FPar0 form1 form2 -> FPar0 form1 form2
-      Aggregate0 (FReturn vars) form -> Aggregate0 (FReturn (subst s vars)) form
-      Aggregate0 Not a -> Aggregate0 Not a
-      Aggregate0 Exists a -> Aggregate0 Exists a
-      Aggregate0 (Summarize funcs groupby) a -> Aggregate0 (Summarize (subst s funcs) (map (subst s) groupby)) a
-      Aggregate0 (Limit n) a -> Aggregate0 (Limit n) a
-      Aggregate0 Distinct a -> Aggregate0 Distinct a
-      Aggregate0 (OrderByAsc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
-      Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
-      FZero0 -> FZero0
-      FOne0 -> FOne0)
+instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a), Subst (Atom1 a)) => Subst (Formula1 a b) where
+    subst s a = let b = mapA (\f -> case f of
+                        FAtomic0 a -> FAtomic0 (subst s a)
+                        FInsert0 lits -> FInsert0 (subst s lits)
+                        FSequencing0 form1 form2 -> FSequencing0 form1 form2
+                        FChoice0 form1 form2 -> FChoice0 form1 form2
+                        FPar0 form1 form2 -> FPar0 form1 form2
+                        Aggregate0 (FReturn vars) form -> Aggregate0 (FReturn (subst s vars)) form
+                        Aggregate0 Not a -> Aggregate0 Not a
+                        Aggregate0 Exists a -> Aggregate0 Exists a
+                        Aggregate0 (Summarize funcs groupby) a -> Aggregate0 (Summarize (subst s funcs) (map (subst s) groupby)) a
+                        Aggregate0 (Limit n) a -> Aggregate0 (Limit n) a
+                        Aggregate0 Distinct a -> Aggregate0 Distinct a
+                        Aggregate0 (OrderByAsc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
+                        Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
+                        FZero0 -> FZero0
+                        FOne0 -> FOne0) a in
+                    trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $ b
 
 instance Subst a => Subst [a] where
     subst s = map (subst s)

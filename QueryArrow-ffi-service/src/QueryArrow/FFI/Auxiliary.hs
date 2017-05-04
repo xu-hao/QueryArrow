@@ -17,6 +17,8 @@ import Data.Int
 import QueryArrow.FFI.Service
 import Data.Text.Encoding
 import qualified Data.ByteString.UTF8 as BSUTF8
+import Control.Exception
+import Debug.Trace
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -808000
@@ -24,13 +26,23 @@ eCAT_NO_ROWS_FOUND = -808000
 eNULL :: Int
 eNULL = -1095000
 
+execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
+execAbstract svc session form params = do
+  r <- trace ("AAA execAbstract: form " ++ serialize form) $ liftIO $ runEitherT (execQuery svc session form params) `catch` (\e -> return (Left (-1,Text.pack(show (e::SomeException)))))
+  case r of
+    Left err -> trace ("execAbstract: caught error " ++ show err) $ throwError err
+    Right a -> return a
+
+getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow]
+getAllResultAbstract svc session vars form params = do
+  r <- trace ("AAA getAllResultValues: form " ++ serialize form) $ liftIO $ runEitherT (getAllResult svc session vars form params) `catch` (\e -> return (Left (-1,Text.pack(show (e::SomeException)))))
+  case r of
+    Left err -> trace ("getAllResultValues: caught error " ++ show err) $ throwError err
+    Right a -> return a
+
 getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> Int -> EitherT Error IO [MapResultRow]
 getSomeResults svc session vars form params n =
-  getAllResult svc session vars (Aggregate (Limit n) form) params
-
-execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
-execAbstract svc session form params =
-  execQuery svc session form params
+  getAllResultAbstract svc session vars (Aggregate (Limit n) form) params
 
 getResultValues :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [AbstractResultValue]
 getResultValues svc session vars form params = do
@@ -45,7 +57,7 @@ getResultValues svc session vars form params = do
 
 getAllResultValues :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
 getAllResultValues svc session vars form params = do
-  count <- getAllResult svc session vars form params
+  count <- getAllResultAbstract svc session vars form params
   case count of
       [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
       rows ->

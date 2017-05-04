@@ -184,9 +184,9 @@ predicate D_TOKEN_ID property(key input text, key input text, input output int64
 rewrite D_TOKEN_ID (ns, n, id)
     TOKN_TOKEN_NAME(id, n) TOKN_TOKEN_NAMESPACE(id, ns)
 
-predicate D_TOKEN_NAME_BY_NAMESPACE_AND_NAME property(key input text, key input text)
-rewrite D_TOKEN_NAME_BY_NAMESPACE_AND_NAME (ns, n)
-    TOKN_TOKEN_NAME(id, n) TOKN_TOKEN_NAMESPACE(id, ns)
+predicate D_TOKEN_NAME_BY_NAMESPACE_AND_NAME property(key input text, key input text, key output text)
+rewrite D_TOKEN_NAME_BY_NAMESPACE_AND_NAME (ns, n, tn)
+    TOKN_TOKEN_NAME(id, n) TOKN_TOKEN_NAMESPACE(id, ns) eq(text n, tn)
 
 predicate D_USER object(key input int64, input output text, input output text, input output text, input output text, input output text)
 rewrite insert D_USER(uid, un, type, zn, cts, mts)
