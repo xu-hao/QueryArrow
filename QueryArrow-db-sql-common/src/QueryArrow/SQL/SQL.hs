@@ -899,12 +899,16 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsert2 _ (Lit sign
                                       then if not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
                                           else return ks{updateKey = Just (tablename, key), ksDeleteObj = True}
-                                      else return ks{updateKey = Just (tablename, key), ksInsertObj = True}
+                                      else if not (superset [(tablename, key)] (queryKeys ks))
+                                          then lift Nothing
+                                          else return ks{updateKey = Just (tablename, key), ksInsertObj = True}
                                   else if isDelete
                                       then if not (superset [(tablename, key)] (queryKeys ks))
                                           then lift Nothing
                                           else return ks{updateKey = Just (tablename, key), ksDeleteProp = [pred0]}
-                                      else return ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
+                                      else if not (superset [(tablename, key)] (queryKeys ks))
+                                          then lift Nothing
+                                          else return ks{updateKey = Just (tablename, key), ksInsertProp = [pred0]}
                           Just key' ->
                               trace "#############4" $ if isObject
                                   then trace "#############6" $ if isDelete
@@ -979,7 +983,7 @@ instance IGenericDatabase01 SQLTrans where
             retvartypes = map (\var0 -> case lookup var0 vtm of
                                                 Nothing -> error "var type not found"
                                                 Just (ParamType _ _ _ p) -> p) retvars in
-            return (case sqlquery of
+            trace ("gTranslateQuery of SQLTrans: " ++ serialize sqlquery) $ return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, retvartypes, serialize sqlquery, params sql)
 

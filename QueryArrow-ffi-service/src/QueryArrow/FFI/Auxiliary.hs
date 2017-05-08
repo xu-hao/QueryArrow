@@ -18,6 +18,7 @@ import QueryArrow.FFI.Service
 import Data.Text.Encoding
 import qualified Data.ByteString.UTF8 as BSUTF8
 import Control.Exception
+import Database.HDBC
 import Debug.Trace
 
 eCAT_NO_ROWS_FOUND :: Int
@@ -26,9 +27,19 @@ eCAT_NO_ROWS_FOUND = -808000
 eNULL :: Int
 eNULL = -1095000
 
+eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME :: Int
+eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME = -809000
+
 execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
 execAbstract svc session form params = do
-  r <- trace ("AAA execAbstract: form " ++ serialize form) $ liftIO $ runEitherT (execQuery svc session form params) `catch` (\e -> return (Left (-1,Text.pack(show (e::SomeException)))))
+  r <- trace ("AAA execAbstract: form " ++ serialize form) $ liftIO $ runEitherT (execQuery svc session form params) 
+       `catch` (\e -> let (SqlError state nativeerror errormsg) = e
+                          errstr = show e in 
+                          return (Left (case nativeerror of
+                                            23505 -> eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME
+					    _ -> - nativeerror, Text.pack(errstr))))
+       `catch` (\e -> let errstr = show (e::SomeException) in 
+                          return (Left (-1, Text.pack(errstr))))
   case r of
     Left err -> trace ("execAbstract: caught error " ++ show err) $ throwError err
     Right a -> return a

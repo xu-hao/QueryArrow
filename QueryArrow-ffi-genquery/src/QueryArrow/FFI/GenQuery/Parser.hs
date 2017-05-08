@@ -20,7 +20,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.opStart = oneOf "=<>|",
     T.opLetter = oneOf "=<>|",
     T.reservedNames = ["select", "where", "and", "like", "parent_of", "order", "SELECT", "WHERE", "AND", "LIKE", "PARENT_OF", "ORDER"],
-    T.reservedOpNames = ["=", "<>", "||"],
+    T.reservedOpNames = ["=", "<>", "||", "!="],
     T.caseSensitive = True
 }
 
@@ -89,5 +89,7 @@ cond2P' = try (EqString <$> (reservedOp "=" >> stringp)) <|>
           try (EqInteger <$> (reservedOp "=" >> integer)) <|>
           try (NotEqString <$> (reservedOp "<>" >> stringp)) <|>
           try (NotEqInteger <$> (reservedOp "<>" >> integer)) <|>
+          try (NotEqString <$> (reservedOp "!=" >> stringp)) <|>
+          try (NotEqInteger <$> (reservedOp "!=" >> integer)) <|>
           try (LikeCond <$> (likeP >> stringp)) <|>
           ParentOfCond <$> (parentOfP >> stringp)

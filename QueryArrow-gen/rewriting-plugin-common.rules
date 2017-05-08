@@ -294,6 +294,7 @@ rewrite delete D_USER_PASSWORD_BY_USER_ZONE_AND_NAME_AND_EXPIRY_TS(zn, un, minx,
 predicate D_USER_PASSWORD_BY_USER_ID object (key input int64)
 rewrite delete D_USER_PASSWORD_BY_USER_ID(uid)
     USER_PASSWORD_OBJ(uid, pw) delete USER_PASSWORD_OBJ(uid, pw)
+export D_USER_PASSWORD_BY_USER_ID
 
 predicate D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS object (key input int64, key input int64, key input int64)
 rewrite delete D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS (minx, maxx, curr)
@@ -352,6 +353,11 @@ rewrite delete D_USER_GROUP_(gid, uid)
 predicate D_USER_GROUP object (key input int64, key input int64, input output text, input output text)
 rewrite insert D_USER_GROUP(gid, uid, cts, mts)
     insert USER_GROUP_OBJ(gid, uid) USER_GROUP_CREATE_TS(gid, uid, cts) USER_GROUP_MODIFY_TS(gid,uid, mts)
+
+predicate USER_GROUP_NAME object (key input output int64, key input output text)
+rewrite USER_GROUP_NAME(uid, gn)
+    USER_GROUP_OBJ(gid, uid) USER_NAME(gid, gn)
+export USER_GROUP_NAME
 
 predicate D_USER_AUTH object (key input int64)
 rewrite delete D_USER_AUTH(uid)
@@ -421,7 +427,7 @@ rewrite delete D_METAMAP_BY_AVU_AND_OBJ_ID(a, v, u, id)
 
 predicate D_META object (key input int64, input output text, input output text, input output text, input output text, input output text)
 rewrite insert D_META(mid, a, v, u, cts, mts)
-    insert META_OBJ(int64 mid) META_ATTR_NAME( mid, a) META_ATTR_VALUE( mid, v) META_ATTR_UNIT( mid, u) META_CREATE_TS( mid, cts) META_MODIFY_TS( mid, mts)
+    insert META_OBJ(mid) META_ATTR_NAME( mid, a) META_ATTR_VALUE( mid, v) META_ATTR_UNIT( mid, u) META_CREATE_TS( mid, cts) META_MODIFY_TS( mid, mts)
 
 predicate D_COLL_INHERITANCE_TS property (key input int64, input output text, input output text)
 rewrite insert D_COLL_INHERITANCE_TS(cid, ci, ts)
@@ -535,6 +541,7 @@ rewrite insert D_REPL2_BY_REPL_NUM(id, rnum, rid, cid, n,
             DATA_SIZE(id, rid, dsize) DATA_PATH(id, rid, filepath) DATA_OWNER_NAME(id, rid, un) DATA_OWNER_ZONE(id, rid, zn)
             DATA_IS_DIRTY(id, rid, dirty) DATA_STATUS(id, rid, status) DATA_CHECKSUM(id, rid, chksum) DATA_MODE(id, rid, dmode) DATA_CREATE_TS(id, rid, cts) DATA_MODIFY_TS(id, rid, mts)
             DATA_EXPIRY_TS(id, rid, expts) DATA_RESC_NAME(id, rid, rn)
+export D_REPL2_BY_REPL_NUM
 
 predicate D_REPL object (key input int64, key input int64, input output int64, input output text, input output int64,
                         input output text, input output text, input output int64, input output text, input output text,
@@ -947,9 +954,9 @@ rewrite D_SIMPLE_QUERY_2(
     tns, pat,
     tns2, tid0, tn, value1, value2,
     value3, tcomment, cts, mts)
-    eq(int64 tid0, tid)
-    TOKN_TOKEN_NAMESPACE(tid, tns) eq(text tns, tns2) TOKN_OBJ(tid) TOKN_TOKEN_NAME(tid, tn) like(tn, pat) TOKN_TOKEN_VALUE(tid, value) TOKN_TOKEN_VALUE2(tid, value2)
+    TOKN_TOKEN_NAMESPACE(tid, tns) eq(text tns, tns2) TOKN_OBJ(tid) TOKN_TOKEN_NAME(tid, tn) like(tn, pat) TOKN_TOKEN_VALUE(tid, value1) TOKN_TOKEN_VALUE2(tid, value2)
     TOKN_TOKEN_VALUE3(tid, value3) TOKN_COMMENT(tid, tcomment) TOKN_CREATE_TS(tid, cts) TOKN_MODIFY_TS(tid, mts)
+    eq(text tid, tid0)
 
 export D_SIMPLE_QUERY_3
 predicate D_SIMPLE_QUERY_3 property(
@@ -974,7 +981,7 @@ rewrite D_SIMPLE_QUERY_4(
     RESC_OBJ(rid) RESC_NAME(rid, rn) eq(text rn, rn2) RESC_ZONE_NAME(rid, zn) RESC_TYPE_NAME(rid, type) RESC_CLASS_NAME(rid, class)
     RESC_NET(rid, net) RESC_DEF_PATH(rid, defpath) RESC_FREE_SPACE(rid, free_space) RESC_FREE_SPACE_TS(rid, free_space_ts) RESC_INFO(rid, info)
     RESC_COMMENT(rid, comment) RESC_STATUS(rid, status) RESC_CREATE_TS(rid, cts) RESC_MODIFY_TS(rid, mts) RESC_CHILDREN(rid, children)
-    RESC_CONTEXT(rid, context) RESC_PARENT(rid, parent) RESC_OBJCOUNT(rid, objcount) RESC_PARENT_CONTEXT(rid, pc)
+    RESC_CONTEXT(rid, context) RESC_PARENT(rid, parent) RESC_OBJCOUNT(rid, objcount) eq(text objcount, objcount0) RESC_PARENT_CONTEXT(rid, pc)
 
 export D_SIMPLE_QUERY_5
 predicate D_SIMPLE_QUERY_5 property(
