@@ -148,10 +148,14 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
             Aggregate Not (whereform wherecol)
         wherelit wherecol "=" =
             whereform wherecol
-    let cond = foldl (.*.) FOne (zipWith wherelit wherecols whereops )
+    let cond = foldl (.*.) ("DATA_OBJ" @@ [var "w_data_id", var "w_resc_id"]) (zipWith wherelit wherecols whereops )
     let updateform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = updateatom "u_" wherecol
+                            | wherecol == "resc_id" = FOne
                             | otherwise = error ("cannot update " ++ wherecol)
-    let update = foldl (.*.) cond (map updateform updatecols)
+    let update = foldl (.*.) cond (map updateform updatecols) .*. 
+                     if "resc_id" `elem` updatecols
+                         then "UPDATE_RESC_ID" @@ [var "w_data_id", var "w_resc_id", var "u_resc_id"]
+                         else FOne
     let whereparam col val = (Var ("w_" ++ col), AbstractResultValue (StringValue (pack val)))
     let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
     let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
@@ -168,7 +172,7 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
     cupdatevals2 <- peekArray upcols cupdatevals
     updatevals <- mapM peekCString cupdatevals2
     cn <- peekCString ccn
-    let cond = "COLL_NAME" @@ [var "cid", var "w_coll_name"]
+    let cond = "COLL_OBJ" @@ [var "cid"] .*. "COLL_NAME" @@ [var "cid", var "w_coll_name"]
     let wherepredicate wherecol0 =
             case wherecol0 of
                     "coll_type" -> "COLL_TYPE"

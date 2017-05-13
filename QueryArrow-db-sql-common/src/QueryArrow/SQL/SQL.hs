@@ -301,6 +301,13 @@ type TransMonad a = StateT TransState NewEnv a
 freshSQLVar :: TableName -> TransMonad SQLVar
 freshSQLVar tablename = lift $ SQLVar <$> new (StringWrapper tablename)
 
+subState :: TransMonad a -> TransMonad a
+subState a = do
+  state <- get
+  r <- a
+  put state
+  return r
+
 sqlExprFromArg :: Expr -> TransMonad (Either SQLExpr Var)
 sqlExprFromArg arg = do
     ts <- get
@@ -505,11 +512,11 @@ translateFormulaToSQL (FZero) =
     return sqlfalse
 
 translateFormulaToSQL (Aggregate Exists conj) = do
-    sql <- translateFormulaToSQL conj
+    sql <- subState (translateFormulaToSQL conj)
     return (sqlexists sql)
 
 translateFormulaToSQL (Aggregate Not form) =
-    snot <$> translateFormulaToSQL form
+    snot <$> subState (translateFormulaToSQL form)
 
 translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
     sql <- translateFormulaToSQL conj

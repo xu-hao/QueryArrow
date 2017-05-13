@@ -50,9 +50,10 @@ sqlBuiltIn lookupPred =
         (lookupPred "not_like_regex", simpleBuildIn "not_like_regex" (\ args ->
             return (swhere (SQLCompCond "!~" (head args) (args !! 1))))),
         (lookupPred "in", simpleBuildIn "in" (\args ->
-            let sql = swhere (SQLCompCond "in" (head args) (SQLExprText ("(" ++ (case args !! 1 of
-                                                                                      SQLStringConstExpr str -> unpack str
-                                                                                      _ -> error "the second argument of in is not a string") ++ ")"))) in
+            let sql = swhere (SQLCompCond "=" (head args) (SQLFuncExpr "ANY" [args !! 1])) -- SQLExprText ("(" ++ (case args !! 1 of
+                                                                              --        SQLStringConstExpr str -> unpack str
+                                                                                --      _ -> error ("the second argument of in is not a string, args = " ++ show args)) ++ ")"))) 
+            in
                 return sql)),
         (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "+" a b)]
             )),

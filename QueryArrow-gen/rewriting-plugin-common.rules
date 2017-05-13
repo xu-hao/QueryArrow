@@ -252,6 +252,11 @@ predicate D_ACCESS_BY_OBJ_ID object (input output int64)
 rewrite delete D_ACCESS_BY_OBJ_ID(id)
     OBJT_ACCESS_OBJ(id, uid, acc) delete OBJT_ACCESS_OBJ(id, uid, acc)
 
+predicate D_ACCESS_BY_DATA_ID object (input output int64)
+rewrite delete D_ACCESS_BY_DATA_ID(id)
+    ~exists(DATA_OBJ(id,rid)) OBJT_ACCESS_OBJ(id, uid, acc) delete OBJT_ACCESS_OBJ(id, uid, acc)
+export D_ACCESS_BY_DATA_ID
+
 predicate D_ACCESS_BY_COLL_NAME object (input text)
 rewrite delete D_ACCESS_BY_COLL_NAME(cn)
     COLL_NAME(cid, cn) OBJT_ACCESS_OBJ(cid, uid, acc) delete OBJT_ACCESS_OBJ(cid, uid, acc)
@@ -556,6 +561,24 @@ rewrite insert D_REPL(id, rid, cid, n, rnum,
             DATA_IS_DIRTY(id, rid, dirty) DATA_STATUS(id, rid, status) DATA_CHECKSUM(id, rid, chksum) DATA_MODE(id, rid, dmode) DATA_CREATE_TS(id, rid, cts) DATA_MODIFY_TS(id, rid, mts)
             DATA_EXPIRY_TS(id, rid, expts) DATA_RESC_NAME(id, rid, rn)
 
+predicate D_REPL_BY_RESC object (key input int64, key input int64)
+rewrite delete D_REPL_BY_RESC(id, rid) 
+    delete DATA_OBJ(id, rid)
+export D_REPL_BY_RESC
+
+predicate UPDATE_RESC_ID property (key input int64, key input int64, key input int64)
+rewrite UPDATE_RESC_ID (id, rid, rid2)
+    D_REPL2(id, rid, cid, n, rnum,
+            version, dtype, dsize, filepath, un,
+            zn, dirty, status, chksum, dmode,
+            cts, mts, expts, rn) 
+    delete D_REPL_BY_RESC(id, rid)
+    insert D_REPL(id, rid2, cid, n, rnum,
+            version, dtype, dsize, filepath, un,
+            zn, dirty, status, chksum, dmode,
+            cts, mts, expts, rn)
+export UPDATE_RESC_ID
+
 predicate D_ACCESS_INHERIT_COLL object (input output int64, input output int64, input output text, input output text)
 rewrite insert D_ACCESS_INHERIT_COLL(id, cid, cts, mts)
     OBJT_ACCESS_OBJ(cid, uid, acc) insert OBJT_ACCESS_OBJ(id, uid, acc) OBJT_ACCESS_CREATE_TS(id, uid, acc, cts) OBJT_ACCESS_MODIFY_TS(id, uid, acc, mts)
@@ -814,7 +837,7 @@ rewrite D_DATA_BY_RESC_NOT_IN_CHILD(rn, crn, id)
 
 predicate D_DATA_BY_RESC_LIST property (key input text, key input text, input output int64)
 rewrite D_DATA_BY_RESC_LIST(rids, rids2, id)
-    distinct (DATA_OBJ(id, rid) in(text rid, rids) ~ in(text rid, rids2) return id)
+    distinct (DATA_OBJ(id, rid0) exists (DATA_OBJ(id, rid) in(text rid, rids)) ~ exists (DATA_OBJ(id, rid)  in(text rid, rids2)) return id)
 
 predicate D_NEXT_ID object (output text)
 rewrite D_NEXT_ID(oid)

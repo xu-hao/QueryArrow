@@ -39,6 +39,7 @@ toIdVariable :: String -> Var
 toIdVariable col = Var ("x" ++ extractPrefix col ++ "_ID")
 
 dataRescId = Var "xDATA_RESC_ID"
+userAuthName = Var "xUSER_DN"
 
 translateGenQueryColumnToPredicate :: String -> Formula
 translateGenQueryColumnToPredicate  col =
@@ -46,6 +47,8 @@ translateGenQueryColumnToPredicate  col =
           "RESC_ID" -> "RESC_OBJ" @@ [VarExpr (toVariable col)]
           "COLL_ID" -> "COLL_OBJ" @@ [VarExpr (toVariable col)]
           "DATA_ID" -> "DATA_OBJ" @@ [VarExpr (toVariable col), VarExpr dataRescId]
+          "USER_ID" -> "USER_OBJ" @@ [VarExpr (toVariable col)]
+          "USER_DN" -> "USER_AUTH_OBJ" @@ [VarExpr (toIdVariable col), VarExpr userAuthName]
           "DATA_RESC_ID" -> "DATA_OBJ" @@ [VarExpr (toIdVariable col), VarExpr dataRescId]
           "DATA_REPL_NUM" -> "DATA_REPL_NUM" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "DATA_COLL_ID" -> "DATA_COLL_ID" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
@@ -67,7 +70,7 @@ translateGenQueryColumnToPredicate  col =
           "DATA_MODE" -> "DATA_MODE" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "DATA_RESC_HIER" -> "DATA_RESC_HIER" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "DATA_RESC_NAME" -> "DATA_RESC_NAME" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
-          "DATA_REPL_STATUS" -> "DATA_STATUS" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
+          "DATA_REPL_STATUS" -> "DATA_IS_DIRTY" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "COLUMN_NAME_NOT_FOUND_421" -> "DATA_MODE" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "ZONE_NAME" -> "ZONE_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "ZONE_TYPE" -> "ZONE_TYPE_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
@@ -80,6 +83,7 @@ translateGenQueryColumnToPredicate  col =
           "RESC_LOC" -> "RESC_NET" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RESC_VAULT_PATH" -> "RESC_DEF_PATH" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RESC_FREE_SPACE" -> "RESC_FREE_SPACE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "RESC_FREE_SPACE_TIME" -> "RESC_FREE_SPACE_TS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RESC_INFO" -> "RESC_INFO" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RESC_COMMENT" -> "RESC_COMMENT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RESC_CREATE_TIME" -> "RESC_CREATE_TS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
@@ -109,6 +113,11 @@ translateGenQueryColumnToPredicate  col =
           "USER_COMMENT" -> "USER_COMMENT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "USER_TYPE" -> "USER_TYPE_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "USER_GROUP_NAME" -> "USER_GROUP_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "USER_INFO" -> "USER_INFO" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "USER_CREATE_TIME" -> "USER_CREATE_TS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "USER_MODIFY_TIME" -> "USER_MODIFY_TS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          -- USER_AUTH
+          "USER_AUTH_CREATE_TIME" -> "USER_AUTH_CREATE_TS" @@ [VarExpr (toIdVariable col), VarExpr userAuthName, VarExpr (toVariable col)]
           -- ACCESS (coll""
           "COLL_ACCESS_NAME" -> "TOKN_TOKEN_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "COLL_TOKEN_NAMESPACE" -> "TOKN_TOKEN_NAMESPACE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
