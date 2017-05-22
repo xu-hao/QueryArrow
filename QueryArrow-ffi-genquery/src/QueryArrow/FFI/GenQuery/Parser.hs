@@ -59,7 +59,9 @@ whereP = reserved "where" <|> reserved "WHERE"
 andP = reserved "and" <|> reserved "AND"
 likeP = reserved "like" <|> reserved "LIKE"
 parentOfP = reserved "parent_of" <|> reserved "PARENT_OF"
-orderP = reserved "order" <|> reserved "ORDER"
+orderDescP = reserved "order_desc" <|> reserved "ORDER_DESC"
+orderAscP = reserved "order" <|> reserved "ORDER"
+countP = reserved "count" <|> reserved "COUNT"
 
 genQueryP :: GenQueryParser GenQuery
 genQueryP = do
@@ -71,7 +73,9 @@ genQueryP = do
 
 selP :: GenQueryParser Sel
 selP =
-  try (orderP >> Sel <$> parens identifier <*> pure Order) <|>
+  try (orderDescP >> Sel <$> parens identifier <*> pure GQOrderDesc) <|>
+  try (orderAscP >> Sel <$> parens identifier <*> pure GQOrderAsc) <|>
+  try (countP >> Sel <$> parens identifier <*> pure GQCount) <|>
     (Sel <$> identifier <*> pure None)
 
 condP :: GenQueryParser Cond

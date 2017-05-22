@@ -40,6 +40,8 @@ toIdVariable col = Var ("x" ++ extractPrefix col ++ "_ID")
 
 dataRescId = Var "xDATA_RESC_ID"
 userAuthName = Var "xUSER_DN"
+dataId = Var "xDATA_ID"
+collId = Var "xCOLL_ID"
 
 translateGenQueryColumnToPredicate :: String -> Formula
 translateGenQueryColumnToPredicate  col =
@@ -163,6 +165,21 @@ toCondPredicate2  cols cond@(Cond col _) =
     then form
     else  (translateGenQueryColumnToPredicate  col) .*. form
 
+ancestors :: String -> [String]
+ancestors = ancestor "" where
+           ancestor "" ('/' : tl) = "'/'" : ancestor "/" tl
+           ancestor a ('/' : tl) = (reverse a) : ancestor ('/' : a) tl
+           ancestor a (hd : tl) = ancestor (hd : a) tl
+           ancestor a "" = [reverse a]
+
+escapeSQLTextArrayString :: String -> String
+escapeSQLTextArrayString "" = ""
+escapeSQLTextArrayString ('{' : tl) = "\\{" ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString (',' : tl) = "\\," ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString ('}' : tl) = "\\}" ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString (hd : tl) = hd : escapeSQLTextArrayString tl
+
+
 toCondPredicate :: Cond ->  Formula
 toCondPredicate  (Cond col (EqString str)) =
   "eq" @@ [CastExpr TextType (VarExpr (toVariable col)), StringExpr (pack str)]
@@ -175,8 +192,8 @@ toCondPredicate  (Cond col (NotEqInteger str)) =
 toCondPredicate  (Cond col (LikeCond str)) =
   "like" @@ [VarExpr (toVariable col), StringExpr (pack str)]
 toCondPredicate  (Cond col (ParentOfCond str)) =
-  "COLL_NAME" @@ [VarExpr (Var "cid"), StringExpr (pack str)] .*.
-      "COLL_PARENT_COLL_NAME" @@ [VarExpr (Var "cid"), VarExpr (toVariable col)]
+  let arrstr = "{" ++ intercalate "," (map escapeSQLTextArrayString (ancestors str)) ++ "}" in
+      "in" @@ [VarExpr (toVariable col), StringExpr (pack arrstr)]
 toCondPredicate  (Cond col (AndCond a b)) =
   toCondPredicate  (Cond col a) .*.
       toCondPredicate  (Cond col b)
@@ -213,19 +230,38 @@ toJoinPredicate  cols conds =
             then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xUSER_ID"), VarExpr (Var "xMETA_COLL_ID")]
             else FOne
         ]
+addAccessControl :: String -> String -> Var -> Formula -> Formula
+addAccessControl uz un id form =
+    form .*. "HAS_READ_PERMISSION" @@ [StringExpr (pack uz), StringExpr (pack un), VarExpr id]
+ 
+addAccessControls :: String -> String -> [String] -> Formula -> Formula
+addAccessControls _ _ [] form = form
+addAccessControls uz un ("DATA" : tabs) form = addAccessControls uz un tabs (addAccessControl uz un dataId form)
+addAccessControls uz un ("COLL" : tabs) form = addAccessControls uz un tabs (addAccessControl uz un collId form)
+addAccessControls uz un (_ : tabs) form = addAccessControls uz un tabs form
 
-translateGenQueryToQAL :: GenQuery -> ([Var],  Formula)
-translateGenQueryToQAL  (GenQuery sels conds) =
+translateGenQueryToQAL :: Bool -> Maybe (String, String) -> GenQuery -> ([Var],  Formula)
+translateGenQueryToQAL distinct addaccessctl (GenQuery sels conds) =
       if null sels
         then error "cannot translate genquery cols null"
         else
           let
+              count = not (null (filter (\(Sel _ a) -> case a of 
+                                                           GQCount -> True
+                                                           _ -> False) sels))
               cols = map (\(Sel col _) -> col) sels
               vars = map toVariable cols
-              form0 = Aggregate (FReturn vars) (foldr (.*.) FOne (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds))
-              orders = map (\(Sel col _) -> col) (filter (\(Sel _ sel) -> case sel of
-                                                                              Order -> True
-                                                                              _ -> False) sels)
-              form = foldr (\col form -> Aggregate (OrderByAsc (toVariable col)) form) form0 orders
+              tabs = nub (map extractPrefix cols) 
+              form0 = foldr (.*.) FOne (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds)
+              form1 = case addaccessctl of
+                          Just (uz, un) -> addAccessControls uz un tabs form0
+                          Nothing -> form0
+              form2 = Aggregate (FReturn vars) form1
+              orders = concatMap (\(Sel col sel) -> case sel of
+                                                                              GQOrderDesc -> [(col, OrderByDesc)]
+                                                                              GQOrderAsc -> [(col, OrderByAsc)]
+                                                                              _ -> []) sels
+              form3 = foldr (\(col, ord) form -> Aggregate (ord (toVariable col)) form) form2 orders
+              form = if distinct then Aggregate Distinct form3 else form3
           in
               (vars, form)

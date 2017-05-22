@@ -953,6 +953,11 @@ rewrite insert D_COLL_PARENT_COLL_NAME_RECURSIVE (oldcn, newcn)
     concat(oldcn, "/%", pattern) COLL_PARENT_COLL_NAME(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern))
     strlen(oldcn, oldl) strlen(pcn, l) add(oldl, 1, oldl1) sub(l, oldl, c) substr(pcn, oldl1, c, scn) concat(newcn, scn, newcn2) insert COLL_PARENT_COLL_NAME(cid, newcn2)
 
+predicate HAS_READ_PERMISSION property(key input text, key input text, key input int64)
+rewrite HAS_READ_PERMISSION(uz, un, id)
+    D_TOKEN_ID("access_type", "read object", tid) D_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) 
+    OBJT_ACCESS_OBJ(id, gid, acclev) le(tid, acclev) 
+export HAS_READ_PERMISSION
 
 // simple query
 

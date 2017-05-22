@@ -23,16 +23,20 @@ import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
 
-foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
-hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
-hs_gen_query svcptr sessionptr cqu cout ccol crow = do
+foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
+hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
+hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cqu cout ccol crow = do
   svc <- deRefStablePtr svcptr
   session <- deRefStablePtr sessionptr
+  let dist = fromIntegral cdist
+  let acc = fromIntegral cacc
+  uz <- peekCString cuserzone
+  un <- peekCString cusername
   qu <- peekCString cqu
   -- putStrLn ("genquery = " ++ qu)
   let (vars, form) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
-                Right gq -> translateGenQueryToQAL gq
+                Right gq -> translateGenQueryToQAL (dist /= 0) (if acc /= 0 then Just (uz, un) else Nothing) gq
   res <- runEitherT (getAllResult svc session vars ( form) mempty)
   case res of
     Left err -> error (show err)
