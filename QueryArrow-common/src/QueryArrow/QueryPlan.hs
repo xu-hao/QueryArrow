@@ -36,15 +36,15 @@ data QueryPlan0 a qp = Exec0 a
 
 type QueryPlan1 a f = f (QueryPlan0 a)
 
-type QueryPlan = QueryPlan1 FormulaT Tie
+type QueryPlan = QueryPlan1 FormulaT (Annotated VarTypeMap)
 
-pattern Exec a = Tie (Exec0 a)
-pattern QPPar a b = Tie (QPPar0 a b)
-pattern QPChoice a b = Tie (QPChoice0 a b)
-pattern QPSequencing a b = Tie (QPSequencing0 a b)
-pattern QPZero = Tie QPZero0
-pattern QPOne = Tie QPOne0
-pattern QPAggregate a b = Tie (QPAggregate0 a b)
+pattern Exec vtm a = Annotated vtm (Exec0 a)
+pattern QPPar vtm a b = Annotated vtm (QPPar0 a b)
+pattern QPChoice vtm a b = Annotated vtm (QPChoice0 a b)
+pattern QPSequencing vtm a b = Annotated vtm (QPSequencing0 a b)
+pattern QPZero vtm = Annotated vtm QPZero0
+pattern QPOne vtm = Annotated vtm QPOne0
+pattern QPAggregate vtm a b = Annotated vtm (QPAggregate0 a b)
 
 data QueryPlanData  = QueryPlanData {
     linscopevs :: MSet Var,
@@ -54,11 +54,12 @@ data QueryPlanData  = QueryPlanData {
     paramvs :: Set Var, -- parameter vars
     returnvs :: Set Var, -- return vars
     combinedvs :: Set Var, -- combined return and available vars that are still in scope
-    availablevs :: Set Var
+    availablevs :: Set Var,
+    vartypemap :: VarTypeMap
 }
 
 dqdb :: QueryPlanData
-dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom
+dqdb = QueryPlanData top top bottom bottom bottom bottom bottom bottom mempty
 
 type QueryPlan2 = QueryPlan1 (FormulaT, Int) (Annotated QueryPlanData)
 
@@ -123,16 +124,16 @@ findDB ret form env dbs =
           in show preds))) (hFindCULV @(IDatabaseUniformDBFormula FormulaT) (\db -> pred0 `elem` (map predName (getPreds db)) && supported db ret form env) dbs))
 
 formulaToQueryPlan :: (HMapConstraint (IDatabase) l) => HList l -> FormulaT -> QueryPlan
-formulaToQueryPlan dbs  form@(Annotated _ (FAtomic0 (Atom pred0  _))) =
-    Exec form
-formulaToQueryPlan _ (Annotated _ FOne0) = QPOne
-formulaToQueryPlan _ (Annotated _ FZero0) = QPZero
-formulaToQueryPlan dbs  (Annotated _ (FChoice0 form1 form2)) = QPChoice (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
-formulaToQueryPlan dbs  (Annotated _ (FPar0 form1 form2)) = QPPar (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
-formulaToQueryPlan dbs  (Annotated _ (FSequencing0 form1 form2)) = QPSequencing (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
-formulaToQueryPlan dbs  (Annotated _ (Aggregate0 agg form)) = QPAggregate agg (formulaToQueryPlan dbs  form)
-formulaToQueryPlan dbs  ins@(Annotated _ (FInsert0 (Lit _ (Atom pred1 _)))) =
-        Exec ins
+formulaToQueryPlan dbs  form@(Annotated vtm (FAtomic0 (Atom pred0  _))) =
+    Exec vtm form -- redundent vtm
+formulaToQueryPlan _ (Annotated vtm FOne0) = QPOne vtm
+formulaToQueryPlan _ (Annotated vtm FZero0) = QPZero vtm
+formulaToQueryPlan dbs  (Annotated vtm (FChoice0 form1 form2)) = QPChoice vtm (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
+formulaToQueryPlan dbs  (Annotated vtm (FPar0 form1 form2)) = QPPar vtm (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
+formulaToQueryPlan dbs  (Annotated vtm (FSequencing0 form1 form2)) = QPSequencing vtm (formulaToQueryPlan dbs form1) (formulaToQueryPlan dbs form2)
+formulaToQueryPlan dbs  (Annotated vtm (Aggregate0 agg form)) = QPAggregate vtm agg (formulaToQueryPlan dbs  form)
+formulaToQueryPlan dbs  ins@(Annotated vtm (FInsert0 (Lit _ (Atom pred1 _)))) =
+        Exec vtm ins -- redundent vtm
 
 
 
@@ -140,38 +141,38 @@ formulaToQueryPlan dbs  ins@(Annotated _ (FInsert0 (Lit _ (Atom pred1 _)))) =
 {- near semi-ring -}
 simplifyQueryPlan :: QueryPlan -> QueryPlan
 
-simplifyQueryPlan qp@(Exec _) = qp
-simplifyQueryPlan (QPChoice qp1 qp2) =
+simplifyQueryPlan qp@(Exec _ _) = qp
+simplifyQueryPlan (QPChoice vtm qp1 qp2) =
     let qp1' = simplifyQueryPlan  qp1
         qp2' = simplifyQueryPlan  qp2 in
         case (qp1', qp2') of
-            (QPZero, _) -> qp2'
-            (_, QPZero) -> qp1'
-            (_, _) -> QPChoice qp1' qp2'
-simplifyQueryPlan (QPPar qp1 qp2) =
+            (QPZero _, _) -> qp2'
+            (_, QPZero _) -> qp1'
+            (_, _) -> QPChoice vtm qp1' qp2'
+simplifyQueryPlan (QPPar vtm qp1 qp2) =
     let qp1' = simplifyQueryPlan  qp1
         qp2' = simplifyQueryPlan  qp2 in
         case (qp1', qp2') of
-            (QPZero, _) -> qp2'
-            (_, QPZero) -> qp1'
-            (_, _) -> QPPar qp1' qp2'
-simplifyQueryPlan  (QPSequencing qp1 qp2) =
+            (QPZero _, _) -> qp2'
+            (_, QPZero _) -> qp1'
+            (_, _) -> QPPar vtm qp1' qp2'
+simplifyQueryPlan  (QPSequencing vtm qp1 qp2) =
     let qp1' = simplifyQueryPlan  qp1
         qp2' = simplifyQueryPlan  qp2 in
         case (qp1', qp2') of
-            (QPOne, _) -> qp2'
-            (QPZero, _) -> QPZero
-            (_, QPOne) -> qp1'
-            (_, _) -> QPSequencing qp1' qp2'
-simplifyQueryPlan  (QPAggregate Not qp1) =
+            (QPOne _, _) -> qp2'
+            (QPZero _, _) -> QPZero vtm
+            (_, QPOne _) -> qp1'
+            (_, _) -> QPSequencing vtm qp1' qp2'
+simplifyQueryPlan  (QPAggregate vtm Not qp1) =
     let qp1' = simplifyQueryPlan  qp1 in
         case qp1' of
-            QPOne -> QPZero
-            QPZero -> QPOne
-            _ -> QPAggregate Not qp1'
-simplifyQueryPlan  (QPAggregate agg qp1) =
+            QPOne _ -> QPZero vtm
+            QPZero _ -> QPOne vtm
+            _ -> QPAggregate vtm Not qp1'
+simplifyQueryPlan  (QPAggregate vtm agg qp1) =
     let qp1' = simplifyQueryPlan  qp1 in
-        QPAggregate agg qp1'
+        QPAggregate vtm agg qp1'
 simplifyQueryPlan  qp = qp
 
 combineQPSequencingData :: QueryPlanData  -> QueryPlanData  -> QueryPlanData
@@ -184,7 +185,8 @@ combineQPSequencingData qp1 qp2 =
         returnvs = (returnvs qp1 \/ returnvs qp2) /\\ rinscopevs qp2,
         rinscopevs = rinscopevs qp2,
         linscopevs = linscopevs qp1,
-        combinedvs = (combinedvs qp1 \/ combinedvs qp2) /\\ rinscopevs qp2
+        combinedvs = (combinedvs qp1 \/ combinedvs qp2) /\\ rinscopevs qp2,
+        vartypemap = vartypemap qp1 <> vartypemap qp2
     }
 
 combineQPChoiceData :: QueryPlanData -> QueryPlanData -> QueryPlanData
@@ -197,7 +199,8 @@ combineQPChoiceData qp1 qp2 =
         returnvs = returnvs qp1 \/ returnvs qp2,
         rinscopevs = rinscopevs qp1 \/ linscopevs qp2,
         linscopevs = linscopevs qp1 \/ linscopevs qp2,
-        combinedvs = combinedvs qp2 \/ combinedvs qp2
+        combinedvs = combinedvs qp2 \/ combinedvs qp2,
+        vartypemap = vartypemap qp1 <> vartypemap qp2
     }
 
 combineQPParData :: QueryPlanData -> QueryPlanData -> QueryPlanData
@@ -210,7 +213,8 @@ combineQPParData qp1 qp2 =
         returnvs = returnvs qp1 \/ returnvs qp2,
         rinscopevs = rinscopevs qp1 \/ linscopevs qp2,
         linscopevs = linscopevs qp1 \/ linscopevs qp2,
-        combinedvs = combinedvs qp2 \/ combinedvs qp2
+        combinedvs = combinedvs qp2 \/ combinedvs qp2,
+        vartypemap = vartypemap qp1 <> vartypemap qp2
     }
 
 supportedDB :: IDatabaseUniformDBFormula FormulaT db => Set Var -> FormulaT -> Set Var -> db -> Bool
@@ -307,8 +311,9 @@ optimizeQueryPlan _ qp@(QPZero2 _) = qp
 optimizeQueryPlan dbsx (QPAggregate2 qpd agg qp1) =
     let qp1' = optimizeQueryPlan dbsx qp1 in
         case qp1' of
-            Exec2 _ (formula1@(Annotated vtm _), x) ->
-                        let exi = Annotated vtm (Aggregate0 agg formula1)
+            Exec2 _ (formula1, x) ->
+                        let vtm = vartypemap qpd
+                            exi = Annotated vtm (Aggregate0 agg formula1)
                             dbs' = fromMaybe (error "index out of range") (hApplyCUL @(IDatabaseUniformDBFormula FormulaT) @Bool (supportedDB (returnvs qpd) exi (paramvs qpd)) x dbsx)  in
                             if dbs' then
                               Exec2 qpd (exi,  x)
@@ -320,68 +325,68 @@ calculateVars :: Set Var -> MSet Var -> QueryPlan -> QueryPlan2
 calculateVars lvars rvars qp = calculateVars2 lvars (calculateVars1 rvars qp)
 
 calculateVars1 :: MSet Var -> QueryPlan -> QueryPlan2
-calculateVars1 rvars (Exec form) =
+calculateVars1 rvars (Exec vtm form) =
     let fvs = freeVars form in
-        Exec2 dqdb{freevs =  fvs, determinevs =  fvs, linscopevs = Include fvs \/ rvars, rinscopevs = rvars} (form, 0)
+        Exec2 dqdb{freevs =  fvs, determinevs =  fvs, linscopevs = Include fvs \/ rvars, rinscopevs = rvars, vartypemap = vtm} (form, 0)
 
-calculateVars1  rvars (QPSequencing qp1 qp2) =
+calculateVars1  rvars (QPSequencing vtm qp1 qp2) =
     let qp2'@(Annotated qpd2 _) = calculateVars1 rvars qp2
         qp1'@(Annotated qpd1 _) = calculateVars1 (linscopevs qpd2) qp1 in
         QPSequencing2   dqdb{
             freevs = freevs qpd1 \/ freevs qpd2,
             determinevs = determinevs qpd1 \/ determinevs qpd2,
             linscopevs = linscopevs qpd1,
-            rinscopevs = rinscopevs qpd2
+            rinscopevs = rinscopevs qpd2, vartypemap = vtm
             } qp1' qp2'
 
-calculateVars1 rvars  (QPChoice qp1 qp2) =
+calculateVars1 rvars  (QPChoice vtm qp1 qp2) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1
         qp2'@(Annotated qpd2 _) = calculateVars1 rvars qp2 in
         QPChoice2  dqdb{
             freevs = freevs qpd1 \/ freevs qpd2,
             determinevs = determinevs qpd1 /\ determinevs qpd2,
             linscopevs = linscopevs qpd1 \/ linscopevs qpd2,
-            rinscopevs = rinscopevs qpd1 \/ rinscopevs qpd2
+            rinscopevs = rinscopevs qpd1 \/ rinscopevs qpd2, vartypemap = vtm
             } qp1' qp2'
-calculateVars1 rvars  (QPPar qp1 qp2) =
+calculateVars1 rvars  (QPPar vtm qp1 qp2) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1
         qp2'@(Annotated qpd2 _) = calculateVars1 rvars qp2 in
         QPPar2 dqdb{
             freevs = freevs qpd1 \/ freevs qpd2,
             determinevs = determinevs qpd1 /\ determinevs qpd2,
             linscopevs = linscopevs qpd1 \/ linscopevs qpd2,
-            rinscopevs = rinscopevs qpd1 \/ rinscopevs qpd2
+            rinscopevs = rinscopevs qpd1 \/ rinscopevs qpd2, vartypemap = vtm
             } qp1' qp2'
-calculateVars1 rvars  QPOne = QPOne2 dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars}
-calculateVars1 rvars  QPZero = QPZero2 dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars}
-calculateVars1 rvars  (QPAggregate agg@Not qp1) =
+calculateVars1 rvars  (QPOne vtm) = QPOne2 dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars, vartypemap = vtm}
+calculateVars1 rvars  (QPZero vtm) = QPZero2 dqdb{freevs = bottom, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars, vartypemap = vtm}
+calculateVars1 rvars  (QPAggregate vtm agg@Not qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars}  agg qp1'
-calculateVars1 rvars  (QPAggregate agg@Exists qp1) =
+        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars, vartypemap = vtm}  agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@Exists qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars}  agg qp1'
-calculateVars1 rvars  (QPAggregate agg@(Summarize funcs groupby) qp1) =
+        QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars, vartypemap = vtm}  agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@(Summarize funcs groupby) qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = fromList (map fst funcs), linscopevs = linscopevs qpd1, rinscopevs = rvars}  agg qp1'
-calculateVars1 rvars  (QPAggregate agg@(Limit _) qp1) =
+        QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = fromList (map fst funcs), linscopevs = linscopevs qpd1, rinscopevs = rvars, vartypemap = vtm}  agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@(Limit _) qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1}  agg qp1'
-calculateVars1 rvars  (QPAggregate agg@Distinct qp1) =
+        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1, vartypemap = vtm}  agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@Distinct qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1}   agg qp1'
-calculateVars1 rvars  (QPAggregate agg@(OrderByAsc _) qp1) =
+        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1, vartypemap = vtm}   agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@(OrderByAsc _) qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1}   agg qp1'
-calculateVars1 rvars  (QPAggregate agg@(OrderByDesc _) qp1) =
+        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1, vartypemap = vtm}   agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@(OrderByDesc _) qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1}   agg qp1'
-calculateVars1 rvars  (QPAggregate agg@(FReturn vars) qp1) =
+        QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1, vartypemap = vtm}   agg qp1'
+calculateVars1 rvars  (QPAggregate vtm agg@(FReturn vars) qp1) =
   let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
     QPAggregate2 dqdb{
         freevs = freevs qpd1,
         determinevs = fromList vars,
         linscopevs = linscopevs qpd1,
-        rinscopevs = rvars
+        rinscopevs = rvars, vartypemap = vtm
         } agg qp1'
 
 
@@ -476,7 +481,8 @@ translateQueryPlan dbs (Exec2 qpd (form, x)) = do
         let vars = paramvs qpd
             vars2 = returnvs qpd
             trans :: (IDatabaseUniformDBFormula FormulaT db) => db ->  IO (DBQueryTypeIso db)
-            trans db =  DBQueryTypeIso <$> (translateQuery db vars2 form vars)
+            trans db =  -- trace ("translateQueryPlan: " ++ show form) $ 
+                DBQueryTypeIso <$> (translateQuery db vars2 form vars)
         qu <-  fromMaybe (error "index out of range") <$> (hApplyACULV @(IDatabaseUniformDBFormula FormulaT) @(DBQueryTypeIso) trans x dbs)
         return (Exec2 qpd (qu, (serialize form)))
 translateQueryPlan dbs  (QPChoice2 qpd qp1 qp2) = do

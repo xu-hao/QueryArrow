@@ -17,6 +17,7 @@ import Data.List (nub)
 import Data.Set (Set, toAscList)
 import qualified Data.Set as Set
 import Algebra.SemiBoundedLattice
+import Debug.Trace
 
 type Pattern = Atom
 

@@ -38,17 +38,23 @@ import qualified Data.Map.Strict as Map
 import Data.Aeson
 import Data.Aeson.TH
 import Data.List (find)
+import Debug.Trace
 
 functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
 functype n t = functype (n - 1) [t|CString -> $(t)|]
 
-data Type2 = StringType | IntType deriving (Show)
+data Type2 = StringType | IntType deriving (Show, Eq)
 
 cstringToText :: CString -> IO Text
 cstringToText str = do
     str2 <- peekCString str
     return (Text.pack str2)
+
+cstringToInt64 :: CString -> IO Int64
+cstringToInt64 str = do
+    str2 <- peekCString str
+    return (read str2)
 
 textToBuffer :: CString -> Int -> Text -> IO ()
 textToBuffer str n text = do
@@ -86,6 +92,10 @@ arrayToAllocateBuffer buf lenbuf txt = do
     arr <- newArray arrelems
     poke buf arr
 
+param :: String -> Type2 -> ExpQ
+param i StringType = [| AbstractResultValue (StringValue $(varE (mkName i))) |] 
+param i IntType = [| AbstractResultValue (Int64Value $(varE (mkName i))) |]
+
 queryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryFunction name inputtypes outputtypes = do
     let fn = mkName ("get_" ++ name)
@@ -97,14 +107,14 @@ queryFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(param i it) ) |]) args inputtypes)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = case outputtypes of
                     [StringType] -> [|getStringResult|]
-                    [IntType] -> [|getIntResult|]
+                    [IntType] -> [|getStringResult|]
                     _ -> [|getStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
     b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
@@ -121,13 +131,17 @@ queryLongFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(param i it) ) |]) args inputtypes)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     case outputtypes of
                   [StringType] -> do
+                      runIO $ putStrLn ("generating function " ++ show fn)
+                      b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+                      sequence [funD fn [return (Clause ps (NormalB b) [])]]
+                  [IntType] -> do
                       runIO $ putStrLn ("generating function " ++ show fn)
                       b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
@@ -148,7 +162,7 @@ querySomeFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : np : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(param i it) ) |]) args inputtypes)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -169,7 +183,7 @@ queryAllFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(param i it) ) |]) args inputtypes)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -194,7 +208,7 @@ queryAll2Function name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = [VarP s, VarP p, VarP listarg]
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(typeToConverter it) $(varE (mkName i)) ) |]) args inputtypes)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     let argListPat = listP (map (\i -> (varP (mkName i))) args)
@@ -211,7 +225,7 @@ hsQueryForeign name inputtypes outputtypes = do
   runIO $ putStrLn ("generating foreign " ++ ("hs_get_" ++ name))
   sequence [ForeignD <$> (ExportF CCall ("hs_get_" ++ name) (mkName ("hs_get_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) (case outputtypes of
     [StringType] -> [t|CString -> CInt -> IO Int|]
-    [IntType] -> [t|Ptr CLong -> IO Int|]
+    [IntType] -> [t|CString -> CInt -> IO Int|]
     _ -> [t|Ptr CString -> CInt -> IO Int|]))|])]
 
 hsQueryLongForeign :: String -> [Type2] -> [Type2] -> DecsQ
@@ -220,6 +234,8 @@ hsQueryLongForeign name inputtypes outputtypes = do
     runIO $ putStrLn ("generating foreign " ++ fn)
     case outputtypes of
         [StringType] ->
+            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
+        [IntType] ->
             sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
         _ -> do
             runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
@@ -245,6 +261,10 @@ hsQueryAll2Foreign name _ _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_all2_" ++ name))
     sequence [ForeignD <$> (ExportF CCall ("hs_get_all2_" ++ name) (mkName ("hs_get_all2_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> CInt -> Ptr (Ptr CString) -> Ptr CInt -> IO Int|])]
 
+cparam :: Name -> Type2 -> ExpQ
+cparam i StringType = [| liftIO $ cstringToText $(varE i) |]
+cparam i IntType = [| liftIO $ cstringToInt64 $(varE i) |]
+
 hsQueryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryFunction n inputtypes outputtypes = do
     let fn = mkName ("get_" ++ n)
@@ -257,12 +277,12 @@ hsQueryFunction n inputtypes outputtypes = do
     let argnames = map mkName args
     let ps = s : p : map VarP argnames ++ [VarP retn] ++ case outputtypes of
                   [StringType] -> [VarP retlen]
-                  [IntType] -> []
+                  [IntType] -> [VarP retlen]
                   _ -> [VarP retlen]
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let argList = zipWith cparam argnames inputtypes
     let retp = case outputtypes of
                   [StringType] -> [|textToBuffer $(varE retn) (fromIntegral $(varE retlen))|]
-                  [IntType] -> [|intToBuffer $(varE retn)|]
+                  [IntType] -> [|textToBuffer $(varE retn) (fromIntegral $(varE retlen))|]
                   _ -> [|arrayToBuffer $(varE retn) (fromIntegral $(varE retlen))|]
     runIO $ putStrLn ("generating function " ++ show fn2)
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session|] argnames
@@ -279,7 +299,7 @@ hsQueryLongFunction :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryLongFunction n inputtypes outputtypes = do
   let fn = mkName ("get_int_" ++ n)
   case outputtypes of
-      [StringType] -> do
+      [a] | a == StringType || a == IntType -> do
           let fn2 = mkName ("hs_get_int_" ++ n)
           let retn = mkName ("retn")
           s <- [p|svcptr|]
@@ -287,7 +307,7 @@ hsQueryLongFunction n inputtypes outputtypes = do
           let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
           let argnames = map mkName args
           let ps = s : p : map VarP argnames ++ [VarP retn]
-          let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+          let argList = zipWith cparam argnames inputtypes
           runIO $ putStrLn ("generating function " ++ show fn2)
           let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session|] argnames
           let b0 = foldl (\expr (arg, name) -> [|do
@@ -314,7 +334,7 @@ hsQuerySomeFunction n inputtypes _ = do
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames ++ [VarP retn, VarP retlen, VarP retlen2]
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let argList = zipWith cparam argnames inputtypes
     let retp = [|arrayToAllocatedBuffer $(varE retn) (fromIntegral $(varE retlen)) (fromIntegral $(varE retlen2))|]
     runIO $ putStrLn ("generating function " ++ show fn2)
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session (fromIntegral $(varE retlen2))|] argnames
@@ -339,7 +359,7 @@ hsQuerySome2Function n inputtypes _ = do
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames ++ [VarP retn, VarP retlen, VarP retlen2]
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let argList = zipWith cparam argnames inputtypes
     let retp = [|arrayToAllocatedBuffer2 $(varE retn) $(varE retlen) (fromIntegral $(varE retlen2))|]
     runIO $ putStrLn ("generating function " ++ show fn2)
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session (fromIntegral $(varE retlen2))|] argnames
@@ -363,7 +383,7 @@ hsQueryAllFunction n inputtypes _ = do
     let args = map (\i -> "arg" ++ show i) [1..length inputtypes]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames ++ [VarP retn, VarP retlen]
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let argList = zipWith cparam argnames inputtypes
     let retp = [|arrayToAllocateBuffer $(varE retn) $(varE retlen)|]
     runIO $ putStrLn ("generating function " ++ show fn2)
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session|] argnames
@@ -377,7 +397,7 @@ hsQueryAllFunction n inputtypes _ = do
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
 hsQueryAll2Function :: String -> [Type2] -> [Type2] -> DecsQ
-hsQueryAll2Function n _ _ = do
+hsQueryAll2Function n inputtypes _ = do
     let fn = mkName ("get_all2_" ++ n)
     let fn2 = mkName ("hs_get_all2_" ++ n)
     let retn = mkName "retn"
@@ -393,15 +413,16 @@ hsQueryAll2Function n _ _ = do
     let app = [|$(varE fn) svc session $(varE listarg)|]
     let b0 = [|do
                   let nargs = fromIntegral $(varE cnargs)
-                  $(varP listarg) <- liftIO $ peekArray nargs $(varE cargs) >>= mapM cstringToText
+                  $(varP listarg) <- liftIO $ peekArray nargs $(varE cargs) >>= mapM peekCString 
                   svc <- liftIO $ deRefStablePtr svcptr
                   session <- liftIO $ deRefStablePtr sessionptr
                   $(app)|]
     b <- [|processRes2 $(b0) $(retp)|]
     sequence [funD fn2 [return (Clause ps (NormalB b) [])]]
 
-createFunction :: String -> Int -> DecQ
-createFunction n a = do
+createFunction :: String -> [Type2] -> DecQ
+createFunction n pts = trace ("creating create function " ++ n ++ " " ++ show pts) $ do
+    let a = length pts
     let fn = mkName ("create_" ++ n)
     let pn = stringE("D_" ++ map toUpper n)
     s <- [p|svcptr|]
@@ -409,22 +430,25 @@ createFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(param i it)) |]) args pts)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execAbstract|]
     b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
-hsCreateForeign :: String -> Int -> DecQ
-hsCreateForeign n a = do
+hsCreateForeign :: String -> [Type2] -> DecQ
+hsCreateForeign n pts = do
+    let a = length pts
     ForeignD <$> (ExportF CCall ("hs_create_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype a [t|IO Int|])|])
 
-hsUpdateForeign :: String -> Int -> DecQ
-hsUpdateForeign n a = do
+hsUpdateForeign :: String -> [Type2] -> DecQ
+hsUpdateForeign n pts = do
+    let a = length pts
     ForeignD <$> (ExportF CCall ("hs_update_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype a [t|IO Int|])|])
 
-hsCreateFunction :: String -> Int -> DecQ
-hsCreateFunction n a = do
+hsCreateFunction :: String -> [Type2] -> DecQ
+hsCreateFunction n pts = do
+    let a = length pts
     let fn = mkName ("create_" ++ n)
     let fn2 = mkName ("hs_create_" ++ n)
     s <- [p|svcptr|]
@@ -432,7 +456,7 @@ hsCreateFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let argList = zipWith cparam argnames pts
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session|] argnames
     let b0 = foldl (\expr (arg, name) -> [|do
                                         $(varP name) <- $(arg)
@@ -443,8 +467,13 @@ hsCreateFunction n a = do
     b <- [|processRes $(b0) (const (return ()))|]
     funD fn2 [return (Clause ps (NormalB b) [])]
 
-createFunctionArray :: String -> Int -> DecQ
-createFunctionArray n a = do
+typeToConverter :: Type2 -> ExpQ
+typeToConverter StringType = [| \ x -> AbstractResultValue (StringValue (Text.pack x)) |] 
+typeToConverter IntType = [| \ x -> AbstractResultValue (Int64Value (read x)) |]
+
+createFunctionArray :: String -> [Type2] -> DecQ
+createFunctionArray n pts = do
+    let a = length pts
     let fn = mkName ("array_create_" ++ n)
     let pn = stringE("D_" ++ map toUpper n)
     s <- [p|svcptr|]
@@ -455,7 +484,7 @@ createFunctionArray n a = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execAbstract|]
-    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList (zip $(argList) (map (AbstractResultValue . StringValue) argarray)))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList (zip $(argList) (zipWith ($) $(listE (map typeToConverter pts)) argarray)))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ
@@ -472,15 +501,16 @@ hsCreateFunctionArray n = do
     p3 <- [p|len|]
     let ps = [s, p, p2, p3]
     let b0 = [|do
-                  argarray2 <- liftIO $ peekArray (fromIntegral len) argarray >>= mapM cstringToText
+                  argarray2 <- liftIO $ peekArray (fromIntegral len) argarray >>= mapM peekCString
                   svc <- liftIO $ deRefStablePtr svcptr
                   session <- liftIO $ deRefStablePtr sessionptr
                   $(varE fn) svc session argarray2|]
     b <- [|processRes $(b0) (const (return ()))|]
     funD fn2 [return (Clause ps (NormalB b) [])]
 
-deleteFunction :: String -> Int -> DecQ
-deleteFunction n a = do
+deleteFunction :: String -> [Type2] -> DecQ
+deleteFunction n pts = do
+    let a = length pts
     let fn = mkName ("delete_" ++ n)
     let pn = stringE("D_" ++ map toUpper n)
 
@@ -489,18 +519,20 @@ deleteFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let argList = listE (zipWith (\i it -> [| (Var $(stringE i), $(param i it)) |]) args pts)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execAbstract|]
     b <- [|$(func) svcptr session ( ($(pn) @@- $(argList2))) (Map.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
-hsDeleteForeign :: String -> Int -> DecQ
-hsDeleteForeign n a = do
+hsDeleteForeign :: String -> [Type2] -> DecQ
+hsDeleteForeign n pts = do
+    let a = length pts
     ForeignD <$> (ExportF CCall ("hs_delete_" ++ n) (mkName ("hs_delete_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype a [t|IO Int|])|])
 
-hsDeleteFunction :: String -> Int -> DecQ
-hsDeleteFunction n a = do
+hsDeleteFunction :: String -> [Type2] -> DecQ
+hsDeleteFunction n pts = do
+    let a = length pts
     let fn = mkName ("delete_" ++ n)
     let fn2 = mkName ("hs_delete_" ++ n)
     s <- [p|svcptr|]
@@ -508,7 +540,7 @@ hsDeleteFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = map (\i -> [| liftIO $ cstringToText $(varE i) |]) argnames
+    let argList = zipWith cparam argnames pts
     let app = foldl (\expr name -> [|$(expr) $(varE name)|]) [|$(varE fn) svc session|] argnames
     let b0 = foldl (\expr (arg, name) -> [|do
                                         $(varP name) <- $(arg)
@@ -543,19 +575,23 @@ functions :: String -> DecsQ
 functions path = do
     ((qr, ir, dr), preds) <- runIO (getRewritingRules path)
     let ptm = constructPredTypeMap preds
+    let                     getOutputTypes [] = []
+                            getOutputTypes (ParamType _ _ True Int64Type : t) = IntType : getOutputTypes t
+                            getOutputTypes (ParamType _ _ True TextType : t) = StringType : getOutputTypes t
+                            getOutputTypes t = error ("getTypes: error unsupported type " ++ show t)
+    let                     getInputTypes [] = []
+                            getInputTypes (ParamType _ True _ Int64Type : t) = IntType : getInputTypes t
+                            getInputTypes (ParamType _ True _ TextType : t) = StringType : getInputTypes t
+                            getInputTypes t = error ("getTypes: error unsupported type " ++ show t)
     qr1 <- concat <$> mapM (\(InsertRewritingRule (Atom ( name@(ObjectPath _ n0)  ) _) _) ->
                         let n = map toLower (drop 2 n0)
                             (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
                             getInputOutputTypes [] = ([], [])
-                            getInputOutputTypes (ParamType _ _ False Int64Type : t) = ((StringType :) *** id) (getInputOutputTypes t)
+                            getInputOutputTypes (ParamType _ _ False Int64Type : t) = ((IntType :) *** id) (getInputOutputTypes t)
                             getInputOutputTypes (ParamType _ _ False TextType : t) = ((StringType :) *** id) (getInputOutputTypes t)
-                            getInputOutputTypes (ParamType _ _ True Int64Type : t) = ([], StringType : getTypes t)
-                            getInputOutputTypes (ParamType _ _ True TextType : t) = ([], StringType : getTypes t)
+                            getInputOutputTypes (ParamType _ _ True Int64Type : t) = ([], IntType : getOutputTypes t)
+                            getInputOutputTypes (ParamType _ _ True TextType : t) = ([], StringType : getOutputTypes t)
                             getInputOutputTypes t = error ("getInputOutputTypes: error unsupported type " ++ show t)
-                            getTypes [] = []
-                            getTypes (ParamType _ _ True Int64Type : t) = StringType : getTypes t
-                            getTypes (ParamType _ _ True TextType : t) = StringType : getTypes t
-                            getTypes t = error ("getTypes: error unsupported type " ++ show t)
                             (inputtypes, outputtypes) = getInputOutputTypes ts in
                             concat <$> sequence [
                               queryFunction n inputtypes outputtypes, hsQueryFunction n inputtypes outputtypes, hsQueryForeign n inputtypes outputtypes,
@@ -565,13 +601,17 @@ functions path = do
                               queryAllFunction n inputtypes outputtypes, hsQueryAllFunction n inputtypes outputtypes, hsQueryAllForeign n inputtypes outputtypes,
                               queryAll2Function n inputtypes outputtypes, hsQueryAll2Function n inputtypes outputtypes, hsQueryAll2Foreign n inputtypes outputtypes]
                     ) qr
-    ir1 <- concat <$> mapM (\(InsertRewritingRule (Atom (ObjectPath _ n0) args) _) ->
-                        let n = map toLower (drop 2 n0) in
-                            sequence [createFunction n (length args), hsCreateFunction n (length args), hsCreateForeign n (length args), hsUpdateForeign n (length args),
-                              createFunctionArray n (length args), hsCreateFunctionArray n, hsCreateForeignArray n]
+    ir1 <- concat <$> mapM (\(InsertRewritingRule (Atom name@(ObjectPath _ n0) args) _) ->
+                        let n = map toLower (drop 2 n0) 
+                            (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
+                            inputtypes = getInputTypes ts in
+                            sequence [createFunction n inputtypes, hsCreateFunction n inputtypes, hsCreateForeign n inputtypes, hsUpdateForeign n inputtypes,
+                              createFunctionArray n inputtypes, hsCreateFunctionArray n, hsCreateForeignArray n]
                     ) ir
-    dr1 <- concat <$> mapM (\(InsertRewritingRule (Atom (ObjectPath _ n0) args) _) ->
-                        let n = map toLower (drop 2 n0) in
-                            sequence [deleteFunction n (length args), hsDeleteFunction n (length args), hsDeleteForeign n (length args)]
+    dr1 <- concat <$> mapM (\(InsertRewritingRule (Atom name@(ObjectPath _ n0) args) _) ->
+                        let n = map toLower (drop 2 n0)
+                            (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
+                            inputtypes = getInputTypes ts in
+                            sequence [deleteFunction n inputtypes, hsDeleteFunction n inputtypes, hsDeleteForeign n inputtypes]
                     ) dr
     return (qr1 ++ ir1 ++ dr1)

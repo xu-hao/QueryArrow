@@ -53,6 +53,7 @@ queryPlan dbs formula =
 --
 translate' :: (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> FormulaT -> Set Var -> IO (QueryPlanT l)
 translate' dbs rvars qu0 vars =
+  -- trace ("translate': " ++ show qu0) $ 
     let insp = queryPlan dbs qu0
         qp2 = calculateVars vars rvars insp
         qp25 = findDBQueryPlan dbs qp2

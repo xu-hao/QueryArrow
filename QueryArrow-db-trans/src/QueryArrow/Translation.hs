@@ -80,15 +80,16 @@ instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase0 (TransDB db) wher
 instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase1 (TransDB db) where
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db _ (qr, ir, dr) ) vars2 qu vars =
-                  let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in
-                      translateQuery db vars2 qu' vars
+                  let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in do
+                      qu' <- translateQuery db vars2 qu' vars
+                      return qu' 
 
 
 instance (IDatabase db) => IDatabase2 (TransDB db) where
     newtype ConnectionType (TransDB db) = TransDBConnection (ConnectionType db)
     dbOpen (TransDB _ db  _ _ ) = TransDBConnection <$> dbOpen db
 
-instance IDatabaseUniformDBFormula FormulaT db => IDatabase (TransDB db)
+instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase (TransDB db)
 
 instance (IDatabase db) => IDBConnection0 (ConnectionType (TransDB db)) where
     dbClose (TransDBConnection db ) = dbClose db

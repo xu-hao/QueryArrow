@@ -17,13 +17,15 @@ import Data.Namespace.Namespace
 import Algebra.Lattice
 import Control.Monad (foldM)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Monoid ((<>))
 import Data.Text.Encoding
 import Data.MessagePack
 import GHC.Generics
 import Data.Int (Int64, Int32)
 import Data.Binary.Get
-import Data.ByteString.Lazy (fromStrict)
+import Data.Binary.Put
+import Data.ByteString.Lazy (fromStrict, toStrict)
 import Data.Typeable (Typeable)
 import Debug.Trace
 
@@ -56,16 +58,19 @@ newtype Tie f = Tie (f (Tie f))
 data Annotated a f = Annotated a (f (Annotated a f))
 
 class Unannotate (f :: (* -> *) -> *) (g :: * -> *) where
+  type AnnotationType f
   unannotate :: f g -> g (f g)
-  mapA :: (forall a . g a -> g a) ->  f g -> f g
+  mapA :: (AnnotationType f -> AnnotationType f) -> (forall a . g a -> g a) -> f g -> f g
 
 instance Functor f => Unannotate Tie f where
+  type AnnotationType Tie = ()
   unannotate (Tie a) = a
-  mapA f (Tie a) = Tie (f (fmap (mapA f) a))
+  mapA g f (Tie a) = Tie (f (fmap (mapA g f) a))
 
 instance Functor f => Unannotate (Annotated a) f where
+  type AnnotationType (Annotated a) = a
   unannotate (Annotated _ a) = a
-  mapA f (Annotated a b) = Annotated a (f (fmap (mapA f) b))
+  mapA g f (Annotated a b) = Annotated (g a) (f (fmap (mapA g f) b))
 
 -- expression
 data Expr0 a = VarExpr0 Var | IntExpr0 Integer | StringExpr0 T.Text | PatternExpr0 T.Text | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
@@ -583,10 +588,10 @@ instance Subst Lit where
 instance Subst Atom where
     subst s (Atom pred' args) = Atom pred' (subst s args)
 
-extractVar :: Unannotate a Expr0 => Expr1 a -> Var
+extractVar :: (Show (Expr1 a), Unannotate a Expr0) => Expr1 a -> Var
 extractVar e1 = case unannotate e1 of
                     VarExpr0 var0 -> var0
-                    _ -> error "this is not a var expr"
+                    _ -> error ("extractVar: this is not a var expr " ++ show e1)
 
 instance Subst Var where
     subst s v = extractVar (subst s (VarExpr v))
@@ -602,8 +607,8 @@ instance Subst Summary where
 instance Subst (Atom1 a) => Subst (Lit1 a) where
     subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
  
-instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a), Subst (Atom1 a)) => Subst (Formula1 a b) where
-    subst s a = let b = mapA (\f -> case f of
+instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a), Subst (Atom1 a), Subst (AnnotationType b)) => Subst (Formula1 a b) where
+    subst s a = let b = mapA (subst s) (\f -> case f of
                         FAtomic0 a -> FAtomic0 (subst s a)
                         FInsert0 lits -> FInsert0 (subst s lits)
                         FSequencing0 form1 form2 -> FSequencing0 form1 form2
@@ -619,7 +624,8 @@ instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unan
                         Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
                         FZero0 -> FZero0
                         FOne0 -> FOne0) a in
-                    trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $ b
+                    -- trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $ 
+                    b
 
 instance Subst a => Subst [a] where
     subst s = map (subst s)
@@ -823,6 +829,7 @@ type Location = [String]
 class (Typeable a, Show a) => ResultValue a where
   toConcreteResultValue :: a -> ConcreteResultValue
   toNetworkResultValue :: a -> NetworkResultValue
+  toNetworkResultValue = toNetworkResultValue . toConcreteResultValue
   castTypeOf :: a -> CastType
 
 data AbstractResultValue = forall a . ResultValue a => AbstractResultValue a
@@ -878,6 +885,12 @@ instance ResultValue NetworkResultValue where
 
 instance ResultValue ConcreteResultValue where
   toConcreteResultValue = id
+  toNetworkResultValue (Int64Value i) = NetworkResultValue (Just Int64Type) (toStrict (runPut (putWord64be (fromIntegral i))))
+  toNetworkResultValue (Int32Value i) = NetworkResultValue (Just Int32Type) (toStrict (runPut (putWord32be (fromIntegral i))))
+  toNetworkResultValue (StringValue s) = NetworkResultValue (Just TextType) (encodeUtf8 s)
+  toNetworkResultValue (ByteStringValue bs) = NetworkResultValue (Just ByteStringType) bs
+  toNetworkResultValue (RefValue _ _ _) = error ("cannot convert ref value to network result value")
+  toNetworkResultValue (Null) = NetworkResultValue Nothing BS.empty
   castTypeOf (Int64Value _) = Int64Type
   castTypeOf (StringValue _) = TextType
   castTypeOf (ByteStringValue _) = ByteStringType

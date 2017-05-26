@@ -45,13 +45,19 @@ worker handle tdb conn = do
                                 return (t2, t3, False)
                             Dynamic qu -> do
                                 t2 <- getCurrentTime
+                                infoM "RPC_TCP_SERVER" "**************"
                                 ret <- runEitherT (run hdr qu par tdb conn)
+                                infoM "RPC_TCP_SERVER" "**************"
                                 t3 <- getCurrentTime
                                 case ret of
-                                    Left e ->
+                                    Left e -> do
+                                        infoM "RPC_TCP_SERVER" "**************1"
                                         sendMsgPack handle (errorSet e)
-                                    Right rep ->
+                                        infoM "RPC_TCP_SERVER" "**************2"
+                                    Right rep -> do
+                                        infoM "RPC_TCP_SERVER" "**************3"
                                         sendMsgPack handle (resultSet rep)
+                                        infoM "RPC_TCP_SERVER" "**************4"
                                 return (t2, t3, False)
                 t1 <- getCurrentTime
                 infoM "RPC_TCP_SERVER" (show (diffUTCTime t1 t0) ++ "\npre: " ++ show (diffUTCTime t2 t0) ++ "\nquery: " ++ show (diffUTCTime t3 t2) ++ "\npost: " ++ show (diffUTCTime t1 t3))

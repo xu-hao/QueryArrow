@@ -18,6 +18,7 @@ import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Monad.Trans.Either
 import Data.Set (Set)
 import Text.Parsec
+import Debug.Trace
 
 run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
 run3 hdr commands params tdb conn = do
@@ -37,7 +38,8 @@ run3 hdr commands params tdb conn = do
                                         return []
                                     Execute qu -> do
                                         let (varstinp, varstout) = setToMap2 (map (\(AbstractResultValue arv) -> castTypeOf arv) params) hdr
-                                        getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
+                                        trace ("varstinp = " ++ show varstinp ++ ", varstout" ++ show varstout) $
+                                          getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb
                             --     if b

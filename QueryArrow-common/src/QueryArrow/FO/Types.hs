@@ -2,11 +2,11 @@
 
 module QueryArrow.FO.Types where
 
-import Prelude hiding (lookup)
-import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty)
+import Prelude hiding (lookup, null, filter)
+import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty, mapKeys, toList)
 import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
-import Data.Set (Set, (\\), toAscList, member)
+import Data.Set (Set, (\\), toAscList, member, null, filter)
 import qualified Data.Set as Set
 import QueryArrow.FO.Data
 import QueryArrow.FO.Domain
@@ -29,6 +29,13 @@ type FormulaT = Formula1 Tie (Annotated VarTypeMap)
 deriving instance Show FormulaT
 deriving instance Eq FormulaT
 deriving instance Ord FormulaT
+
+instance Subst VarTypeMap where
+  subst s = fromList . concatMap (\(k, v) -> 
+		case lookup k s of
+                    Just (VarExpr v2) -> [(v2, v)]
+                    Nothing -> [(k, v)]
+                    _ -> []) . toList
 
 class Typecheck a b where
   typecheck :: a -> TCMonad b
@@ -108,7 +115,7 @@ checkVarType v (ParamType pk inp out t) = do
     Just (ParamType _ inp2 out2 t2) -> do
         when (not inp && inp2) $ throwError ("checkVarType: bounded var: " ++ show v)
         when (not out && out2) $ throwError ("checkVarType: unbounded var: " ++ show v)
-        context ("checkVarType: " ++ serialize v ++ " expected and encountered") $ tcunify t t2
+        context ("checkVarType: " ++ serialize v ++ " " ++ show vartypemap ++ " expected and encountered") $ tcunify t t2
         (_,tvm) <- lift get
         let t' = tcsubst tvm t
         lift $ modify (insert v (ParamType pk True False t') *** id)
@@ -194,10 +201,38 @@ instance Typecheck Aggregator () where
       lift $ modify (const mempty *** id)
   typecheck  Not =
       lift $ modify (const mempty *** id)
-  typecheck  (OrderByDesc _) = return ()
-  typecheck  (OrderByAsc _) = return ()
-  typecheck  Distinct = return ()
-  typecheck  (Limit n) = return ()
+  typecheck  (OrderByDesc _) = 
+      return ()
+  typecheck  (OrderByAsc _) = 
+      return ()
+  typecheck  Distinct = 
+      return ()
+  typecheck  (Limit n) = 
+      return ()
+
+combineAggVtm :: Aggregator -> VarTypeMap -> TCMonad ()
+combineAggVtm (FReturn _) vtm = do
+    (vtm2, _) <- lift get
+    lift $ modify (const (unionWith (const id) vtm vtm2) *** id)
+combineAggVtm (Summarize _ _) vtm = do
+        (vtm2, _) <- lift get
+        let keysset = keysSet vtm
+            keysset2 = keysSet vtm2
+            overlap = filter (\ key -> not (isOutputType (fromMaybe (error "key not found") (lookup key vtm))) || not (isInputType (fromMaybe (error "key not found") (lookup key vtm2))) ) (keysset /\ keysset2)
+        when (not (null overlap)) $ throwError ("typecheck: reassignment of variable(s) " ++ show (map (\key -> (key, lookup key vtm, lookup key vtm2)) (toAscList overlap)))
+        lift $ modify (const (unionWith (const id) vtm vtm2) *** id)
+combineAggVtm  Exists vtm =
+      lift $ modify (const vtm *** id)
+combineAggVtm  Not vtm =
+      lift $ modify (const vtm *** id)
+combineAggVtm  (OrderByDesc _) _ = 
+      return ()
+combineAggVtm  (OrderByAsc _) _ = 
+      return ()
+combineAggVtm  Distinct _ =
+      return ()
+combineAggVtm  (Limit n) _ = 
+      return ()
 
 instance Typecheck Formula FormulaT where
     typecheck  (FAtomic a) = do
@@ -237,12 +272,14 @@ instance Typecheck Formula FormulaT where
         (vtm, _) <- lift get
         form' <- typecheck form
         () <- typecheck agg
-        (vtm2, _) <- lift get
-        lift $ modify (const (unionWith (const id) vtm vtm2) *** id)
-        (vtm, _) <- lift get
-        let vars = freeVars agg
-        let vtm' = filterWithKey (const . (`member` vars)) vtm
+        () <- combineAggVtm agg vtm
+        (vtm', _) <- lift get
+        -- let vars = freeVars agg
+        -- let vtm' = filterWithKey (const . (`member` vars)) vtm
         return (Annotated vtm' (Aggregate0 agg form'))
+
+isOutputType (ParamType _ _ t _) = t
+isInputType (ParamType _ t _ _) = t
 
 setToMap :: Set Var -> Set Var -> (VarTypeMap, VarTypeMap)
 setToMap vars vars2 =

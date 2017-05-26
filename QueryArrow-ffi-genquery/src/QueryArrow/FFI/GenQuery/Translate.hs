@@ -241,7 +241,7 @@ addAccessControls uz un ("COLL" : tabs) form = addAccessControls uz un tabs (add
 addAccessControls uz un (_ : tabs) form = addAccessControls uz un tabs form
 
 translateGenQueryToQAL :: Bool -> Maybe (String, String) -> GenQuery -> ([Var],  Formula)
-translateGenQueryToQAL distinct addaccessctl (GenQuery sels conds) =
+translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
       if null sels
         then error "cannot translate genquery cols null"
         else
@@ -256,12 +256,14 @@ translateGenQueryToQAL distinct addaccessctl (GenQuery sels conds) =
               form1 = case addaccessctl of
                           Just (uz, un) -> addAccessControls uz un tabs form0
                           Nothing -> form0
-              form2 = Aggregate (FReturn vars) form1
-              orders = concatMap (\(Sel col sel) -> case sel of
+              form2 = if distinct then Aggregate Distinct form1 else form1
+              orders = trace ("******************" ++ show cols) $ concatMap (\(Sel col sel) -> case sel of
                                                                               GQOrderDesc -> [(col, OrderByDesc)]
                                                                               GQOrderAsc -> [(col, OrderByAsc)]
-                                                                              _ -> []) sels
+                                                                              _ -> []) sels ++ (if "COLL_NAME" `elem` cols then [("COLL_NAME", OrderByAsc)] else [])
+                                                                                            ++ (if "DATA_NAME" `elem` cols then [("DATA_NAME", OrderByAsc)] else [])
+                                                                                            ++ (if "DATA_REPL_NUM" `elem` cols then [("DATA_REPL_NUM", OrderByAsc)] else [])
               form3 = foldr (\(col, ord) form -> Aggregate (ord (toVariable col)) form) form2 orders
-              form = if distinct then Aggregate Distinct form3 else form3
+              form = Aggregate (FReturn vars) form3
           in
-              (vars, form)
+              trace ("translateGenQueryToQAL: \n------------------\n" ++ show gq ++ "\n----------------->\n" ++ serialize form ++ "\n------------------------" ) $ (vars, form)

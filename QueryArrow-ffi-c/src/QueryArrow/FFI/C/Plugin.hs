@@ -134,6 +134,25 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
                     "data_mode" -> "DATA_MODE"
                     "resc_hier" -> "DATA_RESC_HIER"
                     _ -> error ("unsupported column " ++ wherecol0)
+    let colval wherecol0 val = do
+            case wherecol0 of
+                    "data_repl_num" -> AbstractResultValue (Int64Value (read val))
+                    "data_type_name" -> AbstractResultValue (StringValue (pack val))
+                    "data_size" -> AbstractResultValue (Int64Value (read val))
+                    "data_id" -> AbstractResultValue (Int64Value (read val))
+                    "resc_id" -> AbstractResultValue (Int64Value (read val))
+                    "data_path" -> AbstractResultValue (StringValue (pack val))
+                    "data_owner_name" -> AbstractResultValue (StringValue (pack val))
+                    "data_owner_zone" -> AbstractResultValue (StringValue (pack val))
+                    "data_is_dirty" -> AbstractResultValue (Int64Value (read val))
+                    "data_checksum" -> AbstractResultValue (StringValue (pack val))
+                    "data_expiry_ts" -> AbstractResultValue (StringValue (pack val))
+                    "r_comment" -> AbstractResultValue (StringValue (pack val))
+                    "create_ts" -> AbstractResultValue (StringValue (pack val))
+                    "modify_ts" -> AbstractResultValue (StringValue (pack val))
+                    "data_mode" -> AbstractResultValue (StringValue (pack val))
+                    "resc_hier" -> AbstractResultValue (StringValue (pack val))
+                    _ -> error ("unsupported column " ++ wherecol0)
     let whereatom pre wherecol0 =
           let wherecol = var (pre ++ wherecol0)
               p = wherepredicate wherecol0 in
@@ -156,10 +175,10 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
                      if "resc_id" `elem` updatecols
                          then "UPDATE_RESC_ID" @@ [var "w_data_id", var "w_resc_id", var "u_resc_id"]
                          else FOne
-    let whereparam col val = (Var ("w_" ++ col), AbstractResultValue (StringValue (pack val)))
-    let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
+    let whereparam col val = (Var ("w_" ++ col), colval col val)
+    let updateparam col val = (Var ("u_" ++ col), colval col val)
     let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execQuery svc session ( update) params) (const (return ()))
+    processRes (execAbstract svc session ( update) params) (const (return ()))
 
 foreign export ccall hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
 hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
@@ -179,15 +198,22 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
                     "coll_info1" -> "COLL_INFO1"
                     "coll_info2" -> "COLL_INFO2"
                     "modify_ts" -> "COLL_MODIFY_TS"
+    let colval wherecol0 val =
+            case wherecol0 of
+                    "coll_id" -> AbstractResultValue (Int64Value (read val))
+                    "coll_type" -> AbstractResultValue (StringValue (pack val))
+                    "coll_info1" -> AbstractResultValue (StringValue (pack val))
+                    "coll_info2" -> AbstractResultValue (StringValue (pack val))
+                    "modify_ts" -> AbstractResultValue (StringValue (pack val))
     let updateatom wherecol0 =
           let wherecol = var ("u_" ++ wherecol0)
               p = wherepredicate wherecol0 in
               p @@+ [var "cid", wherecol]
     let updateform updatecol = updateatom updatecol
     let update = foldl (.*.) cond (map updateform updatecols)
-    let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
+    let updateparam col val = (Var ("u_" ++ col), colval col val)
     let params = Map.singleton (Var "w_coll_name") (AbstractResultValue (StringValue (pack cn))) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execQuery svc session ( update) params) (const (return ()))
+    processRes (execAbstract svc session ( update) params) (const (return ()))
 
 mapResultRowToList :: [Var] -> MapResultRow -> [AbstractResultValue]
 mapResultRowToList vars r =
