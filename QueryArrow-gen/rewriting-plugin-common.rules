@@ -73,6 +73,7 @@ export D_USER_PASSWORD
 export D_PASSWORD_EXPIRY_TS
 export D_DATA_ID
 export D_DATA_ID_BY_NAME
+export D_DATA_ID_BY_DATA_ID
 export D_REPL_RESC_ID
 export D_REPL2
 export D_REPL
@@ -248,11 +249,11 @@ predicate D_COLL_BY_NAME object (key input text)
 rewrite delete D_COLL_BY_NAME(cn)
     COLL_NAME(cid, cn) delete COLL_OBJ(cid)
 
-predicate D_ACCESS_BY_OBJ_ID object (input output int64)
+predicate D_ACCESS_BY_OBJ_ID object (input int64)
 rewrite delete D_ACCESS_BY_OBJ_ID(id)
     OBJT_ACCESS_OBJ(id, uid, acc) delete OBJT_ACCESS_OBJ(id, uid, acc)
 
-predicate D_ACCESS_BY_DATA_ID object (input output int64)
+predicate D_ACCESS_BY_DATA_ID object (input int64)
 rewrite delete D_ACCESS_BY_DATA_ID(id)
     ~exists(DATA_OBJ(id,rid)) OBJT_ACCESS_OBJ(id, uid, acc) delete OBJT_ACCESS_OBJ(id, uid, acc)
 export D_ACCESS_BY_DATA_ID
@@ -610,6 +611,10 @@ rewrite delete D_DATA_BY_NAME(cn, n)
 predicate D_DATA_ID_BY_NAME object (key input text, key input text, input output int64)
 rewrite D_DATA_ID_BY_NAME(cn, n, id)
     COLL_NAME(cid, cn) DATA_NAME(id, rid, n) DATA_COLL_ID(id, rid, cid)
+
+predicate D_DATA_ID_BY_DATA_ID object (key input int64, output int64)
+rewrite D_DATA_ID_BY_DATA_ID(id, id2)
+    DATA_OBJ(id, rid) eq(int64 id, id2)
 
 predicate D_DATA_ID_BY_NAME2 object (key input output text, key input output text, input output int64)
 rewrite D_DATA_ID_BY_NAME2(cn, n, id)
