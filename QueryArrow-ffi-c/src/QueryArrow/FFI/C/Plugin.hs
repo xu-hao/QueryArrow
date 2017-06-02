@@ -215,6 +215,46 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
     let params = Map.singleton (Var "w_coll_name") (AbstractResultValue (StringValue (pack cn))) <> Map.fromList (zipWith updateparam updatecols updatevals)
     processRes (execAbstract svc session ( update) params) (const (return ()))
 
+foreign export ccall hs_modify_rule_exec :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CInt -> IO Int
+hs_modify_rule_exec :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CInt -> IO Int
+hs_modify_rule_exec svcptr sessionptr cupdatecols cupdatevals cupcols crexeid= do
+    svc <- deRefStablePtr svcptr
+    let upcols = fromIntegral cupcols
+    session <- deRefStablePtr sessionptr
+    cupdatecols2 <- peekArray upcols cupdatecols
+    updatecols <- mapM peekCString cupdatecols2
+    cupdatevals2 <- peekArray upcols cupdatevals
+    updatevals <- mapM peekCString cupdatevals2
+    let ruleexecid = fromIntegral crexeid
+    let cond = "RULE_EXEC_OBJ" @@ [var "cid"] 
+    let wherepredicate wherecol0 =
+            case wherecol0 of
+                "rule_name" -> "RULE_EXEC_RULE_NAME"
+                "rei_file_path" -> "RULE_EXEC_REI_FILE_PATH"
+                "user_name" -> "RULE_EXEC_USER_NAME"
+                "exe_address" -> "RULE_EXEC_EXE_ADDRESS"
+                "exe_time" -> "RULE_EXEC_EXE_TIME"
+                "exe_frequency" -> "RULE_EXEC_EXE_FREQUENCY"
+                "priority" -> "RULE_EXEC_PRIORITY"
+                "estimated_exe_time" -> "RULE_EXEC_ESTIMATED_EXE_TIME"
+                "notification_addr" -> "RULE_EXEC_NOTIFICATION_ADDR"
+                "last_exe_time" -> "RULE_EXEC_LAST_EXEC_TIME"
+                "exe_status" -> "RULE_EXEC_EXE_STATUS"
+                "create_ts" -> "RULE_EXEC_CREATE_TS"
+                "modify_ts" -> "RULE_EXEC_MODIFY_TS"
+    let colval wherecol0 val =
+            case wherecol0 of
+                    _ -> AbstractResultValue (StringValue (pack val))
+    let updateatom wherecol0 =
+          let wherecol = var ("u_" ++ wherecol0)
+              p = wherepredicate wherecol0 in
+              p @@+ [var "cid", wherecol]
+    let updateform updatecol = updateatom updatecol
+    let update = foldl (.*.) cond (map updateform updatecols)
+    let updateparam col val = (Var ("u_" ++ col), colval col val)
+    let params = Map.singleton (Var "cid") (AbstractResultValue (Int64Value ruleexecid)) <> Map.fromList (zipWith updateparam updatecols updatevals)
+    processRes (execAbstract svc session ( update) params) (const (return ()))
+
 mapResultRowToList :: [Var] -> MapResultRow -> [AbstractResultValue]
 mapResultRowToList vars r =
     map (\v -> fromMaybe (error ("mapResultRowToList: cannot find var " ++ show v ++ show r)) (lookup v r)) vars

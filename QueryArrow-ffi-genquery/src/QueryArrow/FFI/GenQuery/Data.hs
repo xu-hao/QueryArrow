@@ -11,6 +11,6 @@ data Cond2 = EqString String |
             AndCond Cond2 Cond2 deriving (Show)
 
 data Sel = Sel String Sel2 deriving (Show)
-data Sel2 = None | GQOrderDesc | GQOrderAsc | GQCount deriving (Show)
+data Sel2 = None | GQOrderDesc | GQOrderAsc | GQCount | GQSum | GQMax | GQMin deriving (Show)
 
 data GenQuery = GenQuery [Sel] [Cond] deriving (Show)

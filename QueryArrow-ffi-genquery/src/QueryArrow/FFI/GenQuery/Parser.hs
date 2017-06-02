@@ -61,8 +61,11 @@ likeP = reserved "like" <|> reserved "LIKE"
 parentOfP = reserved "parent_of" <|> reserved "PARENT_OF"
 orderDescP = reserved "order_desc" <|> reserved "ORDER_DESC"
 orderAscP = reserved "order" <|> reserved "ORDER"
+sumP = reserved "sum" <|> reserved "SUM"
 countP = reserved "count" <|> reserved "COUNT"
-
+maxP = reserved "max" <|> reserved "MAX"
+minP = reserved "min" <|> reserved "MIN"
+		
 genQueryP :: GenQueryParser GenQuery
 genQueryP = do
     selectP
@@ -76,6 +79,9 @@ selP =
   try (orderDescP >> Sel <$> parens identifier <*> pure GQOrderDesc) <|>
   try (orderAscP >> Sel <$> parens identifier <*> pure GQOrderAsc) <|>
   try (countP >> Sel <$> parens identifier <*> pure GQCount) <|>
+  try (sumP >> Sel <$> parens identifier <*> pure GQSum) <|>
+  try (maxP >> Sel <$> parens identifier <*> pure GQMax) <|>
+  try (minP >> Sel <$> parens identifier <*> pure GQMin) <|>
     (Sel <$> identifier <*> pure None)
 
 condP :: GenQueryParser Cond

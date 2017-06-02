@@ -16,7 +16,7 @@ import Debug.Trace
 import QueryArrow.FFI.GenQuery.Data
 
 prefixes :: [String]
-prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC"]
+prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC", "SERVER_LOAD_DIGEST"]
 
 extractPrefix :: String -> String
 extractPrefix "COLUMN_NAME_NOT_FOUND_510" = "COLL"
@@ -27,6 +27,7 @@ extractPrefix "COLUMN_NAME_NOT_FOUND_1300" = "USER"
 extractPrefix "COLUMN_NAME_NOT_FOUND_1301" = "USER"
 extractPrefix "COLL_TOKEN_NAMESPACE" = "COLL_ACCESS"
 extractPrefix "DATA_TOKEN_NAMESPACE" = "DATA_ACCESS"
+extractPrefix ('S' : 'L' : 'D' : '_' : _) = "SERVER_LOAD_DIGEST"
 extractPrefix col =
   fromMaybe (error ("malformatted column name " ++ col)) (find (\p -> take (length p) col == p) prefixes)
 
@@ -156,6 +157,10 @@ translateGenQueryColumnToPredicate  col =
           "RULE_EXEC_NOTIFICATION_ADDR" -> "RULE_EXEC_NOTIFICATION_ADDR" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RULE_EXEC_LAST_EXE_TIME" -> "RULE_EXEC_LAST_EXE_TIME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RULE_EXEC_STATUS" -> "RULE_EXEC_EXE_STATUS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          -- SLD
+          "SLD_LOAD_FACTOR" -> "SERVER_LOAD_DIGEST_OBJ" @@ [VarExpr (toVariable "SLD_RESC_NAME"), VarExpr (toVariable "SLD_LOAD_FACTOR"), VarExpr (toVariable "SLD_CREATE_TIME")]
+          "SLD_RESC_NAME" -> "SERVER_LOAD_DIGEST_OBJ" @@ [VarExpr (toVariable "SLD_RESC_NAME"), VarExpr (toVariable "SLD_LOAD_FACTOR"), VarExpr (toVariable "SLD_CREATE_TIME")]
+          "SLD_CREATE_TIME" -> "SERVER_LOAD_DIGEST_OBJ" @@ [VarExpr (toVariable "SLD_RESC_NAME"), VarExpr (toVariable "SLD_LOAD_FACTOR"), VarExpr (toVariable "SLD_CREATE_TIME")]
           _ -> error ("unsupported column " ++ col)
 
 toCondPredicate2 :: [String] -> Cond ->  Formula
@@ -246,24 +251,39 @@ translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
         then error "cannot translate genquery cols null"
         else
           let
-              count = not (null (filter (\(Sel _ a) -> case a of 
+              agg = not (null (filter (\(Sel _ a) -> case a of 
                                                            GQCount -> True
                                                            _ -> False) sels))
               cols = map (\(Sel col _) -> col) sels
               vars = map toVariable cols
               tabs = nub (map extractPrefix cols) 
-              form0 = foldr (.*.) FOne (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds)
+              form0 = foldr (.*.) FOne (nub (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds))
               form1 = case addaccessctl of
-                          Just (uz, un) -> addAccessControls uz un tabs form0
-                          Nothing -> form0
-              form2 = if distinct then Aggregate Distinct form1 else form1
-              orders = trace ("******************" ++ show cols) $ concatMap (\(Sel col sel) -> case sel of
+                                             Just (uz, un) -> addAccessControls uz un tabs form0
+                                             Nothing -> form0
+              form3 = if agg 
+                         then
+                             let colaggs = map (\(Sel col sel) -> case sel of
+                                                                      GQCount -> if distinct
+                                                                                     then CountDistinct                                                                                    
+                                                                                     else const Count
+                                                                      GQSum -> Sum
+                                                                      GQMax -> Max
+                                                                      GQMin -> Min
+                                                                      _ -> error ("translateGenQueryToQAL: unsupported selector: " ++ show sel)) sels
+                                 aggs = zip vars (zipWith ($) colaggs vars)
+                             in
+                                 Aggregate (Summarize aggs []) form1
+                         else 
+                             let form2 = if distinct then Aggregate Distinct form1 else form1
+                                 orders = trace ("******************" ++ show cols) $ concatMap (\(Sel col sel) -> case sel of
                                                                               GQOrderDesc -> [(col, OrderByDesc)]
                                                                               GQOrderAsc -> [(col, OrderByAsc)]
                                                                               _ -> []) sels ++ (if "COLL_NAME" `elem` cols then [("COLL_NAME", OrderByAsc)] else [])
                                                                                             ++ (if "DATA_NAME" `elem` cols then [("DATA_NAME", OrderByAsc)] else [])
                                                                                             ++ (if "DATA_REPL_NUM" `elem` cols then [("DATA_REPL_NUM", OrderByAsc)] else [])
-              form3 = foldr (\(col, ord) form -> Aggregate (ord (toVariable col)) form) form2 orders
-              form = Aggregate (FReturn vars) form3
+                             in
+                                 foldr (\(col, ord) form -> Aggregate (ord (toVariable col)) form) form2 orders
+              form = Aggregate (FReturn vars) form3 
           in
               trace ("translateGenQueryToQAL: \n------------------\n" ++ show gq ++ "\n----------------->\n" ++ serialize form ++ "\n------------------------" ) $ (vars, form)

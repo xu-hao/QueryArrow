@@ -633,6 +633,22 @@ predicate D_RULE_EXEC property (key input int64)
 rewrite delete D_RULE_EXEC(ruleid)
     delete RULE_EXEC_OBJ(ruleid)
 
+predicate D_RULE_EXEC2 object (key input int64, input text, input text, input text, input text,
+                               input text, input text, input text, input text, input text,
+                               input text, input text)
+rewrite insert D_RULE_EXEC2(rule_exec_id,  rule_name, rei_file_path, user_name, exe_address,
+                            exe_time, exe_frequency, priority, estimated_exe_time, notification_addr, 
+                            create_ts, modify_ts)
+    insert RULE_EXEC_OBJ(rule_exec_id) RULE_EXEC_RULE_NAME(rule_exec_id, rule_name) RULE_EXEC_REI_FILE_PATH(rule_exec_id, rei_file_path) RULE_EXEC_USER_NAME(rule_exec_id, user_name) RULE_EXEC_EXE_ADDRESS(rule_exec_id, exe_address)
+           RULE_EXEC_EXE_TIME(rule_exec_id, exe_time) RULE_EXEC_EXE_FREQUENCY(rule_exec_id, exe_frequency) RULE_EXEC_PRIORITY(rule_exec_id, priority) RULE_EXEC_ESTIMATED_EXE_TIME(rule_exec_id, estimated_exe_time) RULE_EXEC_NOTIFICATION_ADDR(rule_exec_id, notification_addr)
+           RULE_EXEC_CREATE_TS(rule_exec_id, create_ts) RULE_EXEC_MODIFY_TS(rule_exec_id, modify_ts)
+export D_RULE_EXEC2
+
+predicate D_USER_NAME_BY_RULE_EXEC_ID property(key input int64, input output text)
+rewrite D_USER_NAME_BY_RULE_EXEC_ID(reid, un)
+    RULE_EXEC_USER_NAME(reid, un)
+export D_USER_NAME_BY_RULE_EXEC_ID
+
 predicate D_RESC object (key input int64, input output text, input output text, input output text, input output text, input output text, input output text, input output text, input output text, input output text, input output text, input output text)
 rewrite insert D_RESC(rid, rn, zn, type, class, net, defpath, cts, mts, children, context, parent)
     insert RESC_OBJ(rid) RESC_NAME(rid, rn) RESC_ZONE_NAME(rid, zn) RESC_TYPE_NAME(rid, type) RESC_CLASS_NAME(rid, class) RESC_NET(rid, net) RESC_DEF_PATH(rid, defpath) RESC_CREATE_TS(rid, cts) RESC_MODIFY_TS(rid, mts) RESC_CHILDREN(rid, children) RESC_CONTEXT(rid, context) RESC_PARENT(rid, parent)
@@ -906,8 +922,8 @@ rewrite D_GROUP_ID_BY_USER(uid, gn, gid)
     USER_NAME(gid, gn) USER_TYPE_NAME(gid, "rodsgroup") USER_GROUP_OBJ(gid, int64 uid)
 
 predicate D_DATA_ID_BY_DATA_ID_AND_ACCESS property (key input int64, key input text, key input text, key input text, input output int64)
-rewrite D_DATA_ID_BY_DATA_ID_AND_ACCESS(cid, uz, un, acclevel, cid2)
-    DATA_OBJ(cid, rid) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(id, gid, acclevel2) le(tid, acclevel2) eq(int64 cid, cid2)
+rewrite D_DATA_ID_BY_DATA_ID_AND_ACCESS(id, uz, un, acclevel, id2)
+    DATA_OBJ(id, rid) D_NON_GROUP_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) D_TOKEN_ID("access_type", acclevel, tid) OBJT_ACCESS_OBJ(id, gid, acclevel2) le(tid, acclevel2) eq(int64 id, id2)
 
 predicate D_GROUP_ADMIN_USER_ID property (key input text, key input text, input output int64)
 rewrite D_GROUP_ADMIN_USER_ID(uz, un, uid)
