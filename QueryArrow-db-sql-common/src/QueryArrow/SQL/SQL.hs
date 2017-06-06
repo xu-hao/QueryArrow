@@ -24,6 +24,7 @@ import qualified Data.Set as Set
 import Algebra.Lattice
 import Algebra.Lattice.Dropped
 import Algebra.Lattice.Ordered
+import System.Log.Logger
 
 type Col = String
 type TableName = String
@@ -886,7 +887,8 @@ pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomi
                 then return ()
                 else case lookup n predtablemap of
                     Nothing ->
-                        trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $ return ()
+                        -- trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $ 
+                        return ()
                     Just (OneTable tablename _, _) ->
                         case lookup n ptm of
                             Nothing ->
@@ -1037,14 +1039,15 @@ summarizeF trans dvars form = pureOrExecF trans dvars form
 instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], [CastType], String, [Var])
     type GDBFormulaType SQLTrans = FormulaT
-    gTranslateQuery trans ret query@(Annotated vtm _) env =
+    gTranslateQuery trans ret query@(Annotated vtm _) env = do
         let (SQLTrans builtin predtablemap nextid ptm) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) (stripAnnotations query)) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm}))
             retvartypes = map (\var0 -> case lookup var0 vtm of
                                                 Nothing -> error ("var type not found: " ++ show var0 ++ " from " ++ show query)
-                                                Just (ParamType _ _ _ p) -> p) retvars in
-            trace ("gTranslateQuery of SQLTrans: \n-----------------\n" ++ serialize query ++ "\n---------------->\n" ++ serialize sqlquery ++ "\n----------------") $ return (case sqlquery of
+                                                Just (ParamType _ _ _ p) -> p) retvars
+        debugM "SQL" ("gTranslateQuery of SQLTrans: \n-----------------\n" ++ serialize query ++ "\n---------------->\n" ++ serialize sqlquery ++ "\n----------------")
+        return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, retvartypes, serialize sqlquery, params sql)
 

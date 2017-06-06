@@ -52,17 +52,18 @@ queryPlan dbs formula =
 --     return qu
 --
 translate' :: (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> FormulaT -> Set Var -> IO (QueryPlanT l)
-translate' dbs rvars qu0 vars =
+translate' dbs rvars qu0 vars = do
   -- trace ("translate': " ++ show qu0) $ 
     let insp = queryPlan dbs qu0
         qp2 = calculateVars vars rvars insp
         qp25 = findDBQueryPlan dbs qp2
         t = toTree qp25
-        qp3 = trace (drawTree t) $ optimizeQueryPlan dbs qp25 in
+        qp3 = optimizeQueryPlan dbs qp25
+    debugM "DB_Sum" (drawTree t)
     -- let qp3' = addTransaction' qp3
     -- liftIO $ printQueryPlan qp3
     -- qp4 <- prepareTransaction dbs [] qp3'
-        translateQueryPlan dbs qp3
+    translateQueryPlan dbs qp3
 
 printQueryPlan qp = do
     infoM "QA" ("query plan:")

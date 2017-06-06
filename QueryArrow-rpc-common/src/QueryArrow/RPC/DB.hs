@@ -38,8 +38,8 @@ run3 hdr commands params tdb conn = do
                                         return []
                                     Execute qu -> do
                                         let (varstinp, varstout) = setToMap2 (map (\(AbstractResultValue arv) -> castTypeOf arv) params) hdr
-                                        trace ("varstinp = " ++ show varstinp ++ ", varstout" ++ show varstout) $
-                                          getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
+                                        -- trace ("varstinp = " ++ show varstinp ++ ", varstout" ++ show varstout) $
+                                        getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb
                             --     if b

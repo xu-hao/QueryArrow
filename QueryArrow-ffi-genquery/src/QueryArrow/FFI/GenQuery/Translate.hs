@@ -362,7 +362,7 @@ translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
                                  Aggregate (Summarize aggs []) form1
                          else 
                              let form2 = if distinct then Aggregate Distinct form1 else form1
-                                 orders = trace ("******************" ++ show cols) $ concatMap (\(Sel col sel) -> case sel of
+                                 orders = concatMap (\(Sel col sel) -> case sel of
                                                                               GQOrderDesc -> [(col, OrderByDesc)]
                                                                               GQOrderAsc -> [(col, OrderByAsc)]
                                                                               _ -> []) sels ++ (if "COLL_NAME" `elem` cols then [("COLL_NAME", OrderByAsc)] else [])
@@ -372,4 +372,4 @@ translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
                                  foldr (\(col, ord) form -> Aggregate (ord (toVariable col)) form) form2 orders
               form = Aggregate (FReturn vars) form3 
           in
-              trace ("translateGenQueryToQAL: \n------------------\n" ++ show gq ++ "\n----------------->\n" ++ serialize form ++ "\n------------------------" ) $ (vars, form)
+              (vars, form)

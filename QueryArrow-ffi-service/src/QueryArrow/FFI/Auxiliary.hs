@@ -7,7 +7,7 @@ import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import qualified Data.Text as Text
 import Data.Map.Strict (lookup)
 import Control.Monad.Trans.Either (EitherT, runEitherT)
@@ -19,6 +19,7 @@ import Data.Text.Encoding
 import qualified Data.ByteString.UTF8 as BSUTF8
 import Control.Exception
 import Database.HDBC
+import System.Log.Logger (debugM, errorM)
 import Debug.Trace
 
 eCAT_NO_ROWS_FOUND :: Int
@@ -32,7 +33,8 @@ eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME = -809000
 
 execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
 execAbstract svc session form params = do
-  r <- trace ("AAA execAbstract: form " ++ serialize form) $ liftIO $ runEitherT (execQuery svc session form params) 
+  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form) 
+  r <- liftIO $ runEitherT (execQuery svc session form params) 
        `catch` (\e -> let (SqlError state nativeerror errormsg) = e
                           errstr = show e in 
                           return (Left (case nativeerror of
@@ -41,14 +43,19 @@ execAbstract svc session form params = do
        `catch` (\e -> let errstr = show (e::SomeException) in 
                           return (Left (-1, Text.pack(errstr))))
   case r of
-    Left err -> trace ("execAbstract: caught error " ++ show err) $ throwError err
+    Left err -> do
+      liftIO $ errorM "FFI" ("execAbstract: caught error " ++ show err)
+      throwError err
     Right a -> return a
 
 getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow]
 getAllResultAbstract svc session vars form params = do
-  r <- trace ("AAA getAllResultValues: form " ++ serialize form) $ liftIO $ runEitherT (getAllResult svc session vars form params) `catch` (\e -> return (Left (-1,Text.pack(show (e::SomeException)))))
+  liftIO $ debugM "FFI" ("getAllResultValues: form " ++ serialize form)
+  r <- liftIO $ runEitherT (getAllResult svc session vars form params) `catch` (\e -> return (Left (-1,Text.pack(show (e::SomeException)))))
   case r of
-    Left err -> trace ("getAllResultValues: caught error " ++ show err) $ throwError err
+    Left err -> do
+      liftIO $ errorM "FFI" ("getAllResultValues: caught error " ++ show err)
+      throwError err
     Right a -> return a
 
 getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> Int -> EitherT Error IO [MapResultRow]
@@ -62,8 +69,8 @@ getResultValues svc session vars form params = do
       row : _ -> case mapM (\var -> lookup var row) vars of
                   Just r -> return r
                   Nothing -> do
-                    liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in map " ++ show row)
-                    throwError (eNULL, "error 1")
+                    liftIO $ errorM "FFI" ("cannot find var " ++ show vars ++ " in map " ++ show row)
+                    throwError (eNULL, pack ("cannot find var " ++ show vars ++ " in map " ++ show row))
       _ -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
 
 getAllResultValues :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
@@ -75,8 +82,8 @@ getAllResultValues svc session vars form params = do
           case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
               Just r -> return r
               Nothing -> do
-                liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
-                throwError (eNULL, "error 1")
+                liftIO $ errorM "FFI" ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
+                throwError (eNULL, pack ("cannot find var " ++ show vars ++ " in maps " ++ show rows))
 
 getSomeResultValues :: QueryArrowService b -> b -> Int -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
 getSomeResultValues svc session n vars form params = do
@@ -87,20 +94,20 @@ getSomeResultValues svc session n vars form params = do
           case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
               Just r -> return r
               Nothing -> do
-                liftIO $ putStrLn ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
-                throwError (eNULL, "error 1")
+                liftIO $ errorM "FFI" ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
+                throwError (eNULL, pack ("cannot find var " ++ show vars ++ " in maps " ++ show rows))
 
-getIntResult :: QueryArrowService b -> b ->[ Var ]-> Formula  -> MapResultRow -> EitherT Error IO Int64
+getIntResult :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO Int64
 getIntResult svc session vars form params = do
     r:_ <- getResultValues svc session vars form params
     return (resultValueToInt r)
 
-getStringResult :: QueryArrowService b -> b -> [Var ]-> Formula  -> MapResultRow -> EitherT Error IO Text
+getStringResult :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO Text
 getStringResult svc session vars form params = do
     r:_ <- getResultValues svc session vars form params
     return (resultValueToString r)
 
-getStringArrayResult :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [Text]
+getStringArrayResult :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [Text]
 getStringArrayResult svc session vars form params = do
     r <- getResultValues svc session vars form params
     return (map resultValueToString r)

@@ -24,10 +24,10 @@ instance Puttable put Fingerprint => Puttable put (StaticPtr a) where
 instance (MonadIO get, MonadError IOException get, Gettable get Fingerprint) => Gettable get (StaticPtr a) where
   sGet b0 = do
     (key, b1) <- sGet b0
-    liftIO $ putStrLn ("lookup key " ++ show key)
+    -- liftIO $ putStrLn ("lookup key " ++ show key)
     mstaticptr <- liftIO $ unsafeLookupStaticPtr key
     case mstaticptr of
       Nothing -> throwError (userError ("sGet (StaticPtr a): cannot find static ptr from key " ++ show key))
       Just staticptr -> do
-        liftIO $ putStrLn ("found ptr")
+        -- liftIO $ putStrLn ("found ptr")
         return (staticptr, b1)

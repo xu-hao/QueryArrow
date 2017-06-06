@@ -13,7 +13,7 @@ import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
 import Foreign.Marshal.Array
-import System.Log.Logger (errorM, infoM)
+import System.Log.Logger (errorM, infoM, debugM)
 import Data.Maybe (fromMaybe)
 import Control.Monad.Trans.Either
 import Text.Parsec (runParser)
@@ -35,13 +35,14 @@ hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cticket cqu cout c
   un <- peekCString cusername
   ticket <- peekCString cticket
   qu <- peekCString cqu
-  putStrLn ("hs_gen_query: genquery = " ++ qu)
-  let (vars, form) = case runParser genQueryP () "" qu of
+  debugM "GENQUERY" ("hs_gen_query: genquery = " ++ qu)
+  let (gq, (vars, form)) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
-                Right gq -> translateGenQueryToQAL (dist /= 0) (case acc of
+                Right gq -> (gq, translateGenQueryToQAL (dist /= 0) (case acc of
                                                                     1 -> if null ticket then UserAccessControl uz un else TicketAccessControl ticket 
                                                                     -1 -> NoAccessControl
-                                                                    0 -> AccessControlTicket) gq
+                                                                    0 -> AccessControlTicket) gq)
+  debugM "GENQUERY" ("translateGenQueryToQAL: \n------------------\n" ++ show gq ++ "\n----------------->\n" ++ serialize form ++ "\n------------------------" )
   res <- runEitherT (getAllResult svc session vars ( form) mempty)
   case res of
     Left err -> error (show err)
