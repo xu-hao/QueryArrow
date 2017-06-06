@@ -121,6 +121,7 @@ resultValueToInt rv = case rv of
     (Int64Value i) -> fromIntegral i
     (StringValue i) -> read (Text.unpack i)
     (ByteStringValue i) -> read (BSUTF8.toString i)
+    _ -> error ("resultValueToInt: cannot convert to int " ++ show rv)
 
 resultValueToString :: AbstractResultValue -> Text
 resultValueToString rv = case rv of

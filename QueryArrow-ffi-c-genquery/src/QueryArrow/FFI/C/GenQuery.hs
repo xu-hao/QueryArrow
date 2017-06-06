@@ -22,21 +22,26 @@ import QueryArrow.FFI.GenQuery.Parser
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
+import QueryArrow.FFI.GenQuery.Data
 
-foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
-hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
-hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cqu cout ccol crow = do
+foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
+hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
+hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cticket cqu cout ccol crow = do
   svc <- deRefStablePtr svcptr
   session <- deRefStablePtr sessionptr
   let dist = fromIntegral cdist
   let acc = fromIntegral cacc
   uz <- peekCString cuserzone
   un <- peekCString cusername
+  ticket <- peekCString cticket
   qu <- peekCString cqu
-  -- putStrLn ("genquery = " ++ qu)
+  putStrLn ("hs_gen_query: genquery = " ++ qu)
   let (vars, form) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
-                Right gq -> translateGenQueryToQAL (dist /= 0) (if acc /= 0 then Just (uz, un) else Nothing) gq
+                Right gq -> translateGenQueryToQAL (dist /= 0) (case acc of
+                                                                    1 -> if null ticket then UserAccessControl uz un else TicketAccessControl ticket 
+                                                                    -1 -> NoAccessControl
+                                                                    0 -> AccessControlTicket) gq
   res <- runEitherT (getAllResult svc session vars ( form) mempty)
   case res of
     Left err -> error (show err)

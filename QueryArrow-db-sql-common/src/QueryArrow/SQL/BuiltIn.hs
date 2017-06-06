@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
 module QueryArrow.SQL.BuiltIn where
 
 import QueryArrow.DB.GenericDatabase
@@ -8,9 +8,12 @@ import QueryArrow.ICAT
 import Data.Namespace.Namespace
 
 import Data.Text (unpack)
+import qualified Data.Text as T
 import Data.Map.Strict (fromList, keys)
 import Text.Read
 
+convertTextToSQLText :: T.Text -> SQLExpr
+convertTextToSQLText str = SQLExprText (if str `T.index` 0 /= '(' then if str `T.index` 0 /= '\'' then "(\'" ++ unpack str ++ "\')" else "(" ++ unpack str ++ ")" else unpack str)
 
 sqlBuiltIn :: (String -> PredName) -> BuiltIn
 sqlBuiltIn lookupPred =
@@ -50,9 +53,9 @@ sqlBuiltIn lookupPred =
         (lookupPred "not_like_regex", simpleBuildIn "not_like_regex" (\ args ->
             return (swhere (SQLCompCond "!~" (head args) (args !! 1))))),
         (lookupPred "in", simpleBuildIn "in" (\args ->
-            let sql = swhere (SQLCompCond "=" (head args) (SQLFuncExpr "ANY" [args !! 1])) -- SQLExprText ("(" ++ (case args !! 1 of
-                                                                              --        SQLStringConstExpr str -> unpack str
-                                                                                --      _ -> error ("the second argument of in is not a string, args = " ++ show args)) ++ ")"))) 
+            let sql = swhere (case args !! 1 of
+                                     SQLStringConstExpr str | T.length str == 0 || str `T.index` 0 /= '{' -> SQLCompCond "in" (head args) (convertTextToSQLText str)
+                                     _ -> SQLCompCond "=" (head args) (SQLFuncExpr "ANY" [args !! 1])) 
             in
                 return sql)),
         (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "+" a b)]
@@ -73,7 +76,7 @@ sqlBuiltIn lookupPred =
             )),
         (lookupPred "replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "replace" [a, b, c])]
             )),
-        (lookupPred "regex_replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "regexp_replace" [a, b, c])]
+        (lookupPred "regex_replace", repBuildIn (\ [Left a, Left b, Left c, Right v] -> [(v, SQLFuncExpr "regexp_replace" [a, b, c, SQLStringConstExpr "g"])]
             )),
         (lookupPred "strlen", repBuildIn (\ [Left a, Right v] -> [(v, SQLFuncExpr "length" [a])]
             ))

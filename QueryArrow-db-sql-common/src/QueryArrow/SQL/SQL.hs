@@ -16,6 +16,7 @@ import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, toList, elems, size)
 import Data.Monoid ((<>))
 import Data.Maybe
+import Control.Monad
 import Debug.Trace
 import qualified Data.Text as T
 import Data.Set (toAscList, Set)
@@ -27,8 +28,9 @@ import Algebra.Lattice.Ordered
 type Col = String
 type TableName = String
 data Table = OneTable TableName SQLVar deriving (Eq, Ord, Show, Read)
+data FromTable = SimpleTable TableName SQLVar | QueryTable SQL SQLVar deriving (Eq, Ord, Show)
 
-type SQLTableList = [Table]
+type SQLTableList = [FromTable]
 
 -- merge two lists of sql tables
 -- only support onetable
@@ -41,7 +43,8 @@ type SQLQualifiedCol = (SQLVar, Col)
 
 type SQLOper = String
 
-data SQLExpr = SQLColExpr SQLQualifiedCol
+data SQLExpr = SQLColExpr2 String
+             | SQLColExpr SQLQualifiedCol
              | SQLIntConstExpr Integer
              | SQLStringConstExpr T.Text
              | SQLPatternExpr T.Text
@@ -97,12 +100,13 @@ pattern IntLattice a = Drop (Ordered a)
 data SQL = SQLQuery {sqlSelect :: [ (Var, SQLExpr) ], sqlFrom :: SQLTableList, sqlWhere :: SQLCond, sqlOrderBy :: [(SQLExpr, SQLOrder)], sqlLimit :: IntLattice, sqlDistinct :: Bool, sqlGroupBy :: [SQLExpr]} deriving (Eq, Ord, Show)
 
 data SQLStmt = SQLQueryStmt SQL
-    | SQLInsertStmt TableName [(Col,SQLExpr)] [Table] SQLCond
+    | SQLInsertStmt TableName [(Col,SQLExpr)] [FromTable] SQLCond
     | SQLUpdateStmt (TableName, SQLVar) [(Col,SQLExpr)] SQLCond
     | SQLDeleteStmt (TableName, SQLVar) SQLCond deriving (Eq, Ord, Show)
 
-instance Serialize Table where
-    serialize (OneTable tablename var) = tablename ++ " " ++ serialize var
+instance Serialize FromTable where
+    serialize (SimpleTable tablename var) = tablename ++ " " ++ serialize var
+    serialize (QueryTable qu var) = "(" ++ serialize qu ++ ") " ++ serialize var
 
 instance Serialize SQLCond where
     serialize a = show2 a []
@@ -121,6 +125,7 @@ instance Show2 SQLCond where
     show2 (SQLExistsCond sql) sqlvar = "(EXISTS (" ++ show2 sql sqlvar ++ "))"
     show2 (SQLNotCond sql) sqlvar = "(NOT (" ++ show2 sql sqlvar ++ "))"
 instance Show2 SQLExpr where
+    show2 (SQLColExpr2 col) sqlvar = col
     show2 (SQLColExpr (var, col)) sqlvar = if var `elem` sqlvar
         then col
         else serialize var ++ "." ++ col
@@ -161,9 +166,10 @@ instance Show2 SQL where
                 Top -> ""
                 IntLattice n -> " LIMIT " ++ show n)
 
-
+instance Serialize SQL where
+    serialize sql = show2 sql []
 instance Serialize SQLStmt where
-    serialize (SQLQueryStmt sql) = show2 sql []
+    serialize (SQLQueryStmt sql) = serialize sql
 
     serialize (SQLInsertStmt tname colsexprs tables cond) =
         let (cols, exprs) = unzip colsexprs in
@@ -201,8 +207,9 @@ instance Subst SQLVar where
         Just var2 -> var2
 
 
-instance Subst Table where
-    subst varmap (OneTable tablename var) = OneTable tablename (subst varmap var)
+instance Subst FromTable where
+    subst varmap (SimpleTable tablename var) = SimpleTable tablename (subst varmap var)
+    subst varmap (QueryTable qu var) = QueryTable (subst varmap qu) (subst varmap var)
 
 instance SQLFreeVars Table where
     fv (OneTable tablename var) = [(tablename, var)]
@@ -226,6 +233,15 @@ instance Subst SQLQualifiedCol where
 
 instance Subst a => Subst [a] where
     subst varmap = map (subst varmap)
+
+instance Subst (Var, SQLExpr) where
+    subst varmap (a,b) = (a, subst varmap b)
+
+instance Subst (SQLExpr, SQLOrder) where
+    subst varmap (a,b) = (subst varmap a, b)
+
+instance Subst SQL where
+    subst varmap (SQLQuery sel fro whe orderby limit distinct groupby) = SQLQuery (subst varmap sel) (subst varmap fro) (subst varmap whe) (subst varmap orderby) limit distinct (subst varmap groupby)
 
 type SQLQuery0 = ([Var], SQLStmt) -- return vars, sql
 type SQLQuery = ([Var], SQLStmt, [Var]) -- return vars, sql, param vars
@@ -377,13 +393,17 @@ instance Params SQLCond where
     params (SQLExistsCond sql) = params sql
 
 instance Params SQLStmt where
-    params (SQLQueryStmt (SQLQuery sel _ cond _ _ _ _)) = params sel ++ params cond
+    params (SQLQueryStmt sql) = params sql
     params (SQLInsertStmt _ vs _ cond) = params (map snd vs) ++ params cond
     params (SQLUpdateStmt _ vs cond) = params (map snd vs) ++ params cond
     params (SQLDeleteStmt _ cond) = params cond
 
+instance Params FromTable where
+    params (SimpleTable _ _) = []
+    params (QueryTable sql _) = params sql
+
 instance Params SQL where
-    params (SQLQuery sel _ cond _ _ _ _) = params sel ++ params cond
+    params (SQLQuery sel from cond _ _ _ _) = params sel ++ params from ++ params cond
 
 instance Params (Var, SQLExpr) where
     params (_, expr) = params expr
@@ -420,47 +440,57 @@ translateQueryToSQL vars formula = do
             let sql2 = simplifySQLCond sql
             return (vars, sql2, params sql2)
 
-simplifySQLCond :: SQLStmt -> SQLStmt
-simplifySQLCond (SQLQueryStmt (SQLQuery s f cond orderby limit distinct groupby)) = SQLQueryStmt (SQLQuery s f (simplifySQLCond' cond) orderby limit distinct groupby)
-simplifySQLCond (SQLInsertStmt t s f cond) = SQLInsertStmt t s f (simplifySQLCond' cond)
-simplifySQLCond (SQLUpdateStmt t cs cond) = SQLUpdateStmt t cs (simplifySQLCond' cond)
-simplifySQLCond (SQLDeleteStmt t cond) = SQLDeleteStmt t (simplifySQLCond' cond)
+class SimplifySQLCond a where
+    simplifySQLCond :: a -> a
 
-simplifySQLCond2 :: SQL -> SQL
-simplifySQLCond2 (SQLQuery s f cond orderby limit distinct groupby) = SQLQuery s f (simplifySQLCond' cond) orderby limit distinct groupby
+instance SimplifySQLCond SQLStmt where
+    simplifySQLCond (SQLQueryStmt sql) = SQLQueryStmt (simplifySQLCond sql)
+    simplifySQLCond (SQLInsertStmt t s f cond) = SQLInsertStmt t s f (simplifySQLCond cond)
+    simplifySQLCond (SQLUpdateStmt t cs cond) = SQLUpdateStmt t cs (simplifySQLCond cond)
+    simplifySQLCond (SQLDeleteStmt t cond) = SQLDeleteStmt t (simplifySQLCond cond)
 
-simplifySQLCond' :: SQLCond -> SQLCond
-simplifySQLCond' c@(SQLCompCond "=" a b) | a == b = SQLTrueCond
-simplifySQLCond' c@(SQLCompCond _ _ _) = c
-simplifySQLCond' (SQLTrueCond) = SQLTrueCond
-simplifySQLCond' (SQLFalseCond) = SQLFalseCond
-simplifySQLCond' c@(SQLAndCond _ _) =
-    let conj = getSQLConjuncts c
-        conj2 = concatMap (getSQLConjuncts . simplifySQLCond') conj
-        conj3 = filter (\a -> case a of
+instance SimplifySQLCond SQL where
+    simplifySQLCond (SQLQuery s f cond orderby limit distinct groupby) = SQLQuery s (simplifySQLCond f) (simplifySQLCond cond) orderby limit distinct groupby
+
+instance SimplifySQLCond a => SimplifySQLCond [a] where
+    simplifySQLCond = map simplifySQLCond
+
+instance SimplifySQLCond FromTable where
+    simplifySQLCond table@(SimpleTable _ _) = table
+    simplifySQLCond (QueryTable sql v) = QueryTable (simplifySQLCond sql) v
+
+instance SimplifySQLCond SQLCond where
+    simplifySQLCond c@(SQLCompCond "=" a b) | a == b = SQLTrueCond
+    simplifySQLCond c@(SQLCompCond _ _ _) = c
+    simplifySQLCond (SQLTrueCond) = SQLTrueCond
+    simplifySQLCond (SQLFalseCond) = SQLFalseCond
+    simplifySQLCond c@(SQLAndCond _ _) =
+        let conj = getSQLConjuncts c
+            conj2 = concatMap (getSQLConjuncts . simplifySQLCond) conj
+            conj3 = filter (\a -> case a of
                                 SQLTrueCond -> False
                                 _ -> True) conj2
-        conj4 = if all (\a -> case a of
+            conj4 = if all (\a -> case a of
                                 SQLFalseCond -> False
                                 _ -> True) conj3
-                    then conj3
-                    else [SQLFalseCond]
-        conj5 = nub conj4 in
-        if null conj5
-            then SQLTrueCond
-            else foldl1 (.&&.) conj5
-simplifySQLCond' (SQLOrCond a b) = case simplifySQLCond' a of
-    SQLFalseCond -> simplifySQLCond' b
-    SQLTrueCond -> SQLTrueCond
-    a' -> case simplifySQLCond' b of
-        SQLFalseCond -> a'
+                        then conj3
+                        else [SQLFalseCond]
+            conj5 = nub conj4 in
+            if null conj5
+                then SQLTrueCond
+                else foldl1 (.&&.) conj5
+    simplifySQLCond (SQLOrCond a b) = case simplifySQLCond a of
+        SQLFalseCond -> simplifySQLCond b
         SQLTrueCond -> SQLTrueCond
-        b' -> SQLOrCond a' b'
-simplifySQLCond' (SQLNotCond a) = case simplifySQLCond' a of
-    SQLTrueCond -> SQLFalseCond
-    SQLFalseCond -> SQLTrueCond
-    a' -> SQLNotCond a'
-simplifySQLCond' (SQLExistsCond sql) = SQLExistsCond (simplifySQLCond2 sql)
+        a' -> case simplifySQLCond b of
+            SQLFalseCond -> a'
+            SQLTrueCond -> SQLTrueCond
+            b' -> SQLOrCond a' b'
+    simplifySQLCond (SQLNotCond a) = case simplifySQLCond a of
+        SQLTrueCond -> SQLFalseCond
+        SQLFalseCond -> SQLTrueCond
+        a' -> SQLNotCond a'
+    simplifySQLCond (SQLExistsCond sql) = SQLExistsCond (simplifySQLCond sql)
 
 
 sqlexists :: SQL -> SQL
@@ -481,6 +511,10 @@ sqlsummarize funcs groupby (SQLQuery _ from whe _ _ True _) =
     error "cannot summarize distinct selection"
 sqlsummarize funcs groupby (SQLQuery _ from whe _ _ _ (_ : _)) =
     error "cannot summarize groupby selection"
+
+sqlsummarize2 :: [(Var, SQLExpr)] -> [SQLExpr] -> SQL -> SQLVar -> SQL
+sqlsummarize2 funcs groupby sql v =
+    SQLQuery funcs [QueryTable sql v] SQLTrueCond [] top False []
 
 sqlorderby :: SQLOrder -> SQLExpr -> SQL -> SQL
 sqlorderby ord expr (SQLQuery sel from whe orderby limit distinct groupby) =
@@ -519,27 +553,36 @@ translateFormulaToSQL (Aggregate Not form) =
     snot <$> subState (translateFormulaToSQL form)
 
 translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
-    sql <- translateFormulaToSQL conj
-    funcs' <- mapM (\(v, s) ->
-        case s of
-            Max v2 -> do
-                rep <- findRep v2
-                return (v, SQLFuncExpr "max" [rep])
-            Min v2 -> do
-                rep <- findRep v2
-                return (v, SQLFuncExpr "min" [rep])
-            Sum v2 -> do
-                rep <- findRep v2
-                return (v, SQLFuncExpr "sum" [rep])
-            Average v2 -> do
-                rep <- findRep v2
-                return (v, SQLFuncExpr "average" [rep])
-            Count -> return (v, SQLFuncExpr "count" [SQLExprText "*"])
-            CountDistinct v2 -> do
-                rep <- findRep v2
-                return (v, SQLFuncExpr "count" [SQLFuncExpr2 "distinct" rep])) funcs
+    sql@(SQLQuery sel fro whe ord lim dis gro) <- translateFormulaToSQL conj
+    funcs' <- mapM (\(v@(Var vn), s) -> do
+                addVarRep v (SQLColExpr2 vn)
+                case s of
+                    Max v2 -> do
+                        r <- findRep v2
+                        return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "max" [r], SQLIntConstExpr 0])
+                    Min v2 -> do
+                        r <- findRep v2
+                        return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "min" [r], SQLIntConstExpr 0])
+                    Sum v2 -> do
+                        r <- findRep v2
+                        return (v, SQLFuncExpr "sum" [r])
+                    Average v2 -> do
+                        r <- findRep v2
+                        return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "average" [r], SQLIntConstExpr 0])
+                    Count ->
+                        return (v, SQLFuncExpr "count" [SQLExprText "*"])
+                    CountDistinct v2 -> do
+                        r <- findRep v2
+                        return (v, SQLFuncExpr "count" [SQLFuncExpr2 "distinct" r])) funcs
     groupbyreps <- mapM findRep groupby
-    return (sqlsummarize funcs' groupbyreps sql)
+    
+    if null sel
+        then 
+            return (sqlsummarize funcs' groupbyreps sql)
+        else do
+            qv <- freshSQLVar "qu"
+            return (sqlsummarize2 funcs' groupbyreps sql qv)
+           
 
 translateFormulaToSQL (Aggregate (Limit n) form) =
     sqllimit (IntLattice n) <$> translateFormulaToSQL form
@@ -596,7 +639,7 @@ translateAtomToSQL (Atom name args) = do
                                 (new, v) <- lookupTableVar tablename prikeyargs
                                 if new
                                     then
-                                        return ([table], singleton sqlvar v, cols, args)
+                                        return ([SimpleTable tablename sqlvar], singleton sqlvar v, cols, args)
                                     else do
                                         let cols2 = cols \\ prikeyargcols
                                         let args2 = args \\ prikeyargs
@@ -662,7 +705,7 @@ sortParts (p : ps) = b++[a] where
             _ -> (part, active : done)) (p,[]) ps where
             compatible colexpr = all (\(col, expr) -> all (\(col2, expr2) ->col2 /= col || expr2 == expr) colexpr)
 
-toInsert :: [Table] -> SQLCond -> SQLStmt -> SQLStmt
+toInsert :: [FromTable] -> SQLCond -> SQLStmt -> SQLStmt
 toInsert tablelist cond (SQLInsertStmt tname colexprs tablelist2 cond2) = SQLInsertStmt tname colexprs (tablelist ++ tablelist2) (cond .&&. cond2)
 toInsert tablelist cond (SQLDeleteStmt tname cond2) = SQLDeleteStmt tname (cond .&&. cond2)
 toInsert tablelist cond (SQLUpdateStmt tname colexprs cond2) = SQLUpdateStmt tname colexprs (cond .&&. cond2)

@@ -40,11 +40,13 @@ instance IPSDBStatement HDBCStatement where
         type PSRowType HDBCStatement = MapResultRow
         execWithParams (HDBCStatement ret vars stmt params) args = do
                 liftIO $ infoM "SQL" ("execute stmt")
-                -- liftIO $ putStrLn ("execHDBCStatement: params = " ++ show args)
-                rcode <- liftIO $ execute stmt (map (\v -> convertResultValueToSQL (case case lookup v args of
-                    Just e -> e
-                    Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args) of
+                liftIO $ infoM "SQL" ("execHDBCStatement: params = " ++ show args)
+                let sargs = (map (\v -> convertResultValueToSQL (case case lookup v args of
+                        Just e -> e
+                        Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args) of
                                         AbstractResultValue arv -> toConcreteResultValue arv)) params)
+                liftIO $ infoM "SQL" ("execHDBCStatement: params = " ++ show sargs)
+                rcode <- liftIO $ execute stmt sargs
                 if rcode == -1
                     then do
                         liftIO $ infoM "SQL" ("execute stmt: error ")
@@ -52,7 +54,7 @@ instance IPSDBStatement HDBCStatement where
                     else if ret
                         then do
                             rows <- liftIO $ fetchAllRows stmt
-                            liftIO $ infoM "SQL" ("returns " ++ show (length rows) ++ " rows")
+                            liftIO $ infoM "SQL" ("returns " ++ show (length rows) ++ " rows\n" ++ show rows )
                             listResultStream (map (convertSQLToResult vars) rows)
                         else do
                             liftIO $ infoM "SQL" ("updates " ++ show rcode ++ " rows")

@@ -178,8 +178,8 @@ rewrite D_NUM_DATA_BY_RESC(rid, c)
     let c = count distinct id (DATA_OBJ(id, int64 rid))
 
 predicate D_NUM_DATA_BY_NAME property (key input text, key input text, input output int64)
-rewrite D_NUM_DATA_BY_NAME(cn, n, c)
-    let c = count distinct id (COLL_NAME(cid, cn) DATA_NAME(id, rid, n) DATA_COLL_ID(id, rid, cid))
+rewrite D_NUM_DATA_BY_NAME(cnp, np, c)
+    let c = count distinct id (COLL_NAME(cid, cn) DATA_NAME(id, rid, n) DATA_COLL_ID(id, rid, cid) like(cn, cnp) like(n, np))
 
 predicate D_TOKEN_ID property(key input text, key input text, input output int64)
 rewrite D_TOKEN_ID (ns, n, id)
@@ -223,7 +223,7 @@ rewrite D_RESC_GROUP_ID(rgn, rgid)
 
 predicate D_META_VALUE_AND_UNITS_TS object (key input int64, input output text, input output text, input output text)
 rewrite insert D_META_VALUE_AND_UNITS_TS(mid, v, u, mts)
-    insert META_ATTR_VALUE(mid, v) META_ATTR_UNIT(mid, v) META_MODIFY_TS(mid, mts)
+    insert META_ATTR_VALUE(mid, v) META_ATTR_UNIT(mid, u) META_MODIFY_TS(mid, mts)
 
 predicate D_AVUS object ()
 rewrite delete D_AVUS()
@@ -306,25 +306,30 @@ predicate D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS object (key input int64, ke
 rewrite delete D_USER_PASSWORD_BY_EXPIRY_TS_AND_MODIFY_TS (minx, maxx, curr)
     USER_PASSWORD_PASS_EXPIRY_TS(uid, pw, expiryts) ~like(expiryts, "9999%") eq(int64 expiryts, x) le(minx, x) le(x, maxx) USER_PASSWORD_MODIFY_TS(uid, pw, mts) eq(int64 mts, y) add(x, y, z) lt(z, curr) delete USER_PASSWORD_OBJ(uid, pw)
 
+predicate subcollpat property (key input text, output text)
+rewrite subcollpat(c, p)
+    regex_replace(c, "([_%\\\\])", "\\\\\\1", ce) concat(ce, "/%", p)
+export subcollpat
+
 predicate D_DATA_ACCESS_BY_USER_RECURSIVE object (key input int64, key input text)
 rewrite delete D_DATA_ACCESS_BY_USER_RECURSIVE (uid, cn)
-    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) DATA_COLL_ID(id, rid, cid) OBJT_ACCESS_OBJ(id, uid, tid) delete OBJT_ACCESS_OBJ(id, uid, tid)
+    subcollpat(cn, pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) DATA_COLL_ID(id, rid, cid) OBJT_ACCESS_OBJ(id, uid, tid) delete OBJT_ACCESS_OBJ(id, uid, tid)
 
 predicate D_COLL_ACCESS_BY_USER_RECURSIVE object (key input int64, key input text)
 rewrite delete D_COLL_ACCESS_BY_USER_RECURSIVE (uid, cn)
-    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) OBJT_ACCESS_OBJ(cid, uid, tid) delete OBJT_ACCESS_OBJ(cid, uid, tid)
+    subcollpat(cn, pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) OBJT_ACCESS_OBJ(cid, uid, tid) delete OBJT_ACCESS_OBJ(cid, uid, tid)
 
 predicate D_DATA_ACCESS_RECURSIVE object (key input int64, key input text, key input text, key input text, key input text)
 rewrite insert D_DATA_ACCESS_RECURSIVE (uid, cn, acc, cts, mts)
-    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) DATA_COLL_ID(id, rid, cid)
+    distinct (subcollpat(cn, pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern)) DATA_COLL_ID(id, rid, cid))
     D_TOKEN_ID("access_type", acc, tid)
-    insert OBJT_ACCESS_OBJ(id, uid, tid) OBJT_ACCESS_CREATE_TS(uid, id, tid, cts) OBJT_ACCESS_MODIFY_TS(uid, id, tid, mts)
+    insert OBJT_ACCESS_OBJ(id, uid, tid) OBJT_ACCESS_CREATE_TS(id, uid, tid, cts) OBJT_ACCESS_MODIFY_TS(id, uid, tid, mts)
 
 predicate D_COLL_ACCESS_RECURSIVE object (key input int64, key input text, key input text, key input text, key input text)
 rewrite insert D_COLL_ACCESS_RECURSIVE (uid, cn, acc, cts, mts)
-    concat(cn, "/%", pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern))
+    subcollpat(cn, pattern) COLL_NAME(cid, cn2) (eq(cn2, cn) | like (cn2, pattern))
     D_TOKEN_ID("access_type", acc, tid)
-    insert OBJT_ACCESS_OBJ(cid, uid, tid) OBJT_ACCESS_CREATE_TS(uid, cid, tid, cts) OBJT_ACCESS_MODIFY_TS(uid, cid, tid, mts)
+    insert OBJT_ACCESS_OBJ(cid, uid, tid) OBJT_ACCESS_CREATE_TS(cid, uid, tid, cts) OBJT_ACCESS_MODIFY_TS(cid, uid, tid, mts)
 
 
 predicate D_COLL_ID_IF_OWN_ACCESS_BY_USER_ZONE_AND_NAME object (key input text, key input text, key input int64, input output int64)
@@ -405,7 +410,7 @@ rewrite D_META_ID2(a, v, u, mid)
 
 predicate D_META_ID_BY_ATTRIBUTE_AND_VALUE property (key input text, key input text, input output int64)
 rewrite D_META_ID_BY_ATTRIBUTE_AND_VALUE(a, v, mid)
-    META_ATTR_NAME(mid, a) META_ATTR_VALUE(mid, v) (META_ATTR_UNIT(mid, u) | META_ATTR_UNIT(mid, ""))
+    META_ATTR_NAME(mid, a) META_ATTR_VALUE(mid, v) META_ATTR_UNIT(mid, "")
 
 predicate D_META_ID_BY_ATTRIBUTE_AND_OBJ_ID property (key input text, key input int64, input output int64)
 rewrite D_META_ID_BY_ATTRIBUTE_AND_OBJ_ID(a, id, mid)
@@ -944,6 +949,7 @@ rewrite D_NUM_ACCESS_PERMISSION_USE_WILDCARD(un, uz, cn, dn, permission)
     let permission = count
         (let m = max acc group by id
             (D_NON_GROUP_USER_ID(un, uz, uid) D_DATA_ID_BY_NAME2(cn2, dn2, id) like (cn2, cn) like(dn2, dn) USER_GROUP_OBJ(gid, uid) OBJT_ACCESS_OBJ(id, gid, acc)))
+export D_NUM_ACCESS_PERMISSION_USE_WILDCARD
 
 predicate D_DATA_PATH_BY_USER_ZONE_AND_NAME_AND_RESC_NAME object (key input text, key input text, key input text, key input text, key input text)
 rewrite insert D_DATA_PATH_BY_USER_ZONE_AND_NAME_AND_RESC_NAME(uz, un, rn, old, new)
@@ -974,12 +980,108 @@ rewrite insert D_COLL_PARENT_COLL_NAME_RECURSIVE (oldcn, newcn)
     concat(oldcn, "/%", pattern) COLL_PARENT_COLL_NAME(cid, pcn) (eq(pcn, oldcn) | like(pcn, pattern))
     strlen(oldcn, oldl) strlen(pcn, l) add(oldl, 1, oldl1) sub(l, oldl, c) substr(pcn, oldl1, c, scn) concat(newcn, scn, newcn2) insert COLL_PARENT_COLL_NAME(cid, newcn2)
 
+predicate D_TICKET object(key input int64, key input text, key input text, key input int64, key input int64,
+                   key input text, key input text, key input text)
+rewrite insert D_TICKET(ticketid, tickettext, tickettype, uid, oid, otype, cts, mts)
+    insert TICKET_OBJ(ticketid) TICKET_STRING(ticketid, tickettext) TICKET_TYPE(ticketid, tickettype) TICKET_USER_ID(ticketid, uid) TICKET_OBJECT_ID(ticketid, oid) TICKET_OBJECT_TYPE(ticketid, otype) TICKET_CREATE_TS(ticketid, cts) TICKET_MODIFY_TS(ticketid, mts)
+export D_TICKET
+
+predicate D_TICKET_ID_BY_USER_AND_TICKET_STRING property (key input int64, key input text, key input output int64)
+rewrite D_TICKET_ID_BY_USER_AND_TICKET_STRING(uid, tickettext, ticketid)
+    TICKET_STRING(ticketid, tickettext) TICKET_USER_ID(ticketid, uid)
+export D_TICKET_ID_BY_USER_AND_TICKET_STRING
+
+predicate D_TICKET_ID_BY_USER_AND_TICKET property (key input int64, key input int64, key input output int64)
+rewrite D_TICKET_ID_BY_USER_AND_TICKET(uid, ticketid, ticketid2)
+    TICKET_USER_ID(ticketid, uid) eq(int64 ticketid, ticketid2)
+export D_TICKET_ID_BY_USER_AND_TICKET
+
+predicate D_TICKET_BY_TICKET_AND_USER object (key input int64, key input int64)
+rewrite delete D_TICKET_BY_TICKET_AND_USER(ticketid, uid)
+    TICKET_USER_ID(ticketid, uid) delete TICKET_OBJ(ticketid)
+export D_TICKET_BY_TICKET_AND_USER
+
+predicate D_TICKET_ALLOWED_HOSTS_BY_TICKET object (key input int64)
+rewrite delete D_TICKET_ALLOWED_HOSTS_BY_TICKET(ticketid)
+    TICKET_ALLOWED_HOSTS_OBJ(ticketid, host) delete TICKET_ALLOWED_HOSTS_OBJ(ticketid, host)
+export D_TICKET_ALLOWED_HOSTS_BY_TICKET
+
+predicate D_TICKET_ALLOWED_GROUPS_BY_TICKET object (key input int64)
+rewrite delete D_TICKET_ALLOWED_GROUPS_BY_TICKET(ticketid)
+    TICKET_ALLOWED_GROUPS_OBJ(ticketid, host) delete TICKET_ALLOWED_GROUPS_OBJ(ticketid, host)
+export D_TICKET_ALLOWED_GROUPS_BY_TICKET
+
+predicate D_TICKET_ALLOWED_USERS_BY_TICKET object (key input int64)
+rewrite delete D_TICKET_ALLOWED_USERS_BY_TICKET(ticketid)
+    TICKET_ALLOWED_USERS_OBJ(ticketid, host) delete TICKET_ALLOWED_USERS_OBJ(ticketid, host)
+export D_TICKET_ALLOWED_USERS_BY_TICKET
+
+
+predicate D_TICKET_USES_LIMIT_BY_TICKET_AND_USER property (key input int64, key input int64, key input int64)
+rewrite insert D_TICKET_USES_LIMIT_BY_TICKET_AND_USER(ticketid, uid, ul)
+    TICKET_USER_ID(ticketid, uid) insert TICKET_USES_LIMIT(ticketid, ul)
+export D_TICKET_USES_LIMIT_BY_TICKET_AND_USER
+
+
+predicate D_TICKET_WRITE_FILE_LIMIT_BY_TICKET_AND_USER property (key input int64, key input int64, key input int64)
+rewrite insert D_TICKET_WRITE_FILE_LIMIT_BY_TICKET_AND_USER(ticketid, uid, ul)
+    TICKET_USER_ID(ticketid, uid) insert TICKET_WRITE_FILE_LIMIT(ticketid, ul)
+export D_TICKET_WRITE_FILE_LIMIT_BY_TICKET_AND_USER
+
+
+predicate D_TICKET_WRITE_BYTE_LIMIT_BY_TICKET_AND_USER property (key input int64, key input int64, key input int64)
+rewrite insert D_TICKET_WRITE_BYTE_LIMIT_BY_TICKET_AND_USER(ticketid, uid, ul)
+    TICKET_USER_ID(ticketid, uid) insert TICKET_WRITE_BYTE_LIMIT(ticketid, ul)
+export D_TICKET_WRITE_BYTE_LIMIT_BY_TICKET_AND_USER
+
+predicate D_TICKET_EXPIRY_TS_BY_TICKET_AND_USER property (key input int64, key input int64, key input text)
+rewrite insert D_TICKET_EXPIRY_TS_BY_TICKET_AND_USER(ticketid, uid, ul)
+    TICKET_USER_ID(ticketid, uid) insert TICKET_EXPIRY_TS(ticketid, ul)
+export D_TICKET_EXPIRY_TS_BY_TICKET_AND_USER
+
+predicate D_TICKET_ALLOWED_HOSTS object (key input int64, key input text)
+rewrite insert D_TICKET_ALLOWED_HOSTS(ticketid, host)
+    insert TICKET_ALLOWED_HOSTS_OBJ(ticketid, host)
+rewrite delete D_TICKET_ALLOWED_HOSTS(ticketid, host)
+    delete TICKET_ALLOWED_HOSTS_OBJ(ticketid, host)
+export D_TICKET_ALLOWED_HOSTS
+
+predicate D_TICKET_ALLOWED_USERS object (key input int64, key input text)
+rewrite insert D_TICKET_ALLOWED_USERS(ticketid, host)
+    insert TICKET_ALLOWED_USERS_OBJ(ticketid, host)
+rewrite delete D_TICKET_ALLOWED_USERS(ticketid, host)
+    delete TICKET_ALLOWED_USERS_OBJ(ticketid, host)
+export D_TICKET_ALLOWED_USERS
+
+predicate D_TICKET_ALLOWED_GROUPS object (key input int64, key input text)
+rewrite insert D_TICKET_ALLOWED_GROUPS(ticketid, host)
+    insert TICKET_ALLOWED_GROUPS_OBJ(ticketid, host)
+rewrite delete D_TICKET_ALLOWED_GROUPS(ticketid, host)
+    delete TICKET_ALLOWED_GROUPS_OBJ(ticketid, host)
+export D_TICKET_ALLOWED_GROUPS
+
+
+
+
 predicate HAS_READ_PERMISSION property(key input text, key input text, key input int64)
 rewrite HAS_READ_PERMISSION(uz, un, id)
     D_TOKEN_ID("access_type", "read object", tid) D_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) 
     OBJT_ACCESS_OBJ(id, gid, acclev) le(tid, acclev) 
 export HAS_READ_PERMISSION
 
+predicate HAS_READ_PERMISSION_TICKET_DATA property(key input text, key input int64)
+rewrite HAS_READ_PERMISSION_TICKET_DATA(ticket, id)
+    TICKET_STRING(ticketid, ticket) (
+        TICKET_OBJECT_ID(ticketid, id) |
+        TICKET_OBJECT_ID(ticketid, cid) (DATA_COLL_ID(id, rid, cid) | DATA_COLL_ID(id, rid, cid2) COLL_NAME(cid, cn) COLL_NAME(cid2, cn2) concat(cn, "/%", cnp) like(cn2, cnp)))
+export HAS_READ_PERMISSION_TICKET_DATA
+
+predicate HAS_READ_PERMISSION_TICKET_COLL property(key input text, key input int64)
+rewrite HAS_READ_PERMISSION_TICKET_COLL(ticket, cid)
+    TICKET_STRING(ticketid, ticket) (
+        TICKET_OBJECT_ID(ticketid, cid) |
+        TICKET_OBJECT_ID(ticketid, cid2) COLL_NAME(cid, cn) COLL_NAME(cid2, cn2) concat(cn, "/%", cnp) like(cn2, cnp))
+export HAS_READ_PERMISSION_TICKET_COLL
 // simple query
 
 

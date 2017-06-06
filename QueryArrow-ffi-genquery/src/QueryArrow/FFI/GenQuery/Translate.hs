@@ -16,7 +16,7 @@ import Debug.Trace
 import QueryArrow.FFI.GenQuery.Data
 
 prefixes :: [String]
-prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC", "SERVER_LOAD_DIGEST"]
+prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC", "SERVER_LOAD_DIGEST", "SERVER_LOAD", "TOKEN", "TICKET_ALLOWED_HOST",  "TICKET_ALLOWED_USER",  "TICKET_ALLOWED_GROUP", "TICKET"]
 
 extractPrefix :: String -> String
 extractPrefix "COLUMN_NAME_NOT_FOUND_510" = "COLL"
@@ -28,21 +28,24 @@ extractPrefix "COLUMN_NAME_NOT_FOUND_1301" = "USER"
 extractPrefix "COLL_TOKEN_NAMESPACE" = "COLL_ACCESS"
 extractPrefix "DATA_TOKEN_NAMESPACE" = "DATA_ACCESS"
 extractPrefix ('S' : 'L' : 'D' : '_' : _) = "SERVER_LOAD_DIGEST"
+extractPrefix ('S' : 'L' : '_' : _) = "SERVER_LOAD"
 extractPrefix col =
   fromMaybe (error ("malformatted column name " ++ col)) (find (\p -> take (length p) col == p) prefixes)
 
 
 toVariable :: String -> Var
 toVariable "DATA_ACCESS_DATA_ID" = toVariable "DATA_ID"
+toVariable "DATA_ACCESS_USER_ID" = toVariable "USER_ID"
 toVariable col = Var ("x" ++ col)
 
 toIdVariable :: String -> Var
 toIdVariable col = Var ("x" ++ extractPrefix col ++ "_ID")
 
-dataRescId = Var "xDATA_RESC_ID"
-userAuthName = Var "xUSER_DN"
-dataId = Var "xDATA_ID"
-collId = Var "xCOLL_ID"
+dataRescId = toVariable "DATA_RESC_ID"
+userAuthName = toVariable "USER_DN"
+dataId = toVariable "DATA_ID"
+collId = toVariable "COLL_ID"
+userId = toVariable "USER_ID"
 
 translateGenQueryColumnToPredicate :: String -> Formula
 translateGenQueryColumnToPredicate  col =
@@ -127,7 +130,9 @@ translateGenQueryColumnToPredicate  col =
           -- ACCESS (data)
           "DATA_ACCESS_NAME" -> "TOKN_TOKEN_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "DATA_TOKEN_NAMESPACE" -> "TOKN_TOKEN_NAMESPACE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
-          "DATA_ACCESS_DATA_ID" -> "DATA_OBJ" @@ [VarExpr (toVariable col), VarExpr dataRescId]
+          "DATA_ACCESS_DATA_ID" -> "DATA_OBJ" @@ [VarExpr dataId, VarExpr dataRescId]
+          "DATA_ACCESS_USER_ID" -> "USER_OBJ" @@ [VarExpr userId]
+          "DATA_ACCESS_TYPE" -> FOne
           -- META (data)
           "META_DATA_ATTR_NAME" -> "META_ATTR_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "META_DATA_ATTR_VALUE" -> "META_ATTR_VALUE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
@@ -157,10 +162,42 @@ translateGenQueryColumnToPredicate  col =
           "RULE_EXEC_NOTIFICATION_ADDR" -> "RULE_EXEC_NOTIFICATION_ADDR" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RULE_EXEC_LAST_EXE_TIME" -> "RULE_EXEC_LAST_EXE_TIME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
           "RULE_EXEC_STATUS" -> "RULE_EXEC_EXE_STATUS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          -- SL
+          'S' : 'L' : '_' : _ -> "SERVER_LOAD_OBJ" @@ [VarExpr (toVariable "SL_HOST_NAME"), VarExpr (toVariable "SL_RESC_NAME"), VarExpr (toVariable "SL_CPU_USED"),VarExpr (toVariable "SL_MEM_USED"), VarExpr (toVariable "SL_SWAP_USED"), VarExpr (toVariable "SL_RUNQ_LOAD"), VarExpr (toVariable "SL_DISK_SPACE"), VarExpr (toVariable "SL_NET_INPUT"), VarExpr (toVariable "SL_NET_OUTPUT"), VarExpr (toVariable "SL_CREATE_TIME")] 
           -- SLD
           "SLD_LOAD_FACTOR" -> "SERVER_LOAD_DIGEST_OBJ" @@ [VarExpr (toVariable "SLD_RESC_NAME"), VarExpr (toVariable "SLD_LOAD_FACTOR"), VarExpr (toVariable "SLD_CREATE_TIME")]
           "SLD_RESC_NAME" -> "SERVER_LOAD_DIGEST_OBJ" @@ [VarExpr (toVariable "SLD_RESC_NAME"), VarExpr (toVariable "SLD_LOAD_FACTOR"), VarExpr (toVariable "SLD_CREATE_TIME")]
           "SLD_CREATE_TIME" -> "SERVER_LOAD_DIGEST_OBJ" @@ [VarExpr (toVariable "SLD_RESC_NAME"), VarExpr (toVariable "SLD_LOAD_FACTOR"), VarExpr (toVariable "SLD_CREATE_TIME")]
+          -- TOKEN
+          "TOKEN_ID" -> "TOKN_OBJ" @@ [VarExpr (toVariable col)]
+          "TOKEN_NAME" -> "TOKN_TOKEN_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TOKEN_NAMESPACE" -> "TOKN_TOKEN_NAMESPACE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          -- TICKET
+          "TICKET_ID" -> "TICKET_OBJ" @@ [VarExpr (toVariable col)]
+          "TICKET_STRING" -> "TICKET_STRING" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_TYPE" -> "TICKET_TYPE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_OBJECT_TYPE" -> "TICKET_OBJECT_TYPE" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_OWNER_NAME" -> "TICKET_USER_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_USER_ID")] .*. "USER_NAME" @@ [VarExpr (toVariable "TICKET_USER_ID"), VarExpr (toVariable "TICKET_OWNER_NAME")]
+          "TICKET_OWNER_ZONE" -> "TICKET_USER_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_USER_ID")] .*. "USER_ZONE_NAME" @@ [VarExpr (toVariable "TICKET_USER_ID"), VarExpr (toVariable "TICKET_OWNER_ZONE")]
+          "TICKET_USES_COUNT" -> "TICKET_USES_COUNT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_USES_LIMIT" -> "TICKET_USES_LIMIT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_FILE_COUNT" -> "TICKET_WRITE_FILE_COUNT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_FILE_LIMIT" -> "TICKET_WRITE_FILE_LIMIT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_BYTE_COUNT" -> "TICKET_WRITE_BYTE_COUNT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_BYTE_LIMIT" -> "TICKET_WRITE_BYTE_LIMIT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_EXPIRY" -> "TICKET_EXPIRY_TS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_DATA_NAME" -> "TICKET_OBJECT_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_OBJECT_ID")] .*. "DATA_NAME" @@ [VarExpr (toVariable "TICKET_OBJECT_ID"), VarExpr (toVariable "TICKET_OBJECT_RESC_ID"), VarExpr (toVariable "TICKET_DATA_NAME")]
+          "TICKET_DATA_COLL_NAME" -> "TICKET_OBJECT_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_OBJECT_ID")] .*. "DATA_COLL_ID" @@ [VarExpr (toVariable "TICKET_OBJECT_ID"), VarExpr (toVariable "TICKET_OBJECT_RESC_ID"), VarExpr (toVariable "TICKET_OBJECT_COLL_ID")] .*. "COLL_NAME" @@ [VarExpr (toVariable "TICKET_OBJECT_COLL_ID"), VarExpr (toVariable "TICKET_DATA_COLL_NAME")]
+          "TICKET_COLL_NAME" -> "TICKET_OBJECT_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_OBJECT_ID")] .*. "COLL_NAME" @@ [VarExpr (toVariable "TICKET_OBJECT_ID"), VarExpr (toVariable "TICKET_COLL_NAME")]
+          -- TICKET_ALLOWED_HOSTS
+          "TICKET_ALLOWED_HOST_TICKET_ID" -> "TICKET_ALLOWED_HOSTS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_HOST_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_HOST")]
+          "TICKET_ALLOWED_HOST" -> "TICKET_ALLOWED_HOSTS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_HOST_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_HOST")]
+          -- TICKET_ALLOWED_USERS
+          "TICKET_ALLOWED_USER_TICKET_ID" -> "TICKET_ALLOWED_USERS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_USER_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_USER_NAME")]
+          "TICKET_ALLOWED_USER_NAME" -> "TICKET_ALLOWED_USERS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_USER_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_USER_NAME")]
+          -- TICKET_ALLOWED_GROUPS
+          "TICKET_ALLOWED_GROUP_TICKET_ID" -> "TICKET_ALLOWED_GROUPS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_GROUP_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_GROUP_NAME")]
+          "TICKET_ALLOWED_GROUP_NAME" -> "TICKET_ALLOWED_GROUPS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_GROUP_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_GROUP_NAME")]
           _ -> error ("unsupported column " ++ col)
 
 toCondPredicate2 :: [String] -> Cond ->  Formula
@@ -172,17 +209,19 @@ toCondPredicate2  cols cond@(Cond col _) =
 
 ancestors :: String -> [String]
 ancestors = ancestor "" where
-           ancestor "" ('/' : tl) = "'/'" : ancestor "/" tl
+           ancestor "" ('/' : tl) = "/" : ancestor "/" tl
            ancestor a ('/' : tl) = (reverse a) : ancestor ('/' : a) tl
            ancestor a (hd : tl) = ancestor (hd : a) tl
            ancestor a "" = [reverse a]
 
 escapeSQLTextArrayString :: String -> String
 escapeSQLTextArrayString "" = ""
-escapeSQLTextArrayString ('{' : tl) = "\\{" ++ escapeSQLTextArrayString tl
-escapeSQLTextArrayString (',' : tl) = "\\," ++ escapeSQLTextArrayString tl
-escapeSQLTextArrayString ('}' : tl) = "\\}" ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString ('\"' : tl) = "\\\"" ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString ('\\' : tl) = "\\\\" ++ escapeSQLTextArrayString tl
 escapeSQLTextArrayString (hd : tl) = hd : escapeSQLTextArrayString tl
+
+quote :: String -> String
+quote a = "\"" ++ a ++ "\""
 
 
 toCondPredicate :: Cond ->  Formula
@@ -194,10 +233,28 @@ toCondPredicate  (Cond col (NotEqString str)) =
   Aggregate Not ("eq" @@ [VarExpr (toVariable col), StringExpr (pack str)])
 toCondPredicate  (Cond col (NotEqInteger str)) =
   Aggregate Not ("eq" @@ [VarExpr (toVariable col), IntExpr (fromIntegral str)])
+toCondPredicate  (Cond col (GtString str)) =
+  ("gt" @@ [CastExpr Int64Type (VarExpr (toVariable col)), CastExpr Int64Type (StringExpr (pack str))])
+toCondPredicate  (Cond col (GtInteger str)) =
+  ("gt" @@ [CastExpr Int64Type (VarExpr (toVariable col)), IntExpr (fromIntegral str)])
+toCondPredicate  (Cond col (LtString str)) =
+  ("lt" @@ [CastExpr Int64Type (VarExpr (toVariable col)), CastExpr Int64Type (StringExpr (pack str))])
+toCondPredicate  (Cond col (LtInteger str)) =
+  ("lt" @@ [CastExpr Int64Type (VarExpr (toVariable col)), IntExpr (fromIntegral str)])
+toCondPredicate  (Cond col (GeString str)) =
+  ("ge" @@ [CastExpr Int64Type (VarExpr (toVariable col)), CastExpr Int64Type (StringExpr (pack str))])
+toCondPredicate  (Cond col (GeInteger str)) =
+  ("ge" @@ [CastExpr Int64Type (VarExpr (toVariable col)), IntExpr (fromIntegral str)])
+toCondPredicate  (Cond col (LeString str)) =
+  ("le" @@ [CastExpr Int64Type (VarExpr (toVariable col)), CastExpr Int64Type (StringExpr (pack str))])
+toCondPredicate  (Cond col (LeInteger str)) =
+  ("le" @@ [CastExpr Int64Type (VarExpr (toVariable col)), IntExpr (fromIntegral str)])
 toCondPredicate  (Cond col (LikeCond str)) =
   "like" @@ [VarExpr (toVariable col), StringExpr (pack str)]
+toCondPredicate  (Cond col (InCond str)) =
+  "in" @@ [VarExpr (toVariable col), StringExpr (pack str)]
 toCondPredicate  (Cond col (ParentOfCond str)) =
-  let arrstr = "{" ++ intercalate "," (map escapeSQLTextArrayString (ancestors str)) ++ "}" in
+  let arrstr = "{" ++ intercalate "," (map (quote . escapeSQLTextArrayString) (ancestors str)) ++ "}" in
       "in" @@ [VarExpr (toVariable col), StringExpr (pack arrstr)]
 toCondPredicate  (Cond col (AndCond a b)) =
   toCondPredicate  (Cond col a) .*.
@@ -217,10 +274,10 @@ toJoinPredicate  cols conds =
             then "DATA_COLL_ID" @@ [VarExpr (Var "xDATA_ID"), VarExpr (Var "xDATA_RESC_ID"), VarExpr (Var "xCOLL_ID")]
             else FOne,
           if "COLL_ACCESS" `elem` tables
-            then "OBJT_ACCESS_OBJ" @@ [VarExpr (Var "xCOLL_ID"), VarExpr (Var "xUSER_ID"), VarExpr (Var "xCOLL_ACCESS_ID")]
+            then "OBJT_ACCESS_OBJ" @@ [VarExpr collId, VarExpr userId, VarExpr (Var "xCOLL_ACCESS_TYPE")]
             else FOne,
           if "DATA_ACCESS" `elem` tables
-            then "OBJT_ACCESS_OBJ" @@ [VarExpr (Var "xDATA_ID"), VarExpr (Var "xUSER_ID"), VarExpr (Var "xDATA_ACCESS_ID")]
+            then "OBJT_ACCESS_OBJ" @@ [VarExpr dataId, VarExpr userId, VarExpr (Var "xDATA_ACCESS_TYPE")]
             else FOne,
           if "META_DATA" `elem` tables
             then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xDATA_ID"), VarExpr (Var "xMETA_DATA_ID")]
@@ -229,10 +286,10 @@ toJoinPredicate  cols conds =
             then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xCOLL_ID"), VarExpr (Var "xMETA_COLL_ID")]
             else FOne,
           if "META_RESC" `elem` tables
-            then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xRESC_ID"), VarExpr (Var "xMETA_DATA_ID")]
+            then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xRESC_ID"), VarExpr (Var "xMETA_RESC_ID")]
             else FOne,
           if "META_USER" `elem` tables
-            then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xUSER_ID"), VarExpr (Var "xMETA_COLL_ID")]
+            then "OBJT_METAMAP_OBJ" @@ [VarExpr (Var "xUSER_ID"), VarExpr (Var "xMETA_USER_ID")]
             else FOne
         ]
 addAccessControl :: String -> String -> Var -> Formula -> Formula
@@ -245,7 +302,32 @@ addAccessControls uz un ("DATA" : tabs) form = addAccessControls uz un tabs (add
 addAccessControls uz un ("COLL" : tabs) form = addAccessControls uz un tabs (addAccessControl uz un collId form)
 addAccessControls uz un (_ : tabs) form = addAccessControls uz un tabs form
 
-translateGenQueryToQAL :: Bool -> Maybe (String, String) -> GenQuery -> ([Var],  Formula)
+addTicketAccessControlData :: String -> Var -> Formula -> Formula
+addTicketAccessControlData ticket id form =
+    form .*. "HAS_READ_PERMISSION_TICKET_DATA" @@ [StringExpr (pack ticket), VarExpr id]
+
+addTicketAccessControlColl :: String -> Var -> Formula -> Formula
+addTicketAccessControlColl ticket id form =
+    form .*. "HAS_READ_PERMISSION_TICKET_COLL" @@ [StringExpr (pack ticket), VarExpr id]
+
+addTicketAccessControls :: String -> [String] -> Formula -> Formula
+addTicketAccessControls ticket tabs form = 
+          if "DATA" `elem` tabs
+              then addTicketAccessControlData ticket dataId form
+              else if "COLL" `elem` tabs
+                  then addTicketAccessControlColl ticket collId form
+                  else form
+
+addAccessControlTicket :: Formula -> Formula
+addAccessControlTicket form =
+    form .*. "TICKET_USER_ID" @@ [VarExpr (toVariable "TICKET_ID"), VarExpr (toVariable "USER_ID")]
+
+addAccessControlsTicket :: [String] -> Formula -> Formula
+addAccessControlsTicket [] form = form
+addAccessControlsTicket ("TICKET" : tabs) form = addAccessControlsTicket tabs (addAccessControlTicket form)
+addAccessControlsTicket (_ : tabs) form = addAccessControlsTicket tabs form
+
+translateGenQueryToQAL :: Bool -> AccessControl -> GenQuery -> ([Var],  Formula)
 translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
       if null sels
         then error "cannot translate genquery cols null"
@@ -258,9 +340,13 @@ translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
               vars = map toVariable cols
               tabs = nub (map extractPrefix cols) 
               form0 = foldr (.*.) FOne (nub (map translateGenQueryColumnToPredicate cols ++ toJoinPredicate  cols conds ++ map (toCondPredicate2  cols) conds))
+              form1a = case addaccessctl of
+                                             UserAccessControl uz un -> addAccessControls uz un tabs form0
+                                             TicketAccessControl ticket -> addTicketAccessControls ticket tabs form0
+                                             _ -> form0
               form1 = case addaccessctl of
-                                             Just (uz, un) -> addAccessControls uz un tabs form0
-                                             Nothing -> form0
+                                             AccessControlTicket -> form1a
+                                             _ -> addAccessControlsTicket tabs form1a
               form3 = if agg 
                          then
                              let colaggs = map (\(Sel col sel) -> case sel of

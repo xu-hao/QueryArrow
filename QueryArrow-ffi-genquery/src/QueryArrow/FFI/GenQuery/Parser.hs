@@ -9,6 +9,7 @@ import Text.Parsec
 import Text.ParserCombinators.Parsec (GenParser)
 import qualified Text.Parsec.Token as T
 import QueryArrow.FFI.GenQuery.Data
+import Data.List (intercalate)
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
@@ -19,7 +20,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=<>|",
     T.opLetter = oneOf "=<>|",
-    T.reservedNames = ["select", "where", "and", "like", "parent_of", "order", "SELECT", "WHERE", "AND", "LIKE", "PARENT_OF", "ORDER"],
+    T.reservedNames = ["select", "where", "and", "like", "parent_of", "order", "in", "max", "min", "sum", "SELECT", "WHERE", "AND", "LIKE", "PARENT_OF", "ORDER", "IN", "MAX", "MIN", "SUM"],
     T.reservedOpNames = ["=", "<>", "||", "!="],
     T.caseSensitive = True
 }
@@ -38,13 +39,29 @@ braces :: GenQueryParser a -> GenQueryParser a
 braces = T.braces lexer
 
 integer = T.integer lexer
+
 stringp :: GenQueryParser String
 stringp = do
   char '\''
-  str <- many (noneOf ['\''])
+  str <- many (noneOf ['\''] <|> try (do
+                                    char '\''
+                                    char '\''
+                                    return '\''))
   char '\''
   whiteSpace
   return str
+
+instringp :: GenQueryParser String
+instringp = do
+  strs <- sepBy instringp0 (comma <|> return ",")
+  whiteSpace
+  return (intercalate "," (map (\s -> "'" ++ s ++ "'") strs)) where
+    instringp0 = do
+      char '\''
+      str <- many (noneOf ['\''])
+      char '\''
+      return str
+
 comma = T.comma lexer
 semi = T.semi lexer
 symbol = T.symbol lexer
@@ -65,6 +82,7 @@ sumP = reserved "sum" <|> reserved "SUM"
 countP = reserved "count" <|> reserved "COUNT"
 maxP = reserved "max" <|> reserved "MAX"
 minP = reserved "min" <|> reserved "MIN"
+inP = reserved "in" <|> reserved "IN"
 		
 genQueryP :: GenQueryParser GenQuery
 genQueryP = do
@@ -101,5 +119,14 @@ cond2P' = try (EqString <$> (reservedOp "=" >> stringp)) <|>
           try (NotEqInteger <$> (reservedOp "<>" >> integer)) <|>
           try (NotEqString <$> (reservedOp "!=" >> stringp)) <|>
           try (NotEqInteger <$> (reservedOp "!=" >> integer)) <|>
+          try (GtString <$> (reservedOp ">" >> stringp)) <|>
+          try (GtInteger <$> (reservedOp ">" >> integer)) <|>
+          try (LtString <$> (reservedOp "<" >> stringp)) <|>
+          try (LtInteger <$> (reservedOp "<" >> integer)) <|>
+          try (GeString <$> (reservedOp ">=" >> stringp)) <|>
+          try (GeInteger <$> (reservedOp ">=" >> integer)) <|>
+          try (LeString <$> (reservedOp "<=" >> stringp)) <|>
+          try (LeInteger <$> (reservedOp "<=" >> integer)) <|>
           try (LikeCond <$> (likeP >> stringp)) <|>
+          try (InCond <$> (inP >> instringp)) <|>
           ParentOfCond <$> (parentOfP >> stringp)
