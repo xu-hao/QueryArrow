@@ -356,6 +356,7 @@ translateGenQueryToQAL distinct addaccessctl gq@(GenQuery sels conds) =
                                                                       GQSum -> Sum
                                                                       GQMax -> Max
                                                                       GQMin -> Min
+                                                                      None -> Random
                                                                       _ -> error ("translateGenQueryToQAL: unsupported selector: " ++ show sel)) sels
                                  aggs = zip vars (zipWith ($) colaggs vars)
                              in

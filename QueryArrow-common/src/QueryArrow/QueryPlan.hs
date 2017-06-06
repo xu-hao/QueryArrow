@@ -614,7 +614,11 @@ execQueryPlan rs (QPAggregate2 qpd (Summarize funcs groupby) qp) =
                                 Count ->
                                     fromIntegral (length rows)
                                 CountDistinct v2 ->
-                                    fromIntegral (length (List.nub (map (ext v2) rows))) in
+                                    fromIntegral (length (List.nub (map (ext v2) rows)))
+                                Random v2 ->
+                                    if List.null rows
+                                        then error "random of empty list"
+                                        else head (map (ext v2) rows) in
                           ret v1 m) funcs))) groups where
                               average :: Fractional a => [a] -> a
                               average n = sum n / fromIntegral (length n)

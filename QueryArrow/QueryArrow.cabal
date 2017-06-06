@@ -20,6 +20,7 @@ library
                    QueryArrow-db-sql-hdbc-cockroachdb,
                    QueryArrow-db-sql-hdbc-postgresql,
                    QueryArrow-db-sql-hdbc-sqlite3,
+                   QueryArrow-db-sql-libpq-postgresql,
                    QueryArrow-db-cypher,
                    QueryArrow-db-elastic,
                    QueryArrow-db-remote,

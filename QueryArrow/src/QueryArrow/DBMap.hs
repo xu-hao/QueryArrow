@@ -24,6 +24,7 @@ import qualified QueryArrow.ElasticSearch.ElasticSearch as ElasticSearch
 import qualified QueryArrow.SQL.HDBC.Sqlite3 as Sqlite3
 import qualified QueryArrow.Remote.NoTranslation.TCP.TCP as Remote.TCP
 import qualified QueryArrow.FileSystem.FileSystem as FileSystem
+import qualified QueryArrow.SQL.LibPQ.PostgreSQL as LibPQ
 
 type DBMap = Map String (AbstractPlugin MapResultRow)
 
@@ -38,6 +39,7 @@ dbMap0 = fromList [
     ("SQL/HDBC/PostgreSQL", AbstractPlugin PostgreSQL.PostgreSQLPlugin),
     ("SQL/HDBC/CockroachDB", AbstractPlugin CockroachDB.CockroachDBPlugin),
     ("SQL/HDBC/Sqlite3", AbstractPlugin Sqlite3.SQLite3Plugin),
+    ("SQL/LibPQ", AbstractPlugin LibPQ.PostgreSQLPlugin),
     ("Cypher/Neo4j", AbstractPlugin Neo4j.Neo4jPlugin),
     ("InMemory/BuiltIn", AbstractPlugin builtInPlugin),
     ("InMemory/Map", AbstractPlugin mapPlugin),

@@ -194,6 +194,11 @@ instance Typecheck Aggregator () where
             return (v, ParamType False True False Int64Type)
         CountDistinct _ ->
             return (v, ParamType False True False Int64Type)
+        Random v2 -> do
+            ntv <- lift . lift . lift $ new (StringWrapper "random")
+            checkVarType v2 (ParamType False True False (TypeVar ntv))
+            (vtm, _) <- lift get
+            return (v, fromMaybe (error ("typecheck: cannot find var type " ++ show v2)) (lookup v2 vtm))
       ) cols
     let vtm = fromList vtml
     lift $ modify (const vtm *** id)

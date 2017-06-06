@@ -20,7 +20,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "int64", "text", "bytestring", "ref", "null"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "random", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "int64", "text", "bytestring", "ref", "null"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -115,9 +115,10 @@ letp = do
     reservedOp "="
     s <- (reserved "max" >> Max <$> varp)
       <|> (reserved "min" >> Min <$> varp)
-      <|> (reserved "sum" >> Max <$> varp)
-      <|> (reserved "average" >> Min <$> varp)
+      <|> (reserved "sum" >> Sum <$> varp)
+      <|> (reserved "average" >> Average <$> varp)
       <|> (reserved "count" >> (try (reserved "distinct" >> CountDistinct <$> varp) <|> return Count))
+      <|> (reserved "random" >> Random <$> varp)
     return (v,s)
 
 formula1p :: FOParser Formula

@@ -53,6 +53,7 @@ data SQLExpr = SQLColExpr2 String
              | SQLParamExpr String
              | SQLExprText String
              | SQLCastExpr SQLExpr String
+             | SQLArrayExpr SQLExpr SQLExpr
              | SQLInfixFuncExpr String SQLExpr SQLExpr
              | SQLFuncExpr String [SQLExpr]
              | SQLFuncExpr2 String SQLExpr deriving (Eq, Ord, Show)
@@ -135,6 +136,7 @@ instance Show2 SQLExpr where
     show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
     show2 (SQLParamExpr _) _ = "?"
     show2 (SQLCastExpr arg ty) sqlvar =  "cast(" ++ show2 arg sqlvar ++ " as " ++ ty ++ ")"
+    show2 (SQLArrayExpr arr inx) sqlvar = "(" ++ show2 arr sqlvar ++ ")[" ++ show2 inx sqlvar ++ "]"
     show2 (SQLInfixFuncExpr fn a b) sqlvar = "(" ++ show2 a sqlvar ++ fn ++ show2 b sqlvar ++ ")"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
     show2 (SQLFuncExpr2 fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
@@ -379,6 +381,7 @@ instance Params a => Params [a] where
 instance Params SQLExpr where
     params (SQLParamExpr p) = [Var p]
     params (SQLCastExpr e _) = params e
+    params (SQLArrayExpr a b) = params a ++ params b
     params (SQLInfixFuncExpr _ a b) = params a ++ params b
     params (SQLFuncExpr _ es) = foldMap params es
     params (SQLFuncExpr2 _ e) = params e
@@ -556,8 +559,7 @@ translateFormulaToSQL (Aggregate Not form) =
 translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
     sql@(SQLQuery sel fro whe ord lim dis gro) <- translateFormulaToSQL conj
     funcs' <- mapM (\(v@(Var vn), s) -> do
-                addVarRep v (SQLColExpr2 vn)
-                case s of
+                r <- case s of
                     Max v2 -> do
                         r <- findRep v2
                         return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "max" [r], SQLIntConstExpr 0])
@@ -574,7 +576,12 @@ translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
                         return (v, SQLFuncExpr "count" [SQLExprText "*"])
                     CountDistinct v2 -> do
                         r <- findRep v2
-                        return (v, SQLFuncExpr "count" [SQLFuncExpr2 "distinct" r])) funcs
+                        return (v, SQLFuncExpr "count" [SQLFuncExpr2 "distinct" r])
+                    Random v2 -> do
+                        r <- findRep v2
+                        return (v, SQLArrayExpr (SQLFuncExpr "array_agg" [r]) (SQLIntConstExpr 1))
+                addVarRep v (SQLColExpr2 vn)
+                return r) funcs
     groupbyreps <- mapM findRep groupby
     
     if null sel

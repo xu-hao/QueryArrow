@@ -118,7 +118,7 @@ deriving instance Ord (Expr1 a) => Ord (Lit1 a)
 deriving instance Show (Expr1 a) => Show (Lit1 a)
 deriving instance Read (Expr1 a) => Read (Lit1 a)
 
-data Summary = Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
+data Summary = Random Var | Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
 data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists | FReturn [Var] deriving (Eq, Ord, Show, Read)
 
 data Formula0 a f = FAtomic0 (Atom1 a)
@@ -244,6 +244,7 @@ instance FreeVars Summary where
   freeVars (Average a) = singleton a
   freeVars (CountDistinct a) = singleton a
   freeVars Count = bottom
+  freeVars (Random a) = singleton a
 
 class Unify a where
     unify :: a -> a -> Maybe Substitution
@@ -478,6 +479,7 @@ instance Serialize Summary where
     serialize (Sum v) = "sum " ++ serialize v
     serialize (Average v) = "average " ++ serialize v
     serialize (CountDistinct v) = "count distinct(" ++ serialize v ++ ")"
+    serialize (Random v) = "randomw " ++ serialize v
 
 instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a)) => Serialize (Formula1 a b) where
     serialize f1 = "[" ++ serializeAnnotation f1 ++ "]" ++ case unannotate f1 of
@@ -603,6 +605,7 @@ instance Subst Summary where
     subst s (Average v) = Average (subst s v)
     subst s (Sum v) = Sum (subst s v)
     subst s (CountDistinct v) = CountDistinct (subst s v)
+    subst s (Random v) = Random (subst s v)
 
 instance Subst (Atom1 a) => Subst (Lit1 a) where
     subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
