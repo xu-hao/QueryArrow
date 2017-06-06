@@ -23,6 +23,7 @@ import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
 import QueryArrow.FFI.GenQuery.Data
+import QueryArrow.FO.Data
 
 foreign export ccall hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
 hs_gen_query :: StablePtr (QueryArrowService b) -> StablePtr b -> CInt -> CInt -> CString -> CString -> CString -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CInt -> IO Int
