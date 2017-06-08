@@ -158,6 +158,7 @@ findAllKeys prefix coldefs =
         "TICKET_ALLOWED_USERS" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
                                           "TICKET_ID" == key1 || "USER_NAME" == key1)  coldefs  -- specical case for user auth
+        "GRID_CONFIGURATION" -> (coldefs, [])  -- specical case for user auth
         _ ->
             let par@(key, _) = partition (\(ColDef key0 _ _) -> map toUpper key0 == prefix ++ "_ID")  coldefs in
                 if null key
