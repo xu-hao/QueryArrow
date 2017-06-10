@@ -160,6 +160,6 @@ run2 showhdr hdr query params ps = do
     conn <- dbOpen tdb
     ret <- runEitherT $ run (fromList vars) query params tdb conn
     case ret of
-      Left e -> putStrLn ("error: " ++ e)
+      Left e -> putStrLn ("error: " ++ show e)
       Right pp -> putStr (pprint showhdr False vars pp)
     dbClose conn

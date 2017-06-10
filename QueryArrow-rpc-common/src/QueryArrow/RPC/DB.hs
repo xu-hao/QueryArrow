@@ -16,11 +16,13 @@ import Control.Monad.Trans.Resource
 import Control.Monad.Except
 import QueryArrow.Control.Monad.Logger.HSLogger ()
 import Control.Monad.Trans.Either
+import Control.Exception (SomeException(..))
+import System.IO.Error(userError)
 import Data.Set (Set)
 import Text.Parsec
 import Debug.Trace
 
-run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
+run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> EitherT SomeException IO [MapResultRow]
 run3 hdr commands params tdb conn = do
     r <- liftIO $ runResourceT $ dbCatch $ do
                                 concat <$> mapM (\command -> case command of
@@ -55,10 +57,10 @@ run3 hdr commands params tdb conn = do
                             --             )
     case r of
         Right rows ->  right rows
-        Left e ->  left (show e)
+        Left e ->  left e
 
-run :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT String IO [MapResultRow]
+run :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT SomeException IO [MapResultRow]
 run hdr query par tdb conn =
     case runParser progp () "" query of
-                            Left err -> throwError (show err)
+                            Left err -> throwError (SomeException (userError (show err)))
                             Right commands -> run3 hdr commands par tdb conn

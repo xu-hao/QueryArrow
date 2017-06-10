@@ -37,9 +37,9 @@ catchErrors a = a
                           errstr = show e in 
                           return (Left (case state of
                                             "23505" -> eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME
-					    _ -> - nativeerror, Text.pack(errstr))))
+					    _ -> - nativeerror, Text.pack("*******" ++ errstr))))
        `catch` (\e -> let errstr = show (e::SomeException) in 
-                          return (Left (-1, Text.pack(errstr))))
+                          return (Left (-1, Text.pack("&&&&&&&&&" ++ errstr))))
 
 
 execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
@@ -48,7 +48,7 @@ execAbstract svc session form params = do
   r <- liftIO $ catchErrors (runEitherT (execQuery svc session form params))
   case r of
     Left err -> do
-      liftIO $ errorM "FFI" ("execAbstract: caught error " ++ show err)
+      liftIO $ errorM "FFI" ("execAbstract: ++++++++++++++++++++++++++++ caught error " ++ show err)
       throwError err
     Right a -> return a
 

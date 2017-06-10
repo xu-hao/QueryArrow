@@ -76,7 +76,7 @@ runQuery method db = do
             ret1 <- case ret of
                 Left e ->
                     return (object [
-                        "error" .= e
+                        "error" .= show e
                         ])
                 Right rep ->
                     return (toJSON (resultSet rep))
