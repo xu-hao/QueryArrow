@@ -881,6 +881,16 @@ predicate D_USER_AUTH_BY_USER_ZONE_AND_NAME object (key input text, key input te
 rewrite insert D_USER_AUTH_BY_USER_ZONE_AND_NAME(zn, un, authname, cts)
     D_USER_ID(zn, un, uid) insert USER_AUTH_OBJ(uid, authname) USER_AUTH_CREATE_TS(uid, authname, cts)
 
+predicate D_USER_AUTH_BY_USER_ZONE_AND_NAME2 object (key input text, key input text, input output text, input output text)
+rewrite insert D_USER_AUTH_BY_USER_ZONE_AND_NAME2(zn, un, authname, cts) // in the postgres plugin this is not updated so we ignore it here
+    D_USER_ID(zn, un, uid) USER_AUTH_OBJ(uid, authname2) USER_AUTH_CREATE_TS(uid, authname2, cts2) delete USER_AUTH_OBJ(uid, authname) insert USER_AUTH_OBJ(uid, authname) USER_AUTH_CREATE_TS(uid, authname, cts2)
+export D_USER_AUTH_BY_USER_ZONE_AND_NAME2
+
+predicate D_USER_ID_BY_USER_ZONE_AND_NAME2 object (key input text, key input text, input output int64)
+rewrite D_USER_ID_BY_USER_ZONE_AND_NAME2(zn, un, uid)
+    D_USER_ID(zn, un, uid) USER_AUTH_OBJ(uid, authname)
+export D_USER_ID_BY_USER_ZONE_AND_NAME2
+
 predicate D_USER_AUTH_BY_USER_NAME object (key input text, key input text, input output text)
 rewrite delete D_USER_AUTH_BY_USER_NAME(zn, un, authname)
     D_USER_ID(zn, un, uid) delete USER_AUTH_OBJ(uid, authname)

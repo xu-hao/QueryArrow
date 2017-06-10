@@ -75,7 +75,7 @@ translateGenQueryColumnToPredicate  col =
           "DATA_MODIFY_TIME" -> "DATA_MODIFY_TS" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "DATA_MODE" -> "DATA_MODE" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "DATA_RESC_HIER" -> "DATA_RESC_HIER" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
-          "DATA_RESC_NAME" -> "DATA_RESC_NAME" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
+          "DATA_RESC_NAME" -> "DATA_OBJ" @@ [VarExpr dataId, VarExpr dataRescId] .*. "RESC_NAME" @@ [VarExpr dataRescId, VarExpr (toVariable col)]
           "DATA_REPL_STATUS" -> "DATA_IS_DIRTY" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "COLUMN_NAME_NOT_FOUND_421" -> "DATA_MODE" @@ [VarExpr (toIdVariable col), VarExpr dataRescId, VarExpr (toVariable col)]
           "ZONE_NAME" -> "ZONE_NAME" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]

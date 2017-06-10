@@ -31,17 +31,21 @@ eNULL = -1095000
 eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME :: Int
 eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME = -809000
 
-execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
-execAbstract svc session form params = do
-  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form) 
-  r <- liftIO $ runEitherT (execQuery svc session form params) 
+catchErrors :: IO (Either Error a) -> IO (Either Error a)
+catchErrors a = a
        `catch` (\e -> let (SqlError state nativeerror errormsg) = e
                           errstr = show e in 
-                          return (Left (case nativeerror of
-                                            23505 -> eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME
+                          return (Left (case state of
+                                            "23505" -> eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME
 					    _ -> - nativeerror, Text.pack(errstr))))
        `catch` (\e -> let errstr = show (e::SomeException) in 
                           return (Left (-1, Text.pack(errstr))))
+
+
+execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
+execAbstract svc session form params = do
+  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form) 
+  r <- liftIO $ catchErrors (runEitherT (execQuery svc session form params))
   case r of
     Left err -> do
       liftIO $ errorM "FFI" ("execAbstract: caught error " ++ show err)
@@ -51,7 +55,7 @@ execAbstract svc session form params = do
 getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow]
 getAllResultAbstract svc session vars form params = do
   liftIO $ debugM "FFI" ("getAllResultValues: form " ++ serialize form)
-  r <- liftIO $ runEitherT (getAllResult svc session vars form params) `catch` (\e -> return (Left (-1,Text.pack(show (e::SomeException)))))
+  r <- liftIO $ catchErrors (runEitherT (getAllResult svc session vars form params))
   case r of
     Left err -> do
       liftIO $ errorM "FFI" ("getAllResultValues: caught error " ++ show err)

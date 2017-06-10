@@ -87,9 +87,17 @@ pprint3 showhdr (vars, rows) = (if showhdr then join vars ++ "\n" else "") ++ in
                 | length s < n  = s ++ replicate (n - length s) ' '
                 | otherwise     = s
 
-pprint :: Bool -> [Var] -> [MapResultRow] -> String
-pprint showhdr vars rows =
-    pprint2 showhdr (map unVar vars) (map (mapKeys unVar . M.map show) rows)
+pprint :: Bool -> Bool -> [Var] -> [MapResultRow] -> String
+pprint showhdr showdetails vars rows =
+    pprint2 showhdr (map unVar vars) (map (mapKeys unVar . M.map (if showdetails then show else show2)) rows) where 
+             show2 a =
+                 case a of 
+                     AbstractResultValue a2 ->
+                         case toConcreteResultValue a2 of
+                             Int64Value i -> show i
+                             Int32Value i -> show i
+                             StringValue i -> show i
+                             _ -> show a2
 
 evalExpr :: MapResultRow -> Expr -> AbstractResultValue
 evalExpr _ (StringExpr s) = AbstractResultValue (StringValue s)

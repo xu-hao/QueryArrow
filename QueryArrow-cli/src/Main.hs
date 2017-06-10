@@ -113,7 +113,7 @@ runTCP  addr port showhdr hdr qu params = do
       Just (ResultSet err results) ->
           if null err
             then
-                putStrLn (pprint showhdr (map Var hdr) results)
+                putStrLn (pprint showhdr False (map Var hdr) results)
             else
                 putStrLn ("error: " ++ err)
       Nothing ->
@@ -141,7 +141,7 @@ runUDS addr showhdr hdr qu params = do
       Just (ResultSet err results) ->
           if null err
             then
-                putStrLn (pprint showhdr (map Var hdr) results)
+                putStrLn (pprint showhdr False (map Var hdr) results)
             else
                 putStrLn ("error: " ++ err)
       Nothing ->
@@ -161,5 +161,5 @@ run2 showhdr hdr query params ps = do
     ret <- runEitherT $ run (fromList vars) query params tdb conn
     case ret of
       Left e -> putStrLn ("error: " ++ e)
-      Right pp -> putStr (pprint showhdr vars pp)
+      Right pp -> putStr (pprint showhdr False vars pp)
     dbClose conn
