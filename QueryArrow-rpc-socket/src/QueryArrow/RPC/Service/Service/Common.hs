@@ -39,7 +39,7 @@ worker handle tdb conn = do
                                 t3 <- getCurrentTime
                                 case ret of
                                     Left e ->
-                                        sendMsgPack handle (errorSet e)
+                                        sendMsgPack handle (errorSet ("rpc-service-worker: " ++ convertException e))
                                     Right rep ->
                                         sendMsgPack handle (resultSet rep)
                                 return (t2, t3, False)
@@ -52,7 +52,7 @@ worker handle tdb conn = do
                                 case ret of
                                     Left e -> do
                                         infoM "RPC_TCP_SERVER" "**************1"
-                                        sendMsgPack handle (errorSet e)
+                                        sendMsgPack handle (errorSet ("rpc-service-worker: " ++ convertException e))
                                         infoM "RPC_TCP_SERVER" "**************2"
                                     Right rep -> do
                                         infoM "RPC_TCP_SERVER" "**************3"

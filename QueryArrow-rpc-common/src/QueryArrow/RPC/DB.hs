@@ -62,5 +62,5 @@ run3 hdr commands params tdb conn = do
 run :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT SomeException IO [MapResultRow]
 run hdr query par tdb conn =
     case runParser progp () "" query of
-                            Left err -> throwError (SomeException (userError (show err)))
+                            Left err -> throwError (SomeException (userError ("run: " ++ show err)))
                             Right commands -> run3 hdr commands par tdb conn

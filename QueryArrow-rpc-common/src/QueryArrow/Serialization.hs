@@ -17,7 +17,7 @@ import QueryArrow.FO.Types
 import QueryArrow.DB.DB
 
 data ResultSet = ResultSet {
-    errorstr :: String,
+    errorstr :: Error,
     results :: [MapResultRow]
 } deriving (Generic, Show)
 

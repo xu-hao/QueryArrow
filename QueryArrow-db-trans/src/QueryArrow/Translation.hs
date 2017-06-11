@@ -109,7 +109,7 @@ getRewriting predmap ps = do
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
     d1 <- runCpphs defaultCpphsOptions{includes = include_file_path ps, boolopts = defaultBoolOptions {locations = False}}  (rewriting_file_path ps) d0
     case runParser rulesp () (rewriting_file_path ps) d1 of
-        Left err -> error (show err)
+        Left err -> error ("getRewriting: " ++ show err)
         Right actions ->
             return (processActions predmap actions)
 

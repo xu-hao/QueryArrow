@@ -33,13 +33,19 @@ eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME = -809000
 
 catchErrors :: IO (Either Error a) -> IO (Either Error a)
 catchErrors a = a
-       `catch` (\e -> let (SqlError state nativeerror errormsg) = e
-                          errstr = show e in 
-                          return (Left (case state of
+        `catch` (e -> return (Left (convertException e)))
+
+convertException :: Exception e => e -> Error
+convertException e = 
+                case fromException e of
+                    Just (SqlError state nativeerror errormsg) ->
+                        let errstr = show e in 
+                            (case state of
                                             "23505" -> eCATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME
-					    _ -> - nativeerror, Text.pack("*******" ++ errstr))))
-       `catch` (\e -> let errstr = show (e::SomeException) in 
-                          return (Left (-1, Text.pack("&&&&&&&&&" ++ errstr))))
+					    _ -> - nativeerror, Text.pack("catchErrors: SqlError = " ++ errstr)))
+                    Nothing ->
+                        let errstr = show (e::SomeException) in 
+                            (-1, Text.pack("catchErrors: SomeException = " ++ errstr)))
 
 
 execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
