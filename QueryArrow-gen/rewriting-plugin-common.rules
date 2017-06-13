@@ -829,14 +829,14 @@ rewrite delete D_SERVER_LOAD_DIGEST_BY_CREATE_TS( createts)
 
 predicate D_QUOTA_USAGE_BY_MODIFY_TS object (key input text)
 rewrite delete D_QUOTA_USAGE_BY_MODIFY_TS( createts)
-    QUOTA_USAGE_OBJ( uid, rid, createts2) lt(int64 createts2, int64 createts) delete QUOTA_USAGE_OBJ(uid, rid, createts)
+    QUOTA_USAGE_MODIFY_TS( uid, rid, createts2) lt(int64 createts2, int64 createts) delete QUOTA_USAGE_OBJ(uid, rid)
 
 predicate D_QUOTA_USAGE object (key input text)
 rewrite insert D_QUOTA_USAGE(mts)
     RESC_OBJ(rid)
     D_USER_ID2(zn, un, uid)
     let usage = sum dsize ( DATA_OWNER_NAME(id, rid, un) DATA_OWNER_ZONE(id, rid, zn) DATA_RESC_NAME(id, rid, rn) DATA_SIZE(id, rid, dsize) )
-    insert QUOTA_USAGE_OBJ(uid, rid, mts) QUOTA_USAGE(uid, rid, mts, usage)
+    insert QUOTA_USAGE_OBJ(uid, rid) QUOTA_USAGE_MODIFY_TS(uid, rid, mts) QUOTA_USAGE(uid, rid, usage)
 
 predicate D_QUOTA_BY_USER_ID_AND_RESC_ID object (key input int64, key input int64)
 rewrite delete D_QUOTA_BY_USER_ID_AND_RESC_ID( uid, rid)
@@ -1070,8 +1070,68 @@ rewrite delete D_TICKET_ALLOWED_GROUPS(ticketid, host)
     delete TICKET_ALLOWED_GROUPS_OBJ(ticketid, host)
 export D_TICKET_ALLOWED_GROUPS
 
+predicate D_QUOTA_USAGE_BY_USER object(output int64, output int64)
+rewrite D_QUOTA_USAGE_BY_USER(qus, uid2)
+    let qus = sum qu, uid2 = random uid group by uid (
+        QUOTA_USAGE_OBJ(uid, rid)
+        QUOTA_USAGE(uid, rid, qu)
+    )
+export D_QUOTA_USAGE_BY_USER
 
+predicate D_QUOTA_USAGE_BY_USER_GROUP_AND_RESC object(output int64, output int64, output int64)
+rewrite D_QUOTA_USAGE_BY_USER_GROUP_AND_RESC(qus, gid2, rid2)
+    let qus = sum qu, gid2 = random gid, rid2 = random rid group by gid rid (
+        QUOTA_OBJ(gid, rid) USER_TYPE_NAME(gid, "rodsgroup") USER_GROUP_OBJ(gid, uid)
+        QUOTA_USAGE(uid, rid, qu)
+    )
+export D_QUOTA_USAGE_BY_USER_GROUP_AND_RESC
 
+predicate D_QUOTA_USAGE_BY_LIMIT_AND_USER_GROUP object(output int64, output int64, output int64)
+rewrite D_QUOTA_USAGE_BY_LIMIT_AND_USER_GROUP(qus, ql2, gid2)
+    let qus = sum qu, ql2 = random ql, gid2 = random gid group by gid ql (
+        QUOTA_LIMIT(gid, rid, ql) USER_TYPE_NAME(gid, "rodsgroup") USER_GROUP_OBJ(gid, uid)
+        QUOTA_USAGE(uid, rid2, qu) ne(rid2, 0) eq(rid, 0)
+    )
+export D_QUOTA_USAGE_BY_LIMIT_AND_USER_GROUP
+
+predicate D_QUOTA_OVER object()
+rewrite insert D_QUOTA_OVER()
+    QUOTA_LIMIT(uid, rid, ql) sub(0, ql, qo) insert QUOTA_OVER(uid, rid, qo)
+export D_QUOTA_OVER
+
+predicate D_QUOTA_OVER2 object()
+rewrite insert D_QUOTA_OVER2()
+    QUOTA_LIMIT(uid, rid, ql) QUOTA_USAGE(uid, rid, qu) sub(qu, ql, qo) insert QUOTA_OVER(uid, rid, qo)
+export D_QUOTA_OVER2
+
+predicate D_QUOTA_OVER3 object(input int64, input int64, input text)
+rewrite insert D_QUOTA_OVER3(qu, uid, mts)
+    QUOTA_LIMIT(uid, 0, ql) QUOTA_OVER(uid, 0, qo) sub(qu, ql, qo2) gt(qo2, qo) insert QUOTA_OVER(uid, 0, qo2) QUOTA_MODIFY_TS(uid, 0, mts)
+export D_QUOTA_OVER3
+
+predicate D_QUOTA_OVER4 object(input int64, input int64, input int64, input text)
+rewrite insert D_QUOTA_OVER4(qu, uid, rid, mts)
+    QUOTA_LIMIT(uid, rid, ql) QUOTA_OVER(uid, rid, qo) sub(qu, ql, qo2) gt(qo2, qo) insert QUOTA_OVER(uid, rid, qo2) QUOTA_MODIFY_TS(uid, rid, mts)
+export D_QUOTA_OVER4
+
+predicate D_QUOTA_OVER5 object(input int64, input int64, input int64, input text)
+rewrite insert D_QUOTA_OVER5(qu, ql, uid, mts)
+    QUOTA_OVER(uid, rid, qo) sub(qu, ql, qo2) gt(qo2, qo) insert QUOTA_OVER(uid, rid, qo2) QUOTA_MODIFY_TS(uid, rid, mts)
+export D_QUOTA_OVER5
+
+predicate D_QUOTA_BY_USER_ZONE_AND_NAME object(input text, input text, output int64, input output text, output int64, output int64, output int64)
+rewrite D_QUOTA_BY_USER_ZONE_AND_NAME(uz, un, uid, rn, ql, qo, rid)
+    order by qo desc (distinct (D_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) QUOTA_LIMIT(gid, rid, ql) QUOTA_OVER(gid, rid, qo) RESC_NAME(rid, rn))
+                    | distinct (D_USER_ID(uz, un, uid) USER_GROUP_OBJ(gid, uid) QUOTA_LIMIT(gid, 0, ql) QUOTA_OVER(gid, 0, qo) RESC_NAME(rid, rn))
+                    | distinct (D_USER_ID(uz, un, uid) QUOTA_LIMIT(uid, rid, ql) QUOTA_OVER(uid, rid, qo) RESC_NAME(rid, rn))
+                    | distinct (D_USER_ID(uz, un, uid) QUOTA_LIMIT(uid,   0, ql) QUOTA_OVER(uid,   0, qo) RESC_NAME(rid, rn))
+    )
+export D_QUOTA_BY_USER_ZONE_AND_NAME
+
+predicate D_QUOTA_BY_USER_ZONE_AND_NAME_AND_RESC_NAME object(input text, input text, input text, output int64, output text, output int64, output int64, output int64)
+rewrite D_QUOTA_BY_USER_ZONE_AND_NAME_AND_RESC_NAME(uz, un, rn2, uid, rn, ql, qo, rid)
+    D_QUOTA_BY_USER_ZONE_AND_NAME(uz, un, uid, rn2, ql, qo, rid) eq(text rn2, rn)
+export D_QUOTA_BY_USER_ZONE_AND_NAME_AND_RESC_NAME
 
 predicate HAS_READ_PERMISSION property(key input text, key input text, key input int64)
 rewrite HAS_READ_PERMISSION(uz, un, id)
@@ -1090,7 +1150,7 @@ predicate HAS_READ_PERMISSION_TICKET_COLL property(key input text, key input int
 rewrite HAS_READ_PERMISSION_TICKET_COLL(ticket, cid)
     TICKET_STRING(ticketid, ticket) (
         TICKET_OBJECT_ID(ticketid, cid) |
-        TICKET_OBJECT_ID(ticketid, cid2) COLL_NAME(cid, cn) COLL_NAME(cid2, cn2) concat(cn, "/%", cnp) like(cn2, cnp))
+        TICKET_OBJECT_ID(ticketid, cid2) COLL_NAME(cid, cn) COLL_NAME(cid2, cn2) concat(cn2, "/%", cnp) like(cn, cnp))
 export HAS_READ_PERMISSION_TICKET_COLL
 // simple query
 

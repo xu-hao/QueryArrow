@@ -13,6 +13,7 @@ import Control.Applicative ((<$>))
 import Data.Map.Strict (empty, insert, lookup)
 import System.Log.Logger
 import Data.Convertible
+import Data.Ratio
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
 
@@ -32,6 +33,7 @@ convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
                         SqlByteString _ -> StringValue (fromSql sqlvalue)
                         -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
                         -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
+                        SqlRational r -> Int64Value (fromIntegral (numerator r `div` denominator r))
                         SqlNull -> Null
                         _ -> error ("unsupported sql value: " ++ show sqlvalue))) row) empty (zip vars sqlvalues)
 

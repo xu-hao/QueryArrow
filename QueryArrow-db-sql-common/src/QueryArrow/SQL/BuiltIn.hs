@@ -15,6 +15,12 @@ import Text.Read
 convertTextToSQLText :: T.Text -> SQLExpr
 convertTextToSQLText str = SQLExprText (if str `T.index` 0 /= '(' then if str `T.index` 0 /= '\'' then "(\'" ++ unpack str ++ "\')" else "(" ++ unpack str ++ ")" else unpack str)
 
+aSQLInfixFuncExpr :: String -> SQLExpr -> SQLExpr -> SQLExpr
+aSQLInfixFuncExpr func a@(SQLParamExpr _) b@(SQLParamExpr _) =
+       SQLInfixFuncExpr func (SQLCastExpr a "integer") (SQLCastExpr b "integer")
+aSQLInfixFuncExpr func a b =
+       SQLInfixFuncExpr func a b
+
 sqlBuiltIn :: (String -> PredName) -> BuiltIn
 sqlBuiltIn lookupPred =
       BuiltIn ( fromList [
@@ -58,17 +64,17 @@ sqlBuiltIn lookupPred =
                                      _ -> SQLCompCond "=" (head args) (SQLFuncExpr "ANY" [args !! 1])) 
             in
                 return sql)),
-        (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "+" a b)]
+        (lookupPred "add", repBuildIn (\ [Left a, Left b, Right v] -> [(v, aSQLInfixFuncExpr "+" a b)]
             )),
-        (lookupPred "sub", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "-" a b)]
+        (lookupPred "sub", repBuildIn (\ [Left a, Left b, Right v] -> [(v, aSQLInfixFuncExpr "-" a b)]
             )),
-        (lookupPred "mul", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "*" a b)]
+        (lookupPred "mul", repBuildIn (\ [Left a, Left b, Right v] -> [(v, aSQLInfixFuncExpr "*" a b)]
             )),
-        (lookupPred "div", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "/" a b)]
+        (lookupPred "div", repBuildIn (\ [Left a, Left b, Right v] -> [(v, aSQLInfixFuncExpr "/" a b)]
             )),
-        (lookupPred "mod", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "%" a b)]
+        (lookupPred "mod", repBuildIn (\ [Left a, Left b, Right v] -> [(v, aSQLInfixFuncExpr "%" a b)]
             )),
-        (lookupPred "exp", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "^" a b)]
+        (lookupPred "exp", repBuildIn (\ [Left a, Left b, Right v] -> [(v, aSQLInfixFuncExpr "^" a b)]
             )),
         (lookupPred "concat", repBuildIn (\ [Left a, Left b, Right v] -> [(v, SQLInfixFuncExpr "||" a b)]
             )),

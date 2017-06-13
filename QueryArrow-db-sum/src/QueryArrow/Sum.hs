@@ -58,8 +58,12 @@ translate' dbs rvars qu0 vars = do
         qp2 = calculateVars vars rvars insp
         qp25 = findDBQueryPlan dbs qp2
         t = toTree qp25
+        t' = toTree' qp25
         qp3 = optimizeQueryPlan dbs qp25
-    debugM "DB_Sum" (drawTree t)
+        t2 = toTree qp3
+        t2' = toTree' qp3
+    debugM "DB_Sum" ("optimize query plan:\n---------------\n" ++ drawTree t ++ "\n--------------->\n" ++ drawTree t2 ++ "\n---------------")
+    debugM "DB_Sum" ("optimize query plan':\n---------------\n" ++ drawTree t' ++ "\n--------------->\n" ++ drawTree t2' ++ "\n---------------")
     -- let qp3' = addTransaction' qp3
     -- liftIO $ printQueryPlan qp3
     -- qp4 <- prepareTransaction dbs [] qp3'

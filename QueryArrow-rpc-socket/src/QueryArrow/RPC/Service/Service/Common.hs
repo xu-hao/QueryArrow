@@ -12,6 +12,7 @@ import Control.Monad.Trans.Either
 import QueryArrow.RPC.DB
 import System.IO (Handle)
 import QueryArrow.FO.Types
+import QueryArrow.FFI.Auxiliary
 
 worker :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
 worker handle tdb conn = do
@@ -20,7 +21,7 @@ worker handle tdb conn = do
                 infoM "RPC_TCP_SERVER" ("received message " ++ show req)
                 (t2, t3, b) <- case req of
                     Nothing -> do
-                        sendMsgPack handle (errorSet "cannot parser request")
+                        sendMsgPack handle (errorSet (-1, "cannot parser request"))
                         t2 <- getCurrentTime
                         t3 <- getCurrentTime
                         return (t2, t3, False)
@@ -39,7 +40,7 @@ worker handle tdb conn = do
                                 t3 <- getCurrentTime
                                 case ret of
                                     Left e ->
-                                        sendMsgPack handle (errorSet ("rpc-service-worker: " ++ convertException e))
+                                        sendMsgPack handle (errorSet (convertException e))
                                     Right rep ->
                                         sendMsgPack handle (resultSet rep)
                                 return (t2, t3, False)
@@ -52,7 +53,7 @@ worker handle tdb conn = do
                                 case ret of
                                     Left e -> do
                                         infoM "RPC_TCP_SERVER" "**************1"
-                                        sendMsgPack handle (errorSet ("rpc-service-worker: " ++ convertException e))
+                                        sendMsgPack handle (errorSet (convertException e))
                                         infoM "RPC_TCP_SERVER" "**************2"
                                     Right rep -> do
                                         infoM "RPC_TCP_SERVER" "**************3"

@@ -15,11 +15,10 @@ import qualified Data.ByteString.Char8 as B8
 import QueryArrow.FO.Data
 import QueryArrow.FO.Types
 import QueryArrow.DB.DB
+import QueryArrow.Utils
+import QueryArrow.FFI.Service
 
-data ResultSet = ResultSet {
-    errorstr :: Error,
-    results :: [MapResultRow]
-} deriving (Generic, Show)
+data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show)
 
 data QuerySet = QuerySet {
     qsheaders :: Set Var,
@@ -160,8 +159,8 @@ instance ToJSON ByteString where
 
 resultSet :: [MapResultRow] -> ResultSet
 resultSet rows =
-    ResultSet "" rows
+    ResultSetNormal rows
 
-errorSet :: String -> ResultSet
+errorSet :: Error -> ResultSet
 errorSet vars =
-    ResultSet vars []
+    ResultSetError vars

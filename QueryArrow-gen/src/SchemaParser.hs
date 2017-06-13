@@ -139,7 +139,7 @@ findAllKeys prefix coldefs =
         "SERVER_LOAD_DIGEST" -> (coldefs, []) -- special case for server load digest
         "QUOTA_USAGE" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
-                                          "RESC_ID" == key1 || "USER_ID" == key1 || "MODIFY_TS" == key1)  coldefs  -- specical case for quota usage
+                                          "RESC_ID" == key1 || "USER_ID" == key1)  coldefs  -- specical case for quota usage
         "DATA" -> partition (\(ColDef key0 _ _) ->
                                     let key1 = map toUpper key0 in
                                           "DATA_ID" == key1 || "RESC_ID" == key1)  coldefs  -- specical case for data

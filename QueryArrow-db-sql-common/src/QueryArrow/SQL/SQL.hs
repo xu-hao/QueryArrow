@@ -568,7 +568,7 @@ translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
                         return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "min" [r], SQLIntConstExpr 0])
                     Sum v2 -> do
                         r <- findRep v2
-                        return (v, SQLFuncExpr "sum" [r])
+                        return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "sum" [r], SQLIntConstExpr 0])
                     Average v2 -> do
                         r <- findRep v2
                         return (v, SQLFuncExpr "coalesce" [SQLFuncExpr "average" [r], SQLIntConstExpr 0])
@@ -832,7 +832,9 @@ qcolArgToValue (qcol@(var, col), arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (col, sqlexpr)
-        Right _ -> error "set value to unbounded var"
+        Right _ -> do
+            ts <- get
+            error ("qcolArgToValue: set value to unbounded var" ++ show qcol ++ " " ++ serialize arg ++ " " ++ show (repmap ts))
 
 qcolArgToUpdateCond :: (SQLQualifiedCol, Expr) -> TransMonad SQLCond
 qcolArgToUpdateCond (qcol, arg) = do
@@ -857,7 +859,9 @@ qcolArgToSet ((var, col), arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (col, sqlexpr)
-        Right _ -> error "set value to unbounded var"
+        Right _ -> do
+            ts <- get
+            error ("qcolArgToSet: set value to unbounded var" ++ show (var, col) ++ " " ++ serialize arg ++ " " ++ show (repmap ts))
 
 qcolArgToSetNull :: (SQLQualifiedCol, Expr) -> TransMonad ((Col, SQLExpr), SQLCond)
 qcolArgToSetNull (qcol@(var, col), arg) = do
@@ -1053,7 +1057,7 @@ instance IGenericDatabase01 SQLTrans where
             retvartypes = map (\var0 -> case lookup var0 vtm of
                                                 Nothing -> error ("var type not found: " ++ show var0 ++ " from " ++ show query)
                                                 Just (ParamType _ _ _ p) -> p) retvars
-        debugM "SQL" ("gTranslateQuery of SQLTrans: \n-----------------\n" ++ serialize query ++ "\n---------------->\n" ++ serialize sqlquery ++ "\n----------------")
+        debugM "SQL" ("gTranslateQuery of SQLTrans: " ++ show env ++ "\n-----------------\n" ++ serialize query ++ "\n---------------->\n" ++ serialize sqlquery ++ "\n----------------")
         return (case sqlquery of
                 SQLQueryStmt _ -> True
                 _ -> False, retvars, retvartypes, serialize sqlquery, params sql)

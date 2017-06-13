@@ -110,12 +110,10 @@ runTCP  addr port showhdr hdr qu params = do
   sendMsgPack handle name
   rep <- receiveMsgPack handle
   case rep of
-      Just (ResultSet err results) ->
-          if null err
-            then
+      Just (ResultSetNormal results) ->
                 putStrLn (pprint showhdr False (map Var hdr) results)
-            else
-                putStrLn ("error: " ++ err)
+      Just (ResultSetError err) -> 
+                putStrLn ("error: " ++ show err)
       Nothing ->
           putStrLn ("cannot parse response: " ++ show rep)
   let name2 = QuerySet {
@@ -138,12 +136,10 @@ runUDS addr showhdr hdr qu params = do
   sendMsgPack handle name
   rep <- receiveMsgPack handle
   case rep of
-      Just (ResultSet err results) ->
-          if null err
-            then
+      Just (ResultSetNormal results) ->
                 putStrLn (pprint showhdr False (map Var hdr) results)
-            else
-                putStrLn ("error: " ++ err)
+      Just (ResultSetError err) ->
+                putStrLn ("error: " ++ show err)
       Nothing ->
           putStrLn ("cannot parse response: " ++ show rep)
   let name2 = QuerySet {

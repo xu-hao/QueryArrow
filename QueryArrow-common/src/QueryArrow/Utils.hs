@@ -14,7 +14,7 @@ import Data.List ((\\), intercalate, transpose)
 import Control.Monad.Catch
 import Data.Maybe
 import Data.Tree
-import Data.Text (pack, unpack)
+import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding
 import Data.Int (Int64)
 

@@ -25,6 +25,7 @@ library
                    base64-bytestring,
                    data-msgpack,
                    log-adapter,
-                   QueryArrow-common
+                   QueryArrow-common,
+                   QueryArrow-ffi-service
   ghc-options:     -Wall -fPIC
   other-modules:

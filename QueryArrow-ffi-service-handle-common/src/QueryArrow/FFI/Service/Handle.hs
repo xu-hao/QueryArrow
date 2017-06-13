@@ -28,12 +28,10 @@ handleService connect =
             liftIO $ sendMsgPack handle name
             rep <- liftIO $ receiveMsgPack handle
             case rep of
-                Just (ResultSet err results) ->
-                    if null err
-                      then
+                Just (ResultSetNormal results) ->
                           return results
-                      else
-                          throwError (-1, pack err)
+                Just (ResultSetError err) ->
+                          throwError err
                 Nothing ->
                     throwError (-1, "cannot parse response")
   in
@@ -47,12 +45,10 @@ handleService connect =
               liftIO $ sendMsgPack handle name
               rep <- liftIO $ receiveMsgPack handle
               case rep of
-                  Just (ResultSet err results) ->
-                      if null err
-                        then
+                  Just (ResultSetNormal  results) ->
                             return ()
-                        else
-                            throwError (-1, pack err)
+                  Just (ResultSetError err) ->
+                            throwError err
                   Nothing ->
                       throwError (-1, "cannot parse response"),
             getAllResult = getAllResult0,
@@ -75,12 +71,10 @@ handleService connect =
               liftIO $ sendMsgPack handle name2
               rep <- liftIO $ receiveMsgPack handle
               case rep of
-                  Just (ResultSet err results) ->
-                      if null err
-                        then
+                  Just (ResultSetNormal results) ->
                             return ()
-                        else
-                            throwError (-1, pack err)
+                  Just (ResultSetError err) ->
+                            throwError err
                   Nothing ->
                       throwError (-1, "cannot parse response"),
 
@@ -93,12 +87,10 @@ handleService connect =
               liftIO $ sendMsgPack handle name2
               rep <- liftIO $ receiveMsgPack handle
               case rep of
-                  Just (ResultSet err results) ->
-                      if null err
-                        then
+                  Just (ResultSetNormal results) ->
                             return ()
-                        else
-                            throwError (-1, pack err)
+                  Just (ResultSetError err) ->
+                            throwError err
                   Nothing ->
                       throwError (-1, "cannot parse response")
           }

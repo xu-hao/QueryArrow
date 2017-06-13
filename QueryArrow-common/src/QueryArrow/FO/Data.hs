@@ -624,7 +624,7 @@ instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unan
                         Aggregate0 (Limit n) a -> Aggregate0 (Limit n) a
                         Aggregate0 Distinct a -> Aggregate0 Distinct a
                         Aggregate0 (OrderByAsc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
-                        Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
+                        Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByDesc (subst s var1)) a
                         FZero0 -> FZero0
                         FOne0 -> FOne0) a in
                     -- trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $ 

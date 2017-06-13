@@ -104,6 +104,16 @@ instance ToTree QueryPlan2 where
     toTree (QPOne2 qpd) = Node ("one"++ show qpd ) []
     toTree (QPAggregate2 qpd agg qp1) = Node ("aggregate " ++ show agg ++ " " ++ show qpd) [toTree qp1]
 
+class ToTree' a where
+    toTree' :: a -> Tree String
+instance ToTree' QueryPlan2 where
+    toTree' (Exec2 qpd (f, dbs)) = Node ("exec " ++ serialize f ++ " at " ++ show dbs ++ show qpd ) []
+    toTree' qp@(QPSequencing2 qpd qp1 qp2) = Node ("sequencing"++ show qpd ) [toTree' qp1, toTree' qp2]
+    toTree' qp@(QPChoice2 qpd qp1 qp2) = Node ("choice"++ show qpd ) [toTree' qp1, toTree' qp2]
+    toTree' qp@(QPPar2 qpd qp1 qp2) = Node ("parallel"++ show qpd ) [toTree' qp1, toTree' qp2]
+    toTree' (QPZero2 qpd) = Node ("zero"++ show qpd ) []
+    toTree' (QPOne2 qpd) = Node ("one"++ show qpd ) []
+    toTree' (QPAggregate2 qpd agg qp1) = Node ("aggregate " ++ show agg ++ " " ++ show qpd) [toTree' qp1]
 
 type QueryPlan3 row = QueryPlan1 (AbstractDBStatement row, String) (Annotated QueryPlanData)
 
@@ -367,7 +377,7 @@ calculateVars1 rvars  (QPAggregate vtm agg@Exists qp1) =
         QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars, vartypemap = vtm}  agg qp1'
 calculateVars1 rvars  (QPAggregate vtm agg@(Summarize funcs groupby) qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
-        QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = fromList (map fst funcs), linscopevs = linscopevs qpd1, rinscopevs = rvars, vartypemap = vtm}  agg qp1'
+        QPAggregate2  dqdb{freevs = freevs qpd1, determinevs = fromList (map fst funcs), linscopevs = linscopevs qpd1, rinscopevs = rvars \/ Include (fromList (map fst funcs)), vartypemap = vtm}  agg qp1'
 calculateVars1 rvars  (QPAggregate vtm agg@(Limit _) qp1) =
     let qp1'@(Annotated qpd1 _) = calculateVars1 rvars qp1 in
         QPAggregate2 dqdb{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1, vartypemap = vtm}  agg qp1'
@@ -404,12 +414,34 @@ calculateVars2  lvars (QPPar2 qpd qp1 qp2) =
                 QPPar2  qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd \\\ lvars), combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)}   qp1' qp2'
 calculateVars2  lvars (QPSequencing2 qpd qp1 qp2) =
             let qp1'@(Annotated qpd1 _) = calculateVars2 lvars qp1
-                qp2' = calculateVars2 (lvars \/ freevs qpd1) qp2 in
+                qp2' = calculateVars2 (combinedvs qpd1) qp2 in
                 QPSequencing2  qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd \\\ lvars), combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)}   qp1' qp2'
 
 calculateVars2 lvars  (QPOne2 qpd) = QPOne2 qpd{availablevs = lvars, paramvs = bottom, returnvs = bottom, combinedvs = rinscopevs qpd //\ lvars}
 calculateVars2 lvars  (QPZero2 qpd) = QPZero2 qpd{availablevs = lvars, paramvs = bottom, returnvs = bottom,combinedvs = rinscopevs qpd //\ lvars}
-calculateVars2 lvars  (QPAggregate2 qpd agg qp1) =
+
+calculateVars2 lvars  (QPAggregate2 qpd agg@Not qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@Exists qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@(Summarize funcs groupby) qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@(Limit _) qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@Distinct qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@(OrderByAsc _) qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@(OrderByDesc _) qp1) =
+            let qp1' = calculateVars2 lvars qp1 in
+                QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
+calculateVars2 lvars  (QPAggregate2 qpd agg@(FReturn vars) qp1) =
             let qp1' = calculateVars2 lvars qp1 in
                 QPAggregate2 qpd{availablevs = lvars, paramvs = lvars /\ (freevs qpd), returnvs = (rinscopevs qpd //\ determinevs qpd) \\\ lvars,combinedvs = rinscopevs qpd //\ (determinevs qpd \/ lvars)} agg qp1'
 
@@ -650,7 +682,7 @@ execQueryPlan rs (QPAggregate2 qpd (OrderByDesc v1) qp) =
         let rs2 = execQueryPlan (pure row) qp
         rows <- lift $ getAllResultsInStream rs2
         let rows' = sortBy (\row1 row2 -> comparing Down (ext v1 row1) (ext v1 row2)) rows
-        listResultStream rows')
+        trace ("executeQueryPlan: OrderByDesc " ++ show rows ++ show rows') $ listResultStream rows')
 
 closeQueryPlan :: QueryPlan3 row -> IO ()
 closeQueryPlan (Exec2 _ (stmt, _)) =

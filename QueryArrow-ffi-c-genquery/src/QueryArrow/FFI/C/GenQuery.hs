@@ -36,6 +36,7 @@ hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cticket cqu cout c
   un <- peekCString cusername
   ticket <- peekCString cticket
   qu <- peekCString cqu
+--  putStrLn ("hs_gen_query: genquery = " ++ qu)
   debugM "GENQUERY" ("hs_gen_query: genquery = " ++ qu)
   let (gq, (vars, form)) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)

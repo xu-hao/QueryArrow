@@ -16,7 +16,7 @@ import Debug.Trace
 import QueryArrow.FFI.GenQuery.Data
 
 prefixes :: [String]
-prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC", "SERVER_LOAD_DIGEST", "SERVER_LOAD", "TOKEN", "TICKET_ALLOWED_HOST",  "TICKET_ALLOWED_USER",  "TICKET_ALLOWED_GROUP", "TICKET"]
+prefixes = ["DATA_ACCESS", "COLL_ACCESS", "DATA", "COLL", "RESC", "ZONE", "USER", "META_DATA", "META_COLL", "META_RESC", "META_USER", "RULE_EXEC", "SERVER_LOAD_DIGEST", "SERVER_LOAD", "TOKEN", "TICKET_ALLOWED_HOST",  "TICKET_ALLOWED_USER",  "TICKET_ALLOWED_GROUP", "TICKET", "QUOTA"]
 
 extractPrefix :: String -> String
 extractPrefix "COLUMN_NAME_NOT_FOUND_510" = "COLL"
@@ -198,6 +198,28 @@ translateGenQueryColumnToPredicate  col =
           -- TICKET_ALLOWED_GROUPS
           "TICKET_ALLOWED_GROUP_TICKET_ID" -> "TICKET_ALLOWED_GROUPS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_GROUP_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_GROUP_NAME")]
           "TICKET_ALLOWED_GROUP_NAME" -> "TICKET_ALLOWED_GROUPS_OBJ" @@ [VarExpr (toVariable "TICKET_ALLOWED_GROUP_TICKET_ID"), VarExpr (toVariable "TICKET_ALLOWED_GROUP_NAME")]
+          -- QUOTA
+          "QUOTA_RESC_NAME" -> "QUOTA_OBJ" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID")] .*. "RESC_NAME" @@ [VarExpr (toVariable "QUOTA_RESC_ID"), VarExpr (toVariable col)]
+          "QUOTA_USER_NAME" -> "QUOTA_OBJ" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID")] .*. "USER_NAME" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable col)]
+          "QUOTA_USER_ZONE" -> "QUOTA_OBJ" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID")] .*. "USER_ZONE_NAME" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable col)]
+          "QUOTA_USER_TYPE" -> "QUOTA_OBJ" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID")] .*. "USER_TYPE_NAME" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable col)]
+          "QUOTA_RESC_ID" -> "QUOTA_OBJ" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID")]
+          "QUOTA_USER_ID" -> "QUOTA_OBJ" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID")]
+          "QUOTA_LIMIT" -> "QUOTA_LIMIT" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID"), VarExpr (toVariable col)]
+          "QUOTA_OVER" -> "QUOTA_OVER" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID"), VarExpr (toVariable col)]
+          "QUOTA_MODIFY_TIME" -> "QUOTA_MODIFY_TS" @@ [VarExpr (toVariable "QUOTA_USER_ID"), VarExpr (toVariable "QUOTA_RESC_ID"), VarExpr (toVariable col)]
+          "TICKET_OWNER_ZONE" -> "TICKET_USER_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_USER_ID")] .*. "USER_ZONE_NAME" @@ [VarExpr (toVariable "TICKET_USER_ID"), VarExpr (toVariable "TICKET_OWNER_ZONE")]
+          "TICKET_USES_COUNT" -> "TICKET_USES_COUNT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_USES_LIMIT" -> "TICKET_USES_LIMIT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_FILE_COUNT" -> "TICKET_WRITE_FILE_COUNT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_FILE_LIMIT" -> "TICKET_WRITE_FILE_LIMIT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_BYTE_COUNT" -> "TICKET_WRITE_BYTE_COUNT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_WRITE_BYTE_LIMIT" -> "TICKET_WRITE_BYTE_LIMIT" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_EXPIRY" -> "TICKET_EXPIRY_TS" @@ [VarExpr (toIdVariable col), VarExpr (toVariable col)]
+          "TICKET_DATA_NAME" -> "TICKET_OBJECT_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_OBJECT_ID")] .*. "DATA_NAME" @@ [VarExpr (toVariable "TICKET_OBJECT_ID"), VarExpr (toVariable "TICKET_OBJECT_RESC_ID"), VarExpr (toVariable "TICKET_DATA_NAME")]
+          "TICKET_DATA_COLL_NAME" -> "TICKET_OBJECT_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_OBJECT_ID")] .*. "DATA_COLL_ID" @@ [VarExpr (toVariable "TICKET_OBJECT_ID"), VarExpr (toVariable "TICKET_OBJECT_RESC_ID"), VarExpr (toVariable "TICKET_OBJECT_COLL_ID")] .*. "COLL_NAME" @@ [VarExpr (toVariable "TICKET_OBJECT_COLL_ID"), VarExpr (toVariable "TICKET_DATA_COLL_NAME")]
+          "TICKET_COLL_NAME" -> "TICKET_OBJECT_ID" @@ [VarExpr (toIdVariable col), VarExpr (toVariable "TICKET_OBJECT_ID")] .*. "COLL_NAME" @@ [VarExpr (toVariable "TICKET_OBJECT_ID"), VarExpr (toVariable "TICKET_COLL_NAME")]
+
           _ -> error ("unsupported column " ++ col)
 
 toCondPredicate2 :: [String] -> Cond ->  Formula
