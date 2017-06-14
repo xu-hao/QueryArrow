@@ -44,6 +44,7 @@ import QueryArrow.RPC.DB
 import Options.Applicative
 import Data.Maybe (fromMaybe, isJust, fromJust)
 import System.IO
+import Control.Exception
 import QueryArrow.Serialization
 import Network.Socket
 import Network
@@ -100,34 +101,29 @@ mainArgs input = do
           run2 showhdr hdr qu pars ps
 
 runTCP :: String -> Int -> Bool -> [String] -> String -> MapResultRow -> IO ()
-runTCP  addr port showhdr hdr qu params = do
-  handle <- connectTo addr (PortNumber (fromIntegral port))
-  let name = QuerySet {
-                qsquery = Dynamic qu,
-                qsheaders = fromList (map Var hdr),
-                qsparams = params
-                }
-  sendMsgPack handle name
-  rep <- receiveMsgPack handle
-  case rep of
-      Just (ResultSetNormal results) ->
-                putStrLn (pprint showhdr False (map Var hdr) results)
-      Just (ResultSetError err) -> 
-                putStrLn ("error: " ++ show err)
-      Nothing ->
-          putStrLn ("cannot parse response: " ++ show rep)
-  let name2 = QuerySet {
-                qsquery = Quit,
-                qsheaders = mempty,
-                qsparams = mempty
-                }
-  sendMsgPack handle name2
+runTCP  addr port showhdr hdr qu params =
+  bracket 
+    (connectTo addr (PortNumber (fromIntegral port)))
+    hClose 
+    (\ handle -> runHandle handle showhdr hdr qu params)
 
 runUDS :: String -> Bool -> [String] -> String -> MapResultRow -> IO ()
-runUDS addr showhdr hdr qu params = do
-  sock <- socket AF_UNIX Stream defaultProtocol
-  connect sock (SockAddrUnix addr)
-  handle <- socketToHandle sock ReadWriteMode
+runUDS addr showhdr hdr qu params = 
+  bracket
+    (do
+      sock <- socket AF_UNIX Stream defaultProtocol
+      connect sock (SockAddrUnix addr)
+      socketToHandle sock ReadWriteMode)
+    hClose
+    (\ handle -> runHandle handle showhdr hdr qu params)
+
+runHandle :: Handle -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runHandle handle showhdr hdr qu params = do
+  sendMsgPack handle QuerySet {
+                  qsquery = Static [Begin],
+                  qsheaders = mempty,
+                  qsparams = mempty}
+  _ <- receiveMsgPack handle :: IO (Maybe ResultSet)
   let name = QuerySet {
                 qsquery = Dynamic qu,
                 qsheaders = fromList (map Var hdr),
@@ -136,17 +132,23 @@ runUDS addr showhdr hdr qu params = do
   sendMsgPack handle name
   rep <- receiveMsgPack handle
   case rep of
-      Just (ResultSetNormal results) ->
+      Just (ResultSetNormal results) -> do
                 putStrLn (pprint showhdr False (map Var hdr) results)
+                sendMsgPack handle QuerySet {
+                  qsquery = Static [Prepare, Commit],
+                  qsheaders = mempty,
+                  qsparams = mempty}
+                _ <- receiveMsgPack handle :: IO (Maybe ResultSet)
+                return ()
       Just (ResultSetError err) ->
                 putStrLn ("error: " ++ show err)
       Nothing ->
-          putStrLn ("cannot parse response: " ++ show rep)
+                putStrLn ("cannot parse response: " ++ show rep)
   let name2 = QuerySet {
                 qsquery = Quit,
                 qsheaders = mempty,
                 qsparams = mempty
-                }
+        }
   sendMsgPack handle name2
 
 run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
@@ -154,8 +156,12 @@ run2 showhdr hdr query params ps = do
     let vars = map Var hdr
     AbstractDatabase tdb <- transDB ps
     conn <- dbOpen tdb
+    dbBegin conn
     ret <- runEitherT $ run (fromList vars) query params tdb conn
     case ret of
       Left e -> putStrLn ("error: " ++ show e)
-      Right pp -> putStr (pprint showhdr False vars pp)
+      Right pp -> do
+        dbPrepare conn
+        dbCommit conn
+        putStr (pprint showhdr False vars pp)
     dbClose conn

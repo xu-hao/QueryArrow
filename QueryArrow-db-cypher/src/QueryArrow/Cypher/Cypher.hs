@@ -38,6 +38,7 @@ data CypherExpr = CypherVarExpr CypherVar
                 | CypherParamExpr String
                 | CypherDotExpr CypherExpr PropertyKey
                 | CypherAppExpr String [CypherExpr]
+                | CypherInfixExpr String CypherExpr CypherExpr
                 | CypherNullExpr deriving (Eq, Ord, Show, Read)
 
 extractVarFromExpr :: CypherExpr -> CypherVar
@@ -216,6 +217,13 @@ instance Serialize NodePattern where
 instance Serialize PropertyKey where
     serialize (PropertyKey prop) = prop
 
+parseStringList :: String -> String
+parseStringList a =
+       let a' = drop 2 a
+           a'' = take (length a' - 2) a'
+           a''' = cypherStringUnescape a'' in
+           "[" ++ a''' ++ "]"
+
 instance Serialize CypherExpr where
     serialize (CypherVarExpr var) = serialize var
     serialize (CypherIntConstExpr i) = show i
@@ -223,6 +231,7 @@ instance Serialize CypherExpr where
     serialize (CypherParamExpr m) = "{" ++ m ++ "}"
     serialize (CypherDotExpr expr prop) = serialize expr ++ "." ++ serialize prop
     serialize (CypherAppExpr f args) = f ++ "(" ++ intercalate "," (map serialize args) ++ ")"
+    serialize (CypherInfixExpr f arg1 arg2) = "(" ++ serialize arg1 ++ f ++ serialize arg2 ++ ")"
     serialize (CypherNullExpr) = "NULL"
 
 instance Serialize CypherVar where
@@ -240,18 +249,36 @@ cypherStringEscape = concatMap f where
     f '\\' = "\\\\"
     f a = [a]
 
+cypherStringUnescape :: String -> String
+cypherStringUnescape ('\\' : 't' : t) = '\t' : cypherStringUnescape t
+cypherStringUnescape ('\\' : 'b' : t) = '\b' : cypherStringUnescape t
+cypherStringUnescape ('\\' : 'n' : t) = '\n' : cypherStringUnescape t
+cypherStringUnescape ('\\' : 'r' : t) = '\r' : cypherStringUnescape t
+cypherStringUnescape ('\\' : 'f' : t) = '\f' : cypherStringUnescape t
+cypherStringUnescape ('\\' : '\'' : t) = '\'' : cypherStringUnescape t
+cypherStringUnescape ('\\' : '\"' : t) = '\"' : cypherStringUnescape t
+cypherStringUnescape ('\\' : '\\' : t) = '\\' : cypherStringUnescape t
+cypherStringUnescape (a : t) = a : cypherStringUnescape t
+cypherStringUnescape "" = ""
+
 {- showN _ 0 = "..."
-showN (CypherCompCond op lhs rhs s) n = case s of
-    Pos -> show lhs ++ " " ++ op ++ " " ++ show rhs
-    Neg -> "NOT (" ++ show lhs ++ " " ++ op ++ " " ++ show rhs ++ ")"
+showN (CypherCompCond op lhs rhs s) n = 
+      let a = show lhs ++ " " ++ op ++ " " ++ show rhs in
+          case s of
+              Pos -> a
+              Neg -> "NOT (" ++ a ++ ")"
 showN (CypherTrueCond) _ = "@True"
 showN (CypherPatternCond (GraphPattern [])) _ = "@Graph"
 showN (CypherPatternCond (GraphPattern as)) n = "(" ++ intercalate " AND " (map show (as)) ++ ")"
 showN (CypherAndCond a b) n = "(" ++ showN a (n-1) ++ " AND " ++ showN b (n-1) ++ ")" -}
 instance Serialize CypherCond where
-    serialize (CypherCompCond op lhs rhs s) = case s of
-        Pos -> serialize lhs ++ " " ++ op ++ " " ++ serialize rhs
-        Neg -> "NOT (" ++ serialize lhs ++ " " ++ op ++ " " ++ serialize rhs ++ ")"
+    serialize (CypherCompCond op lhs rhs s) = 
+      let a = if op == "in" 
+                  then serialize lhs ++ " " ++ op ++ " " ++ parseStringList (serialize rhs) -- need to add proper list type
+                  else serialize lhs ++ " " ++ op ++ " " ++ serialize rhs in
+          case s of
+              Pos -> a
+              Neg -> "NOT (" ++ a ++ ")"
     serialize (CypherTrueCond) = "@True"
     serialize (CypherHasPropertyCond expr prop) = "HAS(" ++ serialize expr ++ "." ++ serialize prop ++ ")"
     serialize (CypherAndCond a b) = "(" ++ serialize a ++ " AND " ++ serialize b ++ ")"
@@ -361,6 +388,7 @@ instance FV CypherExpr where
     fv (CypherVarExpr var) = [var]
     fv (CypherDotExpr expr _) = fv expr
     fv (CypherAppExpr _ args) = foldl union [] (map fv args)
+    fv (CypherInfixExpr _ arg1 arg2) = fv arg1 `union` fv arg2
     fv _ = []
 
 instance FV a => FV [a] where
@@ -422,6 +450,7 @@ instance Subst CypherExpr where
     subst (CypherVarExprMap varmap) ve@(CypherVarExpr var) = fromMaybe ve (lookup var varmap)
     subst varmap (CypherDotExpr expr prop) = CypherDotExpr (subst varmap expr) prop
     subst varmap (CypherAppExpr f args) = CypherAppExpr f (map (subst varmap) args)
+    subst varmap (CypherInfixExpr f arg1 arg2) = CypherInfixExpr f (subst varmap arg1) (subst varmap arg2)
     subst _ a = a
 
 instance Subst CypherVarExprMap where

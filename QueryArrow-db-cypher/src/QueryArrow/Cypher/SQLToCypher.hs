@@ -31,6 +31,10 @@ lookup2 :: (Ord a) => a -> Map a a -> a
 lookup2 tablename0 table =
         fromMaybe tablename0 (lookup tablename0 table)
 
+endsWith :: String -> String -> Bool
+endsWith a b = 
+      length a >= length b && drop (length a - length b) a == b
+
 sqlToCypher :: PredTypeMap -> PredTableMap -> CypherPredTableMap
 sqlToCypher ptm mappings =
         foldrWithKey (\predname (OneTable tablename _, qcols) mappings' ->
@@ -44,7 +48,7 @@ sqlToCypher ptm mappings =
                         1 -> ([], keycols)
                         2
                           | tablename == "r_data_main" -> partition (\(col, _) -> col /= "data_id") keycols
-                        _ -> partition (\(col, _) -> col /= "access_type_id") keycols
+                        _ -> partition (\(col, _) -> col `endsWith` "_id" && col /= "data_access_id") keycols
                 (propedges, propprops) = partition (\(col, _) -> endswith "_id" col) propcols
                 ty = lookup2 tablename tabletype
                 foreignkeyedges = map ((\key -> lookup2 key foreignKeys) *** id) keyedges

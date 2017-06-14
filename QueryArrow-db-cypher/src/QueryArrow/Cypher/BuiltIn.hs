@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs #-}
+{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, OverloadedStrings #-}
 module QueryArrow.Cypher.BuiltIn where
 
 import QueryArrow.FO.Data
@@ -43,6 +43,46 @@ cypherBuiltIn lookupPred =
                 ),
             (lookupPred "like_regex",  \ [arg1, arg2] ->
                 return (cwhere (CypherCompCond "=~" arg1 arg2 Pos))),
+            (lookupPred "like",  \[arg1, arg2] ->
+                return (cwhere (CypherCompCond "=~" arg1 (wildcardToRegex arg2) Pos))),
+            (lookupPred "regex_replace",  \[arg1, arg2, arg3, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherAppExpr "replace" [arg1, arg2, arg3]), rvars, env, ptm) -- currently only do non regex replace
+                return mempty),
+            (lookupPred "substr",  \[arg1, arg2, arg3, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherAppExpr "substr" [arg1, arg2, arg3]), rvars, env, ptm)
+                return mempty),
+            (lookupPred "replace",  \[arg1, arg2, arg3, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherAppExpr "replace" [arg1, arg2, arg3]), rvars, env, ptm)
+                return mempty),
+            (lookupPred "concat",  \[arg1, arg2, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherInfixExpr "+" arg1 arg2), rvars, env, ptm)
+                return mempty),
+            (lookupPred "add",  \[arg1, arg2, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherInfixExpr "+" arg1 arg2), rvars, env, ptm)
+                return mempty),
+            (lookupPred "sub",  \[arg1, arg2, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherInfixExpr "-" arg1 arg2), rvars, env, ptm)
+                return mempty),
+            (lookupPred "mul",  \[arg1, arg2, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherInfixExpr "*" arg1 arg2), rvars, env, ptm)
+                return mempty),
+            (lookupPred "div",  \[arg1, arg2, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherInfixExpr "/" arg1 arg2), rvars, env, ptm)
+                return mempty),
+            (lookupPred "strlen",  \[arg1, CypherVarExpr v] -> do
+                (a, b, repmap, rvars, env, ptm) <- get
+                put (a,b, repmap <> cypherVarExprMap v (CypherAppExpr "length" [arg1]), rvars, env, ptm)
+                return mempty),
+            (lookupPred "in",  \ [arg1, arg2] ->
+                return (cwhere (CypherCompCond "in" arg1 arg2 Pos))), -- this conversion is incorrect
             (lookupPred "ge",  \ [arg1, arg2] ->
                 return (cwhere (CypherCompCond ">=" arg1 arg2 Pos))),
             (lookupPred "gt",  \ [arg1, arg2] ->
@@ -52,3 +92,6 @@ cypherBuiltIn lookupPred =
             (lookupPred "not_like_regex",  \ [arg1, arg2] ->
                 return (cwhere (CypherCompCond "=~" arg1 arg2 Neg)))
         ])
+
+wildcardToRegex :: CypherExpr -> CypherExpr
+wildcardToRegex a = foldl (\a (x, y) -> CypherAppExpr "replace" [a, CypherStringConstExpr x, CypherStringConstExpr y]) a [("\\", "\\\\"), (".", "\\."), ("*", "\\*"), ("%", ".*"), ("_", ".")] -- incomplete
