@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, StandaloneDeriving, MultiParamTypeClasses, DeriveGeneric, FlexibleInstances #-}
+{-# LANGUAGE GADTs, StandaloneDeriving, MultiParamTypeClasses, DeriveGeneric, FlexibleInstances, PatternSynonyms #-}
 module QueryArrow.FileSystem.LocalCommands where
 
 import QueryArrow.FO.Data
@@ -7,6 +7,9 @@ import Data.ByteString (ByteString)
 import System.FilePath ((</>), equalFilePath, takeDirectory, takeFileName, pathSeparator)
 import Data.Time.Clock
 import GHC.Generics
+import Data.Text (pack, unpack)
+
+pattern RefValue objtype host root path = ConsValue "Ref" `AppValue` StringValue objtype `AppValue` StringValue host `AppValue` StringValue root `AppValue` StringValue path
 
 data Stats = Stats {isDir :: Bool} deriving (Show, Read, Generic)
 
@@ -35,10 +38,10 @@ fsfileName :: File -> String
 fsfileName file = takeFileName (fRelP file)
 
 fileToResultValue :: String -> File -> ConcreteResultValue
-fileToResultValue ty (File host root path ) = RefValue ty [host, root] path
+fileToResultValue ty (File host root path ) = RefValue (pack ty) (pack host) (pack root) (pack path)
 
 resultValueToFile :: ConcreteResultValue -> File
-resultValueToFile (RefValue _ [host, root] path) = File host root path
+resultValueToFile (RefValue _ host root path) = File (unpack host) (unpack root) (unpack path)
 resultValueToFile _ = error ""
 
 data LocalizedFSCommand2 where

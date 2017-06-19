@@ -15,7 +15,7 @@ data Cond2 = EqString String |
             LeInteger Integer |
             LikeCond String |
             ParentOfCond String |
-            InCond String |
+            InCond [String] |
             OrCond Cond2 Cond2 |
             AndCond Cond2 Cond2 deriving (Show)
 

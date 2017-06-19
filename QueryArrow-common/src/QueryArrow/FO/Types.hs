@@ -3,7 +3,7 @@
 module QueryArrow.FO.Types where
 
 import Prelude hiding (lookup, null, filter)
-import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty, mapKeys, toList)
+import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty, mapKeys, toList, singleton)
 import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
 import Data.Set (Set, (\\), toAscList, member, null, filter)
@@ -71,10 +71,9 @@ class TCSubst a where
   tcsubst :: TVarMap -> a -> a
 
 instance TCSubst CastType where
-  tcsubst _ Int64Type = Int64Type
-  tcsubst _ TextType = TextType
-  tcsubst _ ByteStringType = ByteStringType
-  tcsubst _ ty@(RefType _) = ty
+  tcsubst _ ty@(TypeCons _) = ty
+  tcsubst m (TypeApp ty1 ty2) = TypeApp (tcsubst m ty1) (tcsubst m ty2)
+  tcsubst m (TypeUniv tv ty) = TypeUniv tv (tcsubst (delete tv m) ty)
   tcsubst m tv@(TypeVar v) = fromMaybe tv (lookup v m)
 
 instance TCSubst PredType where
@@ -93,10 +92,9 @@ class FreeTypeVars a where
   freeTypeVars :: a -> Set String
 
 instance FreeTypeVars CastType where
-  freeTypeVars Int64Type = mempty
-  freeTypeVars TextType = mempty
-  freeTypeVars (RefType _) = mempty
-  freeTypeVars ByteStringType = mempty
+  freeTypeVars (TypeCons _) = mempty
+  freeTypeVars (TypeApp ty1 ty2)  = freeTypeVars ty1 \/ freeTypeVars ty2
+  freeTypeVars (TypeUniv tv ty)  = Set.delete tv (freeTypeVars ty)
   freeTypeVars (TypeVar v) = Set.singleton v
 
 instance FreeTypeVars PredType where
@@ -115,7 +113,8 @@ checkVarType v (ParamType pk inp out t) = do
     Just (ParamType _ inp2 out2 t2) -> do
         when (not inp && inp2) $ throwError ("checkVarType: bounded var: " ++ show v)
         when (not out && out2) $ throwError ("checkVarType: unbounded var: " ++ show v)
-        context ("checkVarType: " ++ serialize v ++ " " ++ show vartypemap ++ " expected and encountered") $ tcunify t t2
+        t2' <- instantiate t2
+        context ("checkVarType: " ++ serialize v ++ " " ++ show vartypemap ++ " expected and encountered") $ tcunify t t2'
         (_,tvm) <- lift get
         let t' = tcsubst tvm t
         lift $ modify (insert v (ParamType pk True False t') *** id)
@@ -126,10 +125,22 @@ unbounded vtm  = Set.filter (\var0 -> case lookup var0 vtm of
                                         Just (ParamType _ False _ _) -> True
                                         _ -> False)
 
+newTVar :: String -> TCMonad String
+newTVar s = lift . lift . lift $ new (StringWrapper s)
+
+newTVars :: [String] -> TCMonad [String]
+newTVars as = mapM newTVar as
+
+instantiate :: CastType -> TCMonad CastType
+instantiate (TypeUniv tv ty) = do
+    tv' <- newTVar tv
+    ty' <- instantiate ty
+    return (tcsubst (singleton tv (TypeVar tv')) ty')
+
 instantiatePredType :: PredType -> TCMonad PredType
 instantiatePredType pt = do
     let freetvs = Set.toAscList (freeTypeVars pt)
-    newtvs <- lift . lift . lift $ new (map StringWrapper freetvs)
+    newtvs <- newTVars freetvs
     let s = fromList (zip freetvs (map TypeVar newtvs))
     return (tcsubst s pt)
 
@@ -148,21 +159,31 @@ instance Typecheck Atom () where
                           let free = freeVars arg
                           let ub = unbounded vtm free
                           when (not (isVar arg) && not (null ub)) $ throwError ("typecheck: unbounded nested vars: " ++ show ub ++ ", the formula is " ++ serialize a)
-                          (_, tvm) <- lift get
-                          let pt'@(ParamType _ _ _ t') = tcsubst tvm paramtype
-                          case arg of
+                          context ("typecheck: " ++ serialize a) $ typecheck (arg, paramtype)) pts args
+
+instance Typecheck (Expr, ParamType) () where
+  typecheck (arg, paramtype) = do
+                  (_, tvm) <- lift get
+                  let pt'@(ParamType _ _ _ t') = tcsubst tvm paramtype 
+                  case arg of
                               VarExpr v ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ checkVarType v pt'
+                                  context ("typecheck: arg " ++ serialize arg) $ checkVarType v pt'
                               IntExpr _ ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' Int64Type
+                                  context ("typecheck: arg " ++ serialize arg) $ tcunify t' Int64Type
                               StringExpr _ ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' TextType
-                              PatternExpr _ ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg) $ tcunify t' TextType
+                                  context ("typecheck: arg " ++ serialize arg) $ tcunify t' TextType
+                              AppExpr e1 e2 -> do
+                                  paramType <- newTVar "paramType"
+                                  let paramtv = TypeVar paramType
+                                  context ("typecheck: arg " ++ serialize arg) $ typecheck (e1, FuncType paramtv t')
+                                  context ("typecheck: arg " ++ serialize arg) $ typecheck (e2, paramtv)
                               CastExpr t2 _ ->
-                                  context ("typecheck: " ++ serialize a ++ " arg " ++ serialize arg ++ " paramtype " ++ serialize paramtype) $ tcunify t' t2
+                                  context ("typecheck: arg " ++ serialize arg ++ " paramtype " ++ serialize paramtype) $ tcunify t' t2
                               NullExpr ->
-                                  return ()) pts args
+                                  return ()
+
+instance Typecheck (Expr, CastType) () where
+  typecheck (arg, ty) = typecheck (arg, ParamType False True False ty)
 
 instance Typecheck Lit () where
     typecheck  (Lit s a) = typecheck  a
@@ -195,7 +216,7 @@ instance Typecheck Aggregator () where
         CountDistinct _ ->
             return (v, ParamType False True False Int64Type)
         Random v2 -> do
-            ntv <- lift . lift . lift $ new (StringWrapper "random")
+            ntv <- newTVar "random"
             checkVarType v2 (ParamType False True False (TypeVar ntv))
             (vtm, _) <- lift get
             return (v, fromMaybe (error ("typecheck: cannot find var type " ++ show v2)) (lookup v2 vtm))

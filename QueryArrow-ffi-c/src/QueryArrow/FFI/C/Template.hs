@@ -44,7 +44,7 @@ functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
 functype n t = functype (n - 1) [t|CString -> $(t)|]
 
-data Type2 = StringType | IntType deriving (Show, Eq)
+data Type2 = StringListType | StringType | IntType deriving (Show, Eq)
 
 cstringToText :: CString -> IO Text
 cstringToText str = do
@@ -55,6 +55,13 @@ cstringToInt64 :: CString -> IO Int64
 cstringToInt64 str = do
     str2 <- peekCString str
     return (read str2)
+
+-- | convert a null terminated array of strings to a list of texts
+cstringArrayToTextList :: Ptr CString -> IO [Text]
+cstringArrayToTextList carrstr = do
+    arrcstr <- peekArray0 nullPtr carrstr
+    arrstr <- mapM peekCString arrcstr
+    return (map Text.pack arrstr)
 
 textToBuffer :: CString -> Int -> Text -> IO ()
 textToBuffer str n text = do
@@ -95,6 +102,7 @@ arrayToAllocateBuffer buf lenbuf txt = do
 param :: String -> Type2 -> ExpQ
 param i StringType = [| AbstractResultValue (StringValue $(varE (mkName i))) |] 
 param i IntType = [| AbstractResultValue (Int64Value $(varE (mkName i))) |]
+param i StringListType = [| AbstractResultValue (listValue (map StrinValue $(varE (mkName i)))) |]
 
 queryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryFunction name inputtypes outputtypes = do
@@ -264,6 +272,7 @@ hsQueryAll2Foreign name _ _ = do
 cparam :: Name -> Type2 -> ExpQ
 cparam i StringType = [| liftIO $ cstringToText $(varE i) |]
 cparam i IntType = [| liftIO $ cstringToInt64 $(varE i) |]
+cparam i StringListType = [| liftIO $ cstringArrayToTextList $(varE i) |]
 
 hsQueryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryFunction n inputtypes outputtypes = do
@@ -582,6 +591,7 @@ functions path = do
     let                     getInputTypes [] = []
                             getInputTypes (ParamType _ True _ Int64Type : t) = IntType : getInputTypes t
                             getInputTypes (ParamType _ True _ TextType : t) = StringType : getInputTypes t
+                            getInputTypes (ParamType _ True _ (ListType TextType) : t) = StringListType : getInputTypes t
                             getInputTypes t = error ("getTypes: error unsupported type " ++ show t)
     qr1 <- concat <$> mapM (\(InsertRewritingRule (Atom ( name@(ObjectPath _ n0)  ) _) _) ->
                         let n = map toLower (drop 2 n0)
@@ -589,6 +599,7 @@ functions path = do
                             getInputOutputTypes [] = ([], [])
                             getInputOutputTypes (ParamType _ _ False Int64Type : t) = ((IntType :) *** id) (getInputOutputTypes t)
                             getInputOutputTypes (ParamType _ _ False TextType : t) = ((StringType :) *** id) (getInputOutputTypes t)
+                            getInputOutputTypes (ParamType _ _ False (ListType TextType) : t) = ((StringListType :) *** id) (getInputOutputTypes t)
                             getInputOutputTypes (ParamType _ _ True Int64Type : t) = ([], IntType : getOutputTypes t)
                             getInputOutputTypes (ParamType _ _ True TextType : t) = ([], StringType : getOutputTypes t)
                             getInputOutputTypes t = error ("getInputOutputTypes: error unsupported type " ++ show t)

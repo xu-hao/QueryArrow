@@ -20,7 +20,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "random", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "int64", "text", "bytestring", "ref", "null"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "random", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "int64", "text", "bytestring", "list", "null", "forall"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -50,7 +50,12 @@ dot = T.dot lexer
 type FOParser = GenParser Char ()
 
 casttypep :: FOParser CastType
-casttypep = (reserved "text" >> return TextType) <|> (reserved "int64" >> return Int64Type) <|> (reserved "bytestring" >> return ByteStringType) <|> (reserved "ref" >> RefType <$> identifier)
+casttypep = 
+    (reserved "text" >> return TextType) 
+    <|> (reserved "int64" >> return Int64Type) 
+    <|> (reserved "bytestring" >> return ByteStringType) 
+    <|> (brackets (ListType <$> casttypep))
+    <|> (reserved "forall" >> TypeUniv <$> identifier <*> (dot >> casttypep)) 
 
 argp :: FOParser Expr
 argp =
@@ -58,7 +63,7 @@ argp =
     <|> (CastExpr <$> casttypep <*> argp)
     <|> (VarExpr <$> Var <$> identifier)
     <|> (IntExpr . fromIntegral <$> integer)
-    <|> (reserved "pattern" >> PatternExpr. TE.pack <$> stringp )
+    <|> (brackets (foldr ConsExpr NilExpr <$> sepBy argp comma))
     <|> (StringExpr . TE.pack <$> stringp)
 
 arglistp :: FOParser [Expr]
