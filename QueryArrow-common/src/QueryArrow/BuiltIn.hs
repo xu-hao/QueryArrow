@@ -15,7 +15,7 @@ standardBuiltInPreds = [
         Pred (UQPredName "not_like") (PredType ObjectPred [ParamType True True False TextType, ParamType True True False TextType]),
         Pred (UQPredName "like_regex") (PredType ObjectPred [ParamType True True False TextType, ParamType True True False TextType]),
         Pred (UQPredName "not_like_regex") (PredType ObjectPred [ParamType True True False TextType, ParamType True True False TextType]),
-        Pred (UQPredName "in") (PredType ObjectPred [ParamType True True False TextType, ParamType True True False TextType]),
+        Pred (UQPredName "in") (PredType ObjectPred [ParamType True True False (TypeVar "a"), ParamType True True False (ListType (TypeVar "a"))]),
         Pred (UQPredName "add") (PredType ObjectPred [ParamType True True False Int64Type, ParamType True True False Int64Type, ParamType False False True Int64Type]),
         Pred (UQPredName "sub") (PredType ObjectPred [ParamType True True False Int64Type, ParamType True True False Int64Type, ParamType False False True Int64Type]),
         Pred (UQPredName "mul") (PredType ObjectPred [ParamType True True False Int64Type, ParamType True True False Int64Type, ParamType False False True Int64Type]),

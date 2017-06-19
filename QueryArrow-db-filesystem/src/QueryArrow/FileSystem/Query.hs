@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, OverloadedStrings #-}
 module QueryArrow.FileSystem.Query where
 
 import QueryArrow.FO.Data
@@ -7,10 +7,11 @@ import QueryArrow.DB.DB
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FileSystem.Builtin
 import QueryArrow.FileSystem.Commands
+import QueryArrow.FileSystem.LocalCommands
 
 import Control.Monad
 import Data.Convertible
-import Data.Text (Text)
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -72,22 +73,22 @@ data FileContent = FileContent File
 data DirContent = DirContent File
 
 instance Convertible FileObject ConcreteResultValue where
-  safeConvert (NewFileObject  n) = Right (RefValue "FileObject" ["*"] n)
+  safeConvert (NewFileObject  n) = Right (RefValue "FileObject" "*" "" (pack n))
   safeConvert (ExistingFileObject file) = Right (fileToResultValue "FileObject" file)
 
 instance Convertible ConcreteResultValue FileObject where
-  safeConvert (RefValue "FileObject" ["*"] s) =
-    Right (NewFileObject  s)
+  safeConvert (RefValue "FileObject" "*" _ s) =
+    Right (NewFileObject  (unpack s))
   safeConvert file =
     Right (ExistingFileObject (resultValueToFile file))
 
 instance Convertible DirObject ConcreteResultValue where
-  safeConvert (NewDirObject  n) = Right (RefValue "DirObject" ["*"] n)
+  safeConvert (NewDirObject  n) = Right (RefValue "DirObject" "*" "" (pack n))
   safeConvert (ExistingDirObject file) = Right (fileToResultValue "DirObject" file)
 
 instance Convertible ConcreteResultValue DirObject where
-  safeConvert (RefValue "DirObject" ["*"] s) =
-    Right (NewDirObject  s)
+  safeConvert (RefValue "DirObject" "*" _ s) =
+    Right (NewDirObject  (unpack s))
   safeConvert file =
     Right (ExistingDirObject (resultValueToFile file))
 

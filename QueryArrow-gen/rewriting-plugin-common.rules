@@ -861,7 +861,7 @@ rewrite D_DATA_BY_RESC_NOT_IN_CHILD(rn, crn, id)
     concat(crn, ";%",croot) concat("%;", crn, cmid1) concat(cmid1, ";%", cmid) concat("%;", crn, cleaf)
     distinct (DATA_RESC_HIER(id, rid, h) (like (h, root) | like (h, mid) | like (h, leaf)) ~(like (h, croot) | like (h, cmid) | like (h, cleaf)) return id)
 
-predicate D_DATA_BY_RESC_LIST property (key input text, key input text, input output int64)
+predicate D_DATA_BY_RESC_LIST property (key input [text], key input [text], input output int64)
 rewrite D_DATA_BY_RESC_LIST(rids, rids2, id)
     distinct (DATA_OBJ(id, rid0) exists (DATA_OBJ(id, rid) in(text rid, rids)) ~ exists (DATA_OBJ(id, rid)  in(text rid, rids2)) return id)
 

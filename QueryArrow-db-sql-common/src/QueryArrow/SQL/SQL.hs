@@ -11,6 +11,7 @@ import QueryArrow.FO.Domain
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\),union, nub)
+import Data.Either (rights, lefts, isRight)
 import Control.Monad.Trans.State.Strict (StateT, get, put, evalStateT, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (empty, Map, insert, member, singleton, lookup, fromList, keys, toList, elems, size)
@@ -48,10 +49,10 @@ data SQLExpr = SQLColExpr2 String
              | SQLColExpr SQLQualifiedCol
              | SQLIntConstExpr Integer
              | SQLStringConstExpr T.Text
-             | SQLPatternExpr T.Text
              | SQLNullExpr
              | SQLParamExpr String
              | SQLExprText String
+             | SQLListExpr [SQLExpr]
              | SQLCastExpr SQLExpr String
              | SQLArrayExpr SQLExpr SQLExpr
              | SQLInfixFuncExpr String SQLExpr SQLExpr
@@ -133,11 +134,11 @@ instance Show2 SQLExpr where
         else serialize var ++ "." ++ col
     show2 (SQLIntConstExpr i) _ = show i
     show2 (SQLStringConstExpr s) _ = "'" ++ sqlStringEscape (T.unpack s) ++ "'"
-    show2 (SQLPatternExpr s) _ = "'" ++ sqlPatternEscape (T.unpack s) ++ "'"
     show2 (SQLParamExpr _) _ = "?"
     show2 (SQLCastExpr arg ty) sqlvar =  "cast(" ++ show2 arg sqlvar ++ " as " ++ ty ++ ")"
     show2 (SQLArrayExpr arr inx) sqlvar = "(" ++ show2 arr sqlvar ++ ")[" ++ show2 inx sqlvar ++ "]"
     show2 (SQLInfixFuncExpr fn a b) sqlvar = "(" ++ show2 a sqlvar ++ fn ++ show2 b sqlvar ++ ")"
+    show2 (SQLListExpr args) sqlvar = "{" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ "}"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
     show2 (SQLFuncExpr2 fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
     show2 (SQLExprText s) _ = s
@@ -327,6 +328,17 @@ subState a = do
   put state
   return r
 
+
+sqlExprListFromArg :: Expr -> TransMonad [SQLExpr]
+sqlExprListFromArg e = do
+    let l = exprListFromExpr e
+    l2 <- mapM sqlExprFromArg l
+    let l3 = filter isRight l2
+    if null l3
+        then return (lefts l2)
+        else error ("sqlExprListFromArg: unrepresented var(s) in cast expr " ++ show (rights l3))
+
+
 sqlExprFromArg :: Expr -> TransMonad (Either SQLExpr Var)
 sqlExprFromArg arg = do
     ts <- get
@@ -339,8 +351,12 @@ sqlExprFromArg arg = do
             return (Left (SQLIntConstExpr i))
         StringExpr s ->
             return (Left (SQLStringConstExpr s))
-        PatternExpr s ->
-            return (Left (SQLPatternExpr s))
+        ConsExpr a b -> do
+            l <- sqlExprListFromArg arg
+            return (Left (SQLListExpr l))
+        NilExpr -> do
+            l <- sqlExprListFromArg arg
+            return (Left (SQLListExpr l))
         NullExpr ->
             return (Left (SQLNullExpr))
         CastExpr t v -> do

@@ -273,11 +273,11 @@ toCondPredicate  (Cond col (LeInteger str)) =
   ("le" @@ [CastExpr Int64Type (VarExpr (toVariable col)), IntExpr (fromIntegral str)])
 toCondPredicate  (Cond col (LikeCond str)) =
   "like" @@ [VarExpr (toVariable col), StringExpr (pack str)]
-toCondPredicate  (Cond col (InCond str)) =
-  "in" @@ [VarExpr (toVariable col), StringExpr (pack str)]
+toCondPredicate  (Cond col (InCond arrstr)) =
+      "in" @@ [VarExpr (toVariable col), listExpr (map (StringExpr . pack) arrstr)]
 toCondPredicate  (Cond col (ParentOfCond str)) =
-  let arrstr = "{" ++ intercalate "," (map (quote . escapeSQLTextArrayString) (ancestors str)) ++ "}" in
-      "in" @@ [VarExpr (toVariable col), StringExpr (pack arrstr)]
+  let arrstr = ancestors str in
+      "in" @@ [VarExpr (toVariable col), listExpr (map (StringExpr . pack) arrstr)]
 toCondPredicate  (Cond col (AndCond a b)) =
   toCondPredicate  (Cond col a) .*.
       toCondPredicate  (Cond col b)

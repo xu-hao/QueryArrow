@@ -82,7 +82,7 @@ cypherBuiltIn lookupPred =
                 put (a,b, repmap <> cypherVarExprMap v (CypherAppExpr "length" [arg1]), rvars, env, ptm)
                 return mempty),
             (lookupPred "in",  \ [arg1, arg2] ->
-                return (cwhere (CypherCompCond "in" arg1 arg2 Pos))), -- this conversion is incorrect
+                return (cwhere (CypherCompCond "in" arg1 arg2 Pos))),
             (lookupPred "ge",  \ [arg1, arg2] ->
                 return (cwhere (CypherCompCond ">=" arg1 arg2 Pos))),
             (lookupPred "gt",  \ [arg1, arg2] ->

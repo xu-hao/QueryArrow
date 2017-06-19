@@ -7,7 +7,7 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     create, set, delete, cwhere, creturn) where
 
 import QueryArrow.FO.Data hiding (Subst(..), var)
-import QueryArrow.FO.Types
+import QueryArrow.FO.Types hiding (instantiate)
 import QueryArrow.FO.Utils
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
@@ -38,6 +38,7 @@ data CypherExpr = CypherVarExpr CypherVar
                 | CypherParamExpr String
                 | CypherDotExpr CypherExpr PropertyKey
                 | CypherAppExpr String [CypherExpr]
+                | CypherListExpr [CypherExpr]
                 | CypherInfixExpr String CypherExpr CypherExpr
                 | CypherNullExpr deriving (Eq, Ord, Show, Read)
 
@@ -231,6 +232,7 @@ instance Serialize CypherExpr where
     serialize (CypherParamExpr m) = "{" ++ m ++ "}"
     serialize (CypherDotExpr expr prop) = serialize expr ++ "." ++ serialize prop
     serialize (CypherAppExpr f args) = f ++ "(" ++ intercalate "," (map serialize args) ++ ")"
+    serialize (CypherListExpr args) = "[" ++ intercalate "," (map serialize args) ++ "]"
     serialize (CypherInfixExpr f arg1 arg2) = "(" ++ serialize arg1 ++ f ++ serialize arg2 ++ ")"
     serialize (CypherNullExpr) = "NULL"
 
@@ -388,6 +390,7 @@ instance FV CypherExpr where
     fv (CypherVarExpr var) = [var]
     fv (CypherDotExpr expr _) = fv expr
     fv (CypherAppExpr _ args) = foldl union [] (map fv args)
+    fv (CypherListExpr args) = foldl union [] (map fv args)
     fv (CypherInfixExpr _ arg1 arg2) = fv arg1 `union` fv arg2
     fv _ = []
 
@@ -450,6 +453,7 @@ instance Subst CypherExpr where
     subst (CypherVarExprMap varmap) ve@(CypherVarExpr var) = fromMaybe ve (lookup var varmap)
     subst varmap (CypherDotExpr expr prop) = CypherDotExpr (subst varmap expr) prop
     subst varmap (CypherAppExpr f args) = CypherAppExpr f (map (subst varmap) args)
+    subst varmap (CypherListExpr args) = CypherListExpr (map (subst varmap) args)
     subst varmap (CypherInfixExpr f arg1 arg2) = CypherInfixExpr f (subst varmap arg1) (subst varmap arg2)
     subst _ a = a
 
@@ -706,14 +710,21 @@ instance Convertible ConcreteResultValue CypherValue where
     safeConvert (StringValue i) = Right (CypherStringValue (T.unpack i))
     safeConvert (Null) = Right (CypherNullValue)
     safeConvert (ByteStringValue bs) = Left (ConvertError "" "" "" "")
-    safeConvert (RefValue _ _ _) = Left (ConvertError "" "" "" "")
+    safeConvert (AppValue _ _) = Left (ConvertError "" "" "" "")
+
+cypherExprListFromArg :: Expr -> [CypherExpr]
+cypherExprListFromArg e =
+        let l = exprListFromExpr e in
+            map convert l
+
 
 instance Convertible Expr CypherExpr where
     safeConvert (IntExpr i) = Right (CypherIntConstExpr (fromIntegral i))
     safeConvert (StringExpr i) = Right (CypherStringConstExpr i)
     safeConvert (VarExpr (Var i)) = Right (CypherVarExpr (CypherVar i))
     safeConvert (NullExpr) = Right (CypherNullExpr)
-    safeConvert (PatternExpr p) = Right (CypherStringConstExpr p)
+    safeConvert e@(ConsExpr _ _) = Right (CypherListExpr (cypherExprListFromArg e))
+    safeConvert e@NilExpr = Right (CypherListExpr (cypherExprListFromArg e))
     safeConvert (CastExpr TextType e) = Right (CypherAppExpr "toString" [convert e])
     safeConvert (CastExpr Int64Type e) = Right (CypherAppExpr "toInt" [convert e])
 
