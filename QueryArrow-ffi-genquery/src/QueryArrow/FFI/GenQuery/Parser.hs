@@ -128,5 +128,5 @@ cond2P' = try (EqString <$> (reservedOp "=" >> stringp)) <|>
           try (LeString <$> (reservedOp "<=" >> stringp)) <|>
           try (LeInteger <$> (reservedOp "<=" >> integer)) <|>
           try (LikeCond <$> (likeP >> stringp)) <|>
-          try (InCond <$> (inP >> instringp)) <|>
+          try (InCond <$> (inP >> parens (sepBy stringp comma))) <|>
           ParentOfCond <$> (parentOfP >> stringp)

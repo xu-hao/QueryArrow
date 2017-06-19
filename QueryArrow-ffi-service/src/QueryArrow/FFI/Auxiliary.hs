@@ -146,7 +146,7 @@ resultValueToString rv = case rv of
     (Int64Value i) -> Text.pack (show i)
     (StringValue i) -> i
     (ByteStringValue i) -> decodeUtf8 i
-    (RefValue ty loc path) -> Text.pack (show loc ++ "/" ++ show path)
+    (AppValue a b) ->  "(" `Text.append` resultValueToString (AbstractResultValue a) `Text.append` " " `Text.append` resultValueToString (AbstractResultValue b) `Text.append` ")"
     Null -> Text.pack ""
 
 

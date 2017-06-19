@@ -60,7 +60,7 @@ sqlBuiltIn lookupPred =
             return (swhere (SQLCompCond "!~" (head args) (args !! 1))))),
         (lookupPred "in", simpleBuildIn "in" (\args ->
             let sql = swhere (case args !! 1 of
-                                     SQLStringConstExpr str | T.length str == 0 || str `T.index` 0 /= '{' -> SQLCompCond "in" (head args) (convertTextToSQLText str)
+                                     -- SQLStringConstExpr str | T.length str == 0 || str `T.index` 0 /= '{' -> SQLCompCond "in" (head args) (convertTextToSQLText str)
                                      _ -> SQLCompCond "=" (head args) (SQLFuncExpr "ANY" [args !! 1])) 
             in
                 return sql)),

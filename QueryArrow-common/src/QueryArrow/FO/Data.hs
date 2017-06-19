@@ -50,7 +50,13 @@ data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Or
 newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
 -- types
-data CastType = TextType | Int64Type | Int32Type | RefType String | ByteStringType | TypeVar String deriving (Eq, Ord, Show, Read)
+data CastType = TypeCons String | TypeApp CastType CastType | TypeVar String | TypeUniv String CastType deriving (Eq, Ord, Show, Read)
+pattern TextType = TypeCons "text"
+pattern Int64Type = TypeCons "int64"
+pattern Int32Type = TypeCons "int32"
+pattern ByteStringType = TypeCons "bytestring"
+pattern ListType a = TypeApp (TypeCons "[]") a
+pattern FuncType a b = TypeApp (TypeApp (TypeCons "->") a) b 
 
 -- http://stackoverflow.com/questions/27157717/boilerplate-free-annotation-of-asts-in-haskell
 newtype Tie f = Tie (f (Tie f))
@@ -73,7 +79,7 @@ instance Functor f => Unannotate (Annotated a) f where
   mapA g f (Annotated a b) = Annotated (g a) (f (fmap (mapA g f) b))
 
 -- expression
-data Expr0 a = VarExpr0 Var | IntExpr0 Integer | StringExpr0 T.Text | PatternExpr0 T.Text | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
+data Expr0 a = VarExpr0 Var | IntExpr0 Integer | StringExpr0 T.Text | AppExpr0 a a | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
 
 type Expr1 a = a Expr0
 
@@ -87,9 +93,20 @@ deriving instance Read Expr
 pattern VarExpr a = Tie (VarExpr0 a)
 pattern IntExpr a = Tie (IntExpr0 a)
 pattern StringExpr a = Tie (StringExpr0 a)
-pattern PatternExpr a = Tie (PatternExpr0 a)
+pattern AppExpr a b = Tie (AppExpr0 a b)
 pattern NullExpr = Tie NullExpr0
 pattern CastExpr a b = Tie (CastExpr0 a b)
+pattern ConsExpr a b = AppExpr (AppExpr (VarExpr (Var "(:)")) a) b
+pattern NilExpr = VarExpr (Var "[]")
+
+listExpr :: [Expr] -> Expr
+listExpr = foldr ConsExpr NilExpr 
+
+exprListFromExpr :: Expr -> [Expr]
+exprListFromExpr (ConsExpr a b) = let tl = exprListFromExpr b in
+                                      a:tl
+exprListFromExpr NilExpr = []
+exprListFromExpr a = error ("sqlExprListFromArg: malformatted list " ++ serialize a)
 
 -- atoms
 data Atom1 a = Atom1 { atomPred :: PredName, atomArgs :: [Expr1 a] }
@@ -180,7 +197,7 @@ instance Unannotate a Expr0 => FreeVars (Expr1 a) where
       VarExpr0 var0 -> Set.singleton var0
       IntExpr0 _ -> bottom
       StringExpr0 _ -> bottom
-      PatternExpr0 _ -> bottom
+      AppExpr0 a b -> freeVars a \/ freeVars b
       NullExpr0 -> bottom
 
 instance Unannotate a Expr0 => FreeVars (Atom1 a) where
@@ -453,16 +470,15 @@ instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Expr1 a) wher
       VarExpr0 var0 -> serialize var0
       IntExpr0 i -> show i
       StringExpr0 s -> show s
-      PatternExpr0 p -> show p
+      AppExpr0 a b -> "(" ++ serialize a ++ " " ++ serialize b ++ ")"
       NullExpr0 -> "null"
       CastExpr0 t v -> serialize v ++ " " ++ serialize t
 
 instance Serialize CastType where
-    serialize TextType = "Text"
-    serialize Int64Type = "Integer"
-    serialize ByteStringType = "ByteString"
-    serialize (RefType ty) = "ref " ++ ty
-    serialize (TypeVar v) = v
+    serialize (TypeCons ty) = "(cons " ++ ty ++ ")"
+    serialize (TypeApp ty1 ty2) = "(" ++ serialize ty1 ++ " " ++ serialize ty2 ++ ")" 
+    serialize (TypeUniv tv ty) = "(forall " ++ tv ++ "." ++ serialize ty ++ ")" 
+    serialize (TypeVar v) = "(var " ++ v ++ ")"
 
 instance Serialize Var where
     serialize (Var s) = s
@@ -857,7 +873,16 @@ instance Fractional AbstractResultValue where
   fromRational i = AbstractResultValue (fromRational i :: ConcreteResultValue)
   recip (AbstractResultValue a) = AbstractResultValue (recip (toConcreteResultValue a))
 
-data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | RefValue String Location String | Null deriving (Eq , Ord, Show, Read)
+data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | ConsValue String | AppValue ConcreteResultValue ConcreteResultValue | Null deriving (Eq , Ord, Show, Read)
+
+pattern ListNilValue :: ConcreteResultValue
+pattern ListNilValue = ConsValue "[]"
+
+pattern ListConsValue :: ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue
+pattern ListConsValue a b = ConsValue "(:)" `AppValue` a `AppValue` b
+
+listValue :: [ConcreteResultValue] -> ConcreteResultValue
+listValue = foldr ListConsValue ListNilValue
 
 data NetworkResultValue = NetworkResultValue (Maybe CastType) ByteString deriving (Eq , Ord, Show, Read)
 
@@ -892,12 +917,13 @@ instance ResultValue ConcreteResultValue where
   toNetworkResultValue (Int32Value i) = NetworkResultValue (Just Int32Type) (toStrict (runPut (putWord32be (fromIntegral i))))
   toNetworkResultValue (StringValue s) = NetworkResultValue (Just TextType) (encodeUtf8 s)
   toNetworkResultValue (ByteStringValue bs) = NetworkResultValue (Just ByteStringType) bs
-  toNetworkResultValue (RefValue _ _ _) = error ("cannot convert ref value to network result value")
   toNetworkResultValue (Null) = NetworkResultValue Nothing BS.empty
+  toNetworkResultValue (ConsValue _) = error ("cannot convert cons value to network result value")
   castTypeOf (Int64Value _) = Int64Type
+  castTypeOf (Int32Value _) = TextType
   castTypeOf (StringValue _) = TextType
   castTypeOf (ByteStringValue _) = ByteStringType
-  castTypeOf (RefValue reftype _ _) = RefType reftype
+  castTypeOf (ConsValue _) = error "typeOf: cons value"
   castTypeOf Null = error "typeOf: null value"
 
 instance Num ConcreteResultValue where
@@ -922,3 +948,4 @@ instance Enum ConcreteResultValue where
 instance Integral ConcreteResultValue where
   Int64Value a `quotRem` Int64Value b = let (q, r) = a `quotRem` b in (Int64Value q, Int64Value r)
   toInteger (Int64Value a) = toInteger a
+
