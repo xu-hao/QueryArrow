@@ -62,8 +62,9 @@ instance Match Expr Expr where
                                     | otherwise = Nothing
     match (StringExpr s) (StringExpr s2)    | s == s2   = Just empty
                                             | otherwise = Nothing
-    match (PatternExpr p) (PatternExpr p2)  | p == p2   = Just empty
-                                            | otherwise = Nothing
+    match (AppExpr a b) (AppExpr a2 b2) = do
+           match a a2
+           match b b2
     match _ _ = Nothing
 
 instance Match Atom Atom where
