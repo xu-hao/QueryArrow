@@ -76,6 +76,7 @@ packages:
     - distributed-serialization-binary
     - distributed-serialization-msgpack
     - data-some
+    - test-QueryArrow
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.

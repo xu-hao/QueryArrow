@@ -6,7 +6,7 @@ author:         Hao Xu
 
 executable schema_parser_main
   hs-source-dirs:  src
-  main-is:         schema_parser_main.hs
+  main-is:         TestChopper.hs
   build-depends:
                    base >= 4,
                    containers,
@@ -17,20 +17,6 @@ executable schema_parser_main
                    bytestring,
                    unordered-containers,
                    text >= 1.2.1.1,
-                   parsec,
-                   hslogger,
-                   monad-logger,
-                   fast-logger,
-                   either,
-                   template-haskell,
-                   QueryArrow-db-sql-common,
-                   QueryArrow-common
+                   parsec
   ghc-options:     -Wall
   other-modules:   SchemaParser
-
-library
-  hs-source-dirs: src
-  exposed-modules: QueryArrow.Gen
-  build-depends:
-  ghc-options: -Wall
-  other-modules:
