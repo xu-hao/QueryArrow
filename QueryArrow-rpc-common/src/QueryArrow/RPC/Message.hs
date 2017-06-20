@@ -10,6 +10,7 @@ import Data.Aeson
 import Data.MessagePack
 import qualified Data.ByteString.Lazy as BSL
 import System.Log.Logger
+import System.Poxis.Process
 
 receiveMsg :: FromJSON a => Handle -> IO (Maybe a)
 receiveMsg handle = do
@@ -51,5 +52,6 @@ sendMsgPack handle req0 = do
 
 writeToTmpLog :: Show a => Char -> a -> IO ()
 writeToTmpLog ch a = do
+    pid <- getProcessID
     lgr <- getLogger "TEST_LOG"
-    logL lgr INFO (replicate 10 ch ++ show a)
+    logL lgr INFO (show pid ++ " " ++ replicate 10 ch ++ show a)
