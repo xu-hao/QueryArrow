@@ -1,0 +1,36 @@
+name:           test-QueryArrow
+version:        0.2
+cabal-version:  >=1.2
+build-type:     Custom
+author:         Hao Xu
+
+executable schema_parser_main
+  hs-source-dirs:  src
+  main-is:         schema_parser_main.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   semigroupoids,
+                   bytestring,
+                   unordered-containers,
+                   text >= 1.2.1.1,
+                   parsec,
+                   hslogger,
+                   monad-logger,
+                   fast-logger,
+                   either,
+                   template-haskell,
+                   QueryArrow-db-sql-common,
+                   QueryArrow-common
+  ghc-options:     -Wall
+  other-modules:   SchemaParser
+
+library
+  hs-source-dirs: src
+  exposed-modules: QueryArrow.Gen
+  build-depends:
+  ghc-options: -Wall
+  other-modules:
