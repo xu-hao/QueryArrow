@@ -60,7 +60,7 @@ packages:
     - QueryArrow-db-sql-hdbc-sqlite3/
     - QueryArrow-db-sql-libpq-postgresql
     - QueryArrow-db-inmemory/
-    - QueryArrow-db-remote
+#    - QueryArrow-db-remote
     - QueryArrow-db-filesystem
     - QueryArrow-db-include
     - QueryArrow-db-trans

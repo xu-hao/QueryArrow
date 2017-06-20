@@ -8,9 +8,9 @@ import System.FilePath ((</>), equalFilePath, takeDirectory, takeFileName, pathS
 import Data.Time.Clock
 import GHC.Generics
 
-data Stats = Stats {isDir :: Bool} deriving Generic
+data Stats = Stats {isDir :: Bool} deriving (Show, Read, Generic)
 
-data File = File {fHost :: String, fRoot :: String, fRelP :: String} deriving Generic
+data File = File {fHost :: String, fRoot :: String, fRelP :: String} deriving (Show, Read, Generic)
 
 instance Eq File where
   File h1 r1 p1 == File h2 r2 p2 = h1 == h2 && r1 == r2 && equalFilePath p1 p2

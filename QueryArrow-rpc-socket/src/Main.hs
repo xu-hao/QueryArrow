@@ -16,8 +16,6 @@ import Data.Map.Strict
 import QueryArrow.RPC.Service
 import QueryArrow.RPC.Service.Service.TCP
 import QueryArrow.RPC.Service.Service.UDS
-import QueryArrow.RPC.Service.Remote.TCP
-import QueryArrow.RPC.Service.Remote.UDS
 import QueryArrow.RPC.Service.Service.HTTP
 import QueryArrow.RPC.Service.FileSystem.TCP
 import Data.Monoid ((<>))
@@ -41,8 +39,6 @@ serviceMap = fromList [
     ("service/tcp", AbstractRPCService ServiceTCPRPCService),
     ("service/unix domain socket", AbstractRPCService ServiceUDSRPCService),
     ("service/http", AbstractRPCService ServiceHTTPRPCService),
-    ("remote/tcp", AbstractRPCService RemoteTCPRPCService),
-    ("remote/unix domain socket", AbstractRPCService RemoteUDSRPCService),
     ("file system/tcp", AbstractRPCService FileSystemRPCService)
     ]
 

@@ -22,7 +22,6 @@ executable QueryArrowServer
                    QueryArrow,
                    QueryArrow-rpc-common,
                    QueryArrow-common,
-                   QueryArrow-db-remote,
                    QueryArrow-rpc-http,
                    QueryArrow-db-filesystem,
                    QueryArrow-ffi-service,
@@ -30,9 +29,6 @@ executable QueryArrowServer
   ghc-options:     -Wall -fPIC -threaded
   other-modules:
                     QueryArrow.RPC.Service.FileSystem.TCP
-                    QueryArrow.RPC.Service.Remote.Common
-                    QueryArrow.RPC.Service.Remote.TCP
-                    QueryArrow.RPC.Service.Remote.UDS
                     QueryArrow.RPC.Service.Service.Common
                     QueryArrow.RPC.Service.Service.TCP
                     QueryArrow.RPC.Service.Service.UDS

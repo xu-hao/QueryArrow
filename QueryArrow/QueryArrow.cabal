@@ -23,7 +23,6 @@ library
                    QueryArrow-db-sql-libpq-postgresql,
                    QueryArrow-db-cypher,
                    QueryArrow-db-elastic,
-                   QueryArrow-db-remote,
                    QueryArrow-db-filesystem,
                    QueryArrow-db-include,
                    QueryArrow-db-trans,

@@ -27,7 +27,7 @@ import Control.Concurrent.Async.Pool (withTaskGroup, async, wait, TaskGroup)
 
 
 data Interpreter = Interpreter {
-  interpreter :: forall a m. (MonadIO m, MessagePack a) => LocalizedFSCommand a ->  m a
+  interpreter :: forall a m. (MonadIO m, Show a, MessagePack a) => LocalizedFSCommand a ->  m a
 }
 
 data Interpreter2 = Interpreter2 {
@@ -504,7 +504,7 @@ remoteToRemoteInterpreter2 (L2MoveDir (a) (b)) = do
       sendMsgPack ha (Exit :: LocalizedCommandWrapper LocalizedFSCommand)
       sendMsgPack hb (Exit :: LocalizedCommandWrapper LocalizedFSCommand)))
 
-remoteInterpreter :: (MonadIO m, MessagePack a) => String -> Int -> LocalizedFSCommand a -> m a
+remoteInterpreter :: (MonadIO m, Show a, MessagePack a) => String -> Int -> LocalizedFSCommand a -> m a
 remoteInterpreter addr port cmd =
   liftIO $ bracket (connectTo addr (PortNumber (fromIntegral port))) hClose (\h -> do
     sendMsgPack h (LocalizedCommandWrapper cmd)

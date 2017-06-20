@@ -8,7 +8,7 @@ import QueryArrow.RPC.Message
 import Data.MessagePack
 
 newtype HandleChannel a b = HandleChannel Handle
-instance (MessagePack a, MessagePack b) => Channel (HandleChannel a b) where
+instance (Show a, MessagePack a, Show b, MessagePack b) => Channel (HandleChannel a b) where
   type SendType (HandleChannel a b) = a
   type ReceiveType (HandleChannel a b) = b
   send (HandleChannel h) a = sendMsgPack h a

@@ -9,7 +9,7 @@ import Data.MessagePack
 import Data.Time
 
 data LocalizedCommandWrapper m where
-   LocalizedCommandWrapper :: forall m a. (MessagePack a, Show (m a)) => m a -> LocalizedCommandWrapper m
+   LocalizedCommandWrapper :: forall m a. (Show a, MessagePack a, Show (m a)) => m a -> LocalizedCommandWrapper m
    Exit :: LocalizedCommandWrapper m
 
 deriving instance Show (LocalizedCommandWrapper m)
