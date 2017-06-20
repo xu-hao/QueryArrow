@@ -1,10 +1,10 @@
 name:           test-QueryArrow
 version:        0.2
 cabal-version:  >=1.2
-build-type:     Custom
+build-type:     Simple
 author:         Hao Xu
 
-executable schema_parser_main
+executable test_parser_main
   hs-source-dirs:  src
   main-is:         TestChopper.hs
   build-depends:
@@ -19,4 +19,4 @@ executable schema_parser_main
                    text >= 1.2.1.1,
                    parsec
   ghc-options:     -Wall
-  other-modules:   SchemaParser
+  other-modules:   
