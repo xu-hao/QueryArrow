@@ -21,3 +21,23 @@ executable test_parser_main
                    QueryArrow-rpc-common
   ghc-options:     -Wall
   other-modules:
+
+executable test_runner_main
+    hs-source-dirs:  src
+    main-is:         TestRunner.hs
+    build-depends:
+                     base >= 4,
+                     containers,
+                     mtl,
+                     transformers,
+                     semigroups,
+                     semigroupoids,
+                     bytestring,
+                     unordered-containers,
+                     text >= 1.2.1.1,
+                     directory,
+                     network,
+                     QueryArrow-rpc-common,
+                     QueryArrow-cli
+    ghc-options:     -Wall
+    other-modules:

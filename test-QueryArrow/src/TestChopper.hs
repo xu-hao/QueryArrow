@@ -68,8 +68,6 @@ roundtripp pid = do
     then return (read a, Nothing)
     else do
       b <- messagep '<' pid
-      liftIO $ putStrLn ("parsing " ++ a)
-      liftIO $ putStrLn ("parsing " ++ b)
       return (read a, Just (read b))
 
 type Message = String
