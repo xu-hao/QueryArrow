@@ -27,6 +27,7 @@ import Data.Binary.Get
 import Data.Binary.Put
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Data.Typeable (Typeable)
+import Text.Read (Read(..), ReadPrec)
 import Debug.Trace
 
 
@@ -609,7 +610,7 @@ instance Subst Summary where
 
 instance Subst (Atom1 a) => Subst (Lit1 a) where
     subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
- 
+
 instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a), Subst (Atom1 a), Subst (AnnotationType b)) => Subst (Formula1 a b) where
     subst s a = let b = mapA (subst s) (\f -> case f of
                         FAtomic0 a -> FAtomic0 (subst s a)
@@ -627,7 +628,7 @@ instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unan
                         Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByDesc (subst s var1)) a
                         FZero0 -> FZero0
                         FOne0 -> FOne0) a in
-                    -- trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $ 
+                    -- trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $
                     b
 
 instance Subst a => Subst [a] where
@@ -837,7 +838,14 @@ class (Typeable a, Show a) => ResultValue a where
 
 data AbstractResultValue = forall a . ResultValue a => AbstractResultValue a
 
-deriving instance Show AbstractResultValue
+instance Show AbstractResultValue where
+  show (AbstractResultValue a) = show (toConcreteResultValue a)
+
+instance Read AbstractResultValue where
+  readPrec = AbstractResultValue <$> (readPrec :: ReadPrec ConcreteResultValue)
+
+  -- this doesn't always work read . show /= id
+
 
 instance Ord AbstractResultValue where
   compare (AbstractResultValue a) (AbstractResultValue b) = compare (toConcreteResultValue a) (toConcreteResultValue b)

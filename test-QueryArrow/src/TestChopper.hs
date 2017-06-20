@@ -3,6 +3,7 @@ import Text.Parsec
 import qualified Text.Parsec.Token as P
 import Text.Parsec.Language
 import Control.Monad.IO.Class
+import QueryArrow.Serialization
 
 lexer = P.makeTokenParser P.LanguageDef {
            P.reservedNames = ["ALL", "TEST", "BEGIN", "END"],
@@ -27,25 +28,25 @@ identifier = P.identifier lexer
 reserved :: String -> ParsecT String () IO ()
 reserved = P.reserved lexer
 
-type RoundTrip = (String, String)
+type RoundTrip = (QuerySet, ResultSet)
 type Test = (String, [RoundTrip])
 type TestSuite = [Test]
 
-testsuitep :: ParsecT String () IO TestSuite
-testsuitep = do
+testsuitep :: String -> ParsecT String () IO TestSuite
+testsuitep pid = do
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "BEGIN"
-  r <- many testp
+  r <- many (testp pid)
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "END"
   return r
 
-testp :: ParsecT String () IO Test
-testp = do
+testp :: String -> ParsecT String () IO Test
+testp pid = do
   _ <- count 10 (char '*')
   reserved "TEST"
   reserved "BEGIN"
@@ -55,34 +56,42 @@ testp = do
   reserved "TEST"
   reserved "END"
   _ <- identifier
-  r <- many roundtripp
+  r <- many (roundtripp pid)
   return (t, r)
 
-roundtripp :: ParsecT String () IO RoundTrip
-roundtripp = do
+roundtripp :: String -> ParsecT String () IO RoundTrip
+roundtripp pid = do
+  a <- messagep '>' pid
+  b <- messagep '<' pid
+  return (read a, read b)
+
+type Message = String
+
+messagep :: Char -> String -> ParsecT String () IO Message
+messagep dir pid = do
   _ <- brackets (many (noneOf "]"))
   _ <- many space
-  _ <- count 10 (char '>')
-  s <- many (noneOf "\n")
-  _ <- newline
-  _ <- brackets (many (noneOf "]"))
+  pid2 <- many digit
   _ <- many space
-  _ <- count 10 (char '<')
-  r <- many (noneOf "\n")
-  _ <- newline
-  return (s, r)
-
-
+  if pid2 == pid
+    then do
+      _ <- count 10 (char dir)
+      msg <- many (noneOf "\n")
+      _ <- newline
+      return msg
+    else do
+      _ <- many (noneOf "\n")
+      _ <- newline
+      messagep dir pid
 
 main :: IO ()
 main = do
-  [inp, out] <- getArgs
+  [inp, pid, out] <- getArgs
   putStrLn "reading file..."
   cnt <- readFile inp
   putStrLn "parsing file..."
-  res <- runParserT testsuitep () inp cnt
+  res <- runParserT (testsuitep pid) () inp cnt
   case res of
     Left err -> print err
     Right ts -> mapM_ (\(t, r) -> writeFile (out ++ "/" ++ t) (show r)) ts
   putStrLn "exiting..."
-  

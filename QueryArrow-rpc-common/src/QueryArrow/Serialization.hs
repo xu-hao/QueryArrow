@@ -18,15 +18,15 @@ import QueryArrow.DB.DB
 import QueryArrow.Utils
 import QueryArrow.FFI.Service
 
-data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show)
+data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show, Read)
 
 data QuerySet = QuerySet {
     qsheaders :: Set Var,
     qsquery :: DynCommand,
     qsparams :: MapResultRow
-} deriving (Generic, Show)
+} deriving (Generic, Show, Read)
 
-data DynCommand = Quit | Dynamic String | Static [Command] deriving (Generic, Show)
+data DynCommand = Quit | Dynamic String | Static [Command] deriving (Generic, Show, Read)
 
 deriving instance Generic Var
 deriving instance Generic Command
@@ -46,6 +46,7 @@ deriving instance Generic Aggregator
 deriving instance Generic Summary
 deriving instance Generic ConcreteResultValue
 deriving instance Show Command
+deriving instance Read Command
 
 instance (Key a, MessagePack a) => MessagePack (ObjectPath a) where
     fromObject arr = do

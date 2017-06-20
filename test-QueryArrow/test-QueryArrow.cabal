@@ -17,6 +17,7 @@ executable test_parser_main
                    bytestring,
                    unordered-containers,
                    text >= 1.2.1.1,
-                   parsec
+                   parsec,
+                   QueryArrow-rpc-common
   ghc-options:     -Wall
-  other-modules:   
+  other-modules:
