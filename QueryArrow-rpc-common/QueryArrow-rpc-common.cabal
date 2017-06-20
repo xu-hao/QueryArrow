@@ -23,6 +23,7 @@ library
                    parsec,
                    text,
                    base64-bytestring,
+                   unix,
                    data-msgpack,
                    log-adapter,
                    QueryArrow-common,

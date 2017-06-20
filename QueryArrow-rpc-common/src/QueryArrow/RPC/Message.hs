@@ -10,7 +10,7 @@ import Data.Aeson
 import Data.MessagePack
 import qualified Data.ByteString.Lazy as BSL
 import System.Log.Logger
-import System.Poxis.Process
+import System.Posix.Process
 
 receiveMsg :: FromJSON a => Handle -> IO (Maybe a)
 receiveMsg handle = do
