@@ -53,6 +53,7 @@ import QueryArrow.FO.Data
 import Data.Set (fromList)
 import Control.Arrow ((***))
 import Data.Monoid ((<>))
+import QueryArrow.Client
 
 import QueryArrow.Utils
 
@@ -99,69 +100,3 @@ mainArgs input = do
           runUDS (fromJust (udsAddr input)) showhdr hdr qu pars
         else
           run2 showhdr hdr qu pars ps
-
-runTCP :: String -> Int -> Bool -> [String] -> String -> MapResultRow -> IO ()
-runTCP  addr port showhdr hdr qu params =
-  bracket 
-    (connectTo addr (PortNumber (fromIntegral port)))
-    hClose 
-    (\ handle -> runHandle handle showhdr hdr qu params)
-
-runUDS :: String -> Bool -> [String] -> String -> MapResultRow -> IO ()
-runUDS addr showhdr hdr qu params = 
-  bracket
-    (do
-      sock <- socket AF_UNIX Stream defaultProtocol
-      connect sock (SockAddrUnix addr)
-      socketToHandle sock ReadWriteMode)
-    hClose
-    (\ handle -> runHandle handle showhdr hdr qu params)
-
-runHandle :: Handle -> Bool -> [String] -> String -> MapResultRow -> IO ()
-runHandle handle showhdr hdr qu params = do
-  sendMsgPack handle QuerySet {
-                  qsquery = Static [Begin],
-                  qsheaders = mempty,
-                  qsparams = mempty}
-  _ <- receiveMsgPack handle :: IO (Maybe ResultSet)
-  let name = QuerySet {
-                qsquery = Dynamic qu,
-                qsheaders = fromList (map Var hdr),
-                qsparams = params
-                }
-  sendMsgPack handle name
-  rep <- receiveMsgPack handle
-  case rep of
-      Just (ResultSetNormal results) -> do
-                putStrLn (pprint showhdr False (map Var hdr) results)
-                sendMsgPack handle QuerySet {
-                  qsquery = Static [Prepare, Commit],
-                  qsheaders = mempty,
-                  qsparams = mempty}
-                _ <- receiveMsgPack handle :: IO (Maybe ResultSet)
-                return ()
-      Just (ResultSetError err) ->
-                putStrLn ("error: " ++ show err)
-      Nothing ->
-                putStrLn ("cannot parse response: " ++ show rep)
-  let name2 = QuerySet {
-                qsquery = Quit,
-                qsheaders = mempty,
-                qsparams = mempty
-        }
-  sendMsgPack handle name2
-
-run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
-run2 showhdr hdr query params ps = do
-    let vars = map Var hdr
-    AbstractDatabase tdb <- transDB ps
-    conn <- dbOpen tdb
-    dbBegin conn
-    ret <- runEitherT $ run (fromList vars) query params tdb conn
-    case ret of
-      Left e -> putStrLn ("error: " ++ show e)
-      Right pp -> do
-        dbPrepare conn
-        dbCommit conn
-        putStr (pprint showhdr False vars pp)
-    dbClose conn
