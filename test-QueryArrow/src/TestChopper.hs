@@ -1,10 +1,10 @@
 import System.Environment
 import Text.Parsec
 import qualified Text.Parsec.Token as P
-import Text.Parsec.Language
 import Control.Monad.IO.Class
 import QueryArrow.Serialization
 
+lexer :: P.GenTokenParser String () IO
 lexer = P.makeTokenParser P.LanguageDef {
            P.reservedNames = ["ALL", "TEST", "BEGIN", "END"],
            P.commentStart = "",
@@ -28,7 +28,7 @@ identifier = P.identifier lexer
 reserved :: String -> ParsecT String () IO ()
 reserved = P.reserved lexer
 
-type RoundTrip = (QuerySet, ResultSet)
+type RoundTrip = (QuerySet, Maybe ResultSet)
 type Test = (String, [RoundTrip])
 type TestSuite = [Test]
 
@@ -47,8 +47,10 @@ testsuitep pid = do
 
 testp :: String -> ParsecT String () IO Test
 testp pid = do
-  _ <- count 10 (char '*')
-  reserved "TEST"
+  try (do
+      _ <- count 10 (char '*')
+      reserved "TEST"
+      )
   reserved "BEGIN"
   t <- identifier
   liftIO $ putStrLn ("parsing " ++ t ++ "...")
@@ -62,8 +64,13 @@ testp pid = do
 roundtripp :: String -> ParsecT String () IO RoundTrip
 roundtripp pid = do
   a <- messagep '>' pid
-  b <- messagep '<' pid
-  return (read a, read b)
+  if a == "QuerySet {qsheaders = fromList [], qsquery = Quit, qsparams = fromList []}"
+    then return (read a, Nothing)
+    else do
+      b <- messagep '<' pid
+      liftIO $ putStrLn ("parsing " ++ a)
+      liftIO $ putStrLn ("parsing " ++ b)
+      return (read a, Just (read b))
 
 type Message = String
 
