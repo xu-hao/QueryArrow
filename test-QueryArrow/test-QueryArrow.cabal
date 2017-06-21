@@ -37,6 +37,8 @@ executable test_runner_main
                      text >= 1.2.1.1,
                      directory,
                      network,
+                     hspec,
+                     hspec-expectations,
                      QueryArrow-rpc-common,
                      QueryArrow-cli
     ghc-options:     -Wall

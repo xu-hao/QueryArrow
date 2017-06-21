@@ -2,7 +2,7 @@ import System.Environment
 import Text.Parsec
 import qualified Text.Parsec.Token as P
 import Control.Monad.IO.Class
-import QueryArrow.Serialization
+import QueryArrow.Chopper.Data
 
 lexer :: P.GenTokenParser String () IO
 lexer = P.makeTokenParser P.LanguageDef {
@@ -27,10 +27,6 @@ identifier = P.identifier lexer
 
 reserved :: String -> ParsecT String () IO ()
 reserved = P.reserved lexer
-
-type RoundTrip = (QuerySet, Maybe ResultSet)
-type Test = (String, [RoundTrip])
-type TestSuite = [Test]
 
 testsuitep :: String -> ParsecT String () IO TestSuite
 testsuitep pid = do
@@ -58,17 +54,18 @@ testp pid = do
   reserved "TEST"
   reserved "END"
   _ <- identifier
-  r <- many (roundtripp pid)
+  r <- many (actionp pid)
   return (t, r)
 
-roundtripp :: String -> ParsecT String () IO RoundTrip
-roundtripp pid = do
-  a <- messagep '>' pid
-  if a == "QuerySet {qsheaders = fromList [], qsquery = Quit, qsparams = fromList []}"
-    then return (read a, Nothing)
-    else do
+actionp :: String -> ParsecT String () IO Action
+actionp pid = do
+  try (do
+    a <- messagep '>' pid
+    return (SendAction (read a))
+    ) <|> (do
       b <- messagep '<' pid
-      return (read a, Just (read b))
+      return (RecvAction (read b))
+      )
 
 type Message = String
 
