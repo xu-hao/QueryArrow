@@ -9,9 +9,9 @@ import Test.Hspec
 
 main :: IO ()
 main = do
-  let dryrun = False
-  let udsaddr = "/tmp/QueryArrow"
-  let inp = "/tmp/qatests"
+  dryrun <- read <$> getEnv "dryrun"
+  udsaddr <- getEnv "udsaddr"
+  inp <- getEnv "inp"
   files <- filter (\filepath -> filepath /= "." && filepath /= "..") <$> getDirectoryContents inp
   hspec $ do
     describe "all tests" $ do
