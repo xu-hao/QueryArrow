@@ -6,13 +6,15 @@ import System.IO
 import QueryArrow.RPC.Message
 import QueryArrow.Chopper.Data
 import Test.Hspec
+import Control.Monad
 
 main :: IO ()
 main = do
   dryrun <- read <$> getEnv "dryrun"
   udsaddr <- getEnv "udsaddr"
   inp <- getEnv "inp"
-  files <- filter (\filepath -> filepath /= "." && filepath /= "..") <$> getDirectoryContents inp
+  files0 <- getDirectoryContents inp
+  files <- filterM (\filepath -> doesFileExist (inp ++ "/" ++ filepath)) files0
   hspec $ do
     describe "all tests" $ do
       mapM_ (\filepath -> it filepath $ do
