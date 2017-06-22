@@ -3,6 +3,7 @@ import Text.Parsec
 import qualified Text.Parsec.Token as P
 import Control.Monad.IO.Class
 import QueryArrow.Chopper.Data
+import System.IO
 
 lexer :: P.GenTokenParser String () IO
 lexer = P.makeTokenParser P.LanguageDef {
@@ -12,7 +13,7 @@ lexer = P.makeTokenParser P.LanguageDef {
            P.commentLine = "",
            P.nestedComments = False,
            P.identStart = letter,
-           P.identLetter = letter <|> digit <|> oneOf "._",
+           P.identLetter = letter <|> digit <|> oneOf "._-",
            P.opStart = oneOf "",
            P.opLetter = oneOf "",
            P.reservedOpNames = [],
@@ -28,21 +29,20 @@ identifier = P.identifier lexer
 reserved :: String -> ParsecT String () IO ()
 reserved = P.reserved lexer
 
-testsuitep :: String -> ParsecT String () IO TestSuite
-testsuitep pid = do
+testsuitep :: String -> String -> ParsecT String () IO ()
+testsuitep pid out = do
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "BEGIN"
-  r <- many (testp pid)
+  _ <- many (testp pid out)
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "END"
-  return r
 
-testp :: String -> ParsecT String () IO Test
-testp pid = do
+testp :: String -> String -> ParsecT String () IO ()
+testp pid out = do
   try (do
       _ <- count 10 (char '*')
       reserved "TEST"
@@ -54,17 +54,24 @@ testp pid = do
   reserved "TEST"
   reserved "END"
   _ <- identifier
-  r <- many (actionp pid)
-  return (t, r)
+  h <- liftIO $ openFile (out ++ "/" ++ t) WriteMode
+  r <- many (actionp pid h)
+  liftIO $ hClose h
 
-actionp :: String -> ParsecT String () IO Action
-actionp pid = do
+actionp :: String -> Handle -> ParsecT String () IO ()
+actionp pid h = do
   try (do
     a <- messagep '>' pid
-    return (SendAction (read a))
+    let str = show (SendAction (read a))
+    liftIO $ do 
+      hPutStrLn h ("==========" ++ show (length str))
+      hPutStrLn h str
     ) <|> (do
       b <- messagep '<' pid
-      return (RecvAction (read b))
+      let str = show (RecvAction (read b))
+      liftIO $ do 
+        hPutStrLn h ("==========" ++ show (length str))
+        hPutStrLn h str
       )
 
 type Message = String
@@ -92,8 +99,8 @@ main = do
   putStrLn "reading file..."
   cnt <- readFile inp
   putStrLn "parsing file..."
-  res <- runParserT (testsuitep pid) () inp cnt
+  res <- runParserT (testsuitep pid out) () inp cnt
   case res of
     Left err -> print err
-    Right ts -> mapM_ (\(t, r) -> writeFile (out ++ "/" ++ t) (show r)) ts
+    Right _ -> return ()
   putStrLn "exiting..."
