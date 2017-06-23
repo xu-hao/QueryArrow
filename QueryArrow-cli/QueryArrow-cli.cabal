@@ -23,7 +23,7 @@ executable QueryArrow
                    QueryArrow-rpc-common,
                    QueryArrow
   ghc-options:     -Wall
-  other-modules:
+  other-modules:   QueryArrow.Client
 
 library
   hs-source-dirs:  src

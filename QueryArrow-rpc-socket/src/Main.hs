@@ -24,12 +24,14 @@ main::IO()
 main = execParser opts >>= mainArgs where
   opts = info (helper <*> input) (fullDesc <> progDesc "QueryArrow description" <> header "QueryArrow header")
 
-input :: Parser (String, Maybe String)
-input = (,) <$> strArgument (metavar "CONFIG FILE" <> help "config file") <*> optional (strOption (long "log-level" <> short 'v' <> metavar "LOG LEVEL" <> help "log level"))
+input :: Parser (String, Maybe Priority, Maybe String)
+input = (,,) <$> strArgument (metavar "CONFIG FILE" <> help "config file")
+            <*> optional (option auto (long "log-level" <> short 'v' <> metavar "LOG LEVEL" <> help "log level"))
+            <*> optional (strOption (long "log-test" <> short 'l' <> metavar "LOG TEST" <> help "log test"))
 
-mainArgs :: (String, Maybe String) -> IO ()
-mainArgs (arg, ps2) = do
-    setup (fromMaybe INFO (read <$> ps2))
+mainArgs :: (String, Maybe Priority, Maybe String) -> IO ()
+mainArgs (arg, ps2, ps3) = do
+    setup (fromMaybe INFO ps2) ps3
     ps <- getConfig arg
     tdb <- transDB ps
     runtcpmulti tdb (servers ps)

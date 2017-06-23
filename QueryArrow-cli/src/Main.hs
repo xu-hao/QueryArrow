@@ -31,31 +31,19 @@ module Main where
 --            return (case p of VLeaf v -> v
 --                              VCons v _ -> v)))) g () in
 --        print a
-import QueryArrow.DB.DB
-import QueryArrow.DBMap
 import QueryArrow.Config
 
 import Prelude hiding (lookup)
 import qualified Data.Map.Strict as Map
 import System.Log.Logger
 import QueryArrow.Logging
-import Control.Monad.Trans.Either
-import QueryArrow.RPC.DB
 import Options.Applicative
 import Data.Maybe (fromMaybe, isJust, fromJust)
-import System.IO
-import Control.Exception
-import QueryArrow.Serialization
-import Network.Socket
-import Network
-import QueryArrow.RPC.Message
 import QueryArrow.FO.Data
-import Data.Set (fromList)
 import Control.Arrow ((***))
 import Data.Monoid ((<>))
 import QueryArrow.Client
 
-import QueryArrow.Utils
 
 main::IO()
 main = execParser opts >>= mainArgs where
@@ -65,7 +53,7 @@ data Input = Input {
   query:: String,
   headers::  String,
   configFile:: Maybe String,
-  verbose :: Bool,
+  verbose :: Maybe Priority,
   showHeaders :: Bool,
   tcpAddr :: Maybe String,
   tcpPort :: Maybe Int,
@@ -77,7 +65,7 @@ input = Input <$>
             strArgument (metavar "QUERY" <> help "query") <*>
             strArgument (metavar "HEADERS" <> help "headers") <*>
             optional (strOption (long "config" <> short 'c' <> metavar "CONFIG" <> help "config file")) <*>
-            switch (long "verbose" <> short 'v' <> help "verbose") <*>
+            optional (option auto (long "verbose" <> short 'v' <> metavar "VERBOSE" <> help "verbose")) <*>
             switch (long "show-headers" <> short 's' <> help "show headers") <*>
             optional (strOption (long "tcpaddr" <> metavar "TCPADDR" <> help "tcp address")) <*>
             optional (option auto (long "tcpport" <> metavar "TCPPORT" <> help "tcp port")) <*>
@@ -86,7 +74,9 @@ input = Input <$>
 
 mainArgs :: Input -> IO ()
 mainArgs input = do
-    setup (if verbose input then INFO else WARNING)
+    setup (case verbose input of
+               Nothing -> WARNING
+               Just v -> v) Nothing
     ps <- getConfig (fromMaybe "/etc/QueryArrow/tdb-plugin-gen-abs.yaml" (configFile input))
     let hdr = words (headers input)
     let qu = query input

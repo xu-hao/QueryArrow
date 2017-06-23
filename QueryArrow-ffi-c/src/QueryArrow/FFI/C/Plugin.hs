@@ -40,7 +40,7 @@ import QueryArrow.FFI.Auxiliary
 
 foreign export ccall hs_setup :: IO ()
 hs_setup :: IO ()
-hs_setup = setup INFO
+hs_setup = setup INFO Nothing
 
 foreign export ccall hs_connect :: StablePtr (QueryArrowService b) -> CString -> Ptr (StablePtr b) -> IO Int
 hs_connect :: StablePtr (QueryArrowService b) -> CString -> Ptr (StablePtr b) -> IO Int
@@ -171,7 +171,7 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
     let updateform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = updateatom "u_" wherecol
                             | wherecol == "resc_id" = FOne
                             | otherwise = error ("cannot update " ++ wherecol)
-    let update = foldl (.*.) cond (map updateform updatecols) .*. 
+    let update = foldl (.*.) cond (map updateform updatecols) .*.
                      if "resc_id" `elem` updatecols
                          then "UPDATE_RESC_ID" @@ [var "w_data_id", var "w_resc_id", var "u_resc_id"]
                          else FOne
@@ -226,7 +226,7 @@ hs_modify_rule_exec svcptr sessionptr cupdatecols cupdatevals cupcols crexeid= d
     cupdatevals2 <- peekArray upcols cupdatevals
     updatevals <- mapM peekCString cupdatevals2
     let ruleexecid = fromIntegral crexeid
-    let cond = "RULE_EXEC_OBJ" @@ [var "cid"] 
+    let cond = "RULE_EXEC_OBJ" @@ [var "cid"]
     let wherepredicate wherecol0 =
             case wherecol0 of
                 "rule_name" -> "RULE_EXEC_RULE_NAME"

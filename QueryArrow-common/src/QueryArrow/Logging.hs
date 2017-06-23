@@ -3,23 +3,27 @@ module QueryArrow.Logging where
 
 import System.IO (stderr, Handle)
 import System.Log.Logger (rootLoggerName, setHandlers, updateGlobalLogger,
-                          Priority(INFO), Priority(WARNING), infoM, debugM,
+                          Priority(..), infoM, debugM,
                           warningM, errorM, setLevel)
 import System.Log.Handler.Simple (fileHandler, streamHandler, GenericHandler)
 import System.Log.Handler (setFormatter)
 import System.Log.Formatter
 
-setup :: Priority -> IO ()
-setup pri = do
+setup :: Priority -> Maybe String -> IO ()
+setup pri mLogPath = do
     myStreamHandler <- streamHandler stderr pri
     let myStreamHandler' = withFormatter myStreamHandler
     let log = rootLoggerName
     updateGlobalLogger log (setLevel pri)
     updateGlobalLogger log (setHandlers [myStreamHandler'])
-    let logPath = "/tmp/qatest.log"
-    myFileHandler <- fileHandler logPath INFO
-    let myFileHandler' = withFormatter myFileHandler
-    updateGlobalLogger "TEST_LOG" $ (setLevel INFO . setHandlers [myFileHandler']) 
+    case mLogPath of
+      Just logPath -> do
+        myFileHandler <- fileHandler logPath INFO
+        let myFileHandler' = withFormatter myFileHandler
+        updateGlobalLogger "TEST_LOG" $ (setLevel INFO . setHandlers [myFileHandler'])
+      Nothing -> do
+        updateGlobalLogger "TEST_LOG" $ (setLevel EMERGENCY)
+
 
 withFormatter :: GenericHandler Handle -> GenericHandler Handle
 withFormatter handler = setFormatter handler formatter

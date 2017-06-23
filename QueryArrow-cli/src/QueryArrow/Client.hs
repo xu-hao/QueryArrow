@@ -36,13 +36,8 @@ import QueryArrow.DBMap
 import QueryArrow.Config
 
 import Prelude hiding (lookup)
-import qualified Data.Map.Strict as Map
-import System.Log.Logger
-import QueryArrow.Logging
 import Control.Monad.Trans.Either
 import QueryArrow.RPC.DB
-import Options.Applicative
-import Data.Maybe (fromMaybe, isJust, fromJust)
 import System.IO
 import Control.Exception
 import QueryArrow.Serialization
@@ -51,8 +46,6 @@ import Network
 import QueryArrow.RPC.Message
 import QueryArrow.FO.Data
 import Data.Set (fromList)
-import Control.Arrow ((***))
-import Data.Monoid ((<>))
 
 import QueryArrow.Utils
 
