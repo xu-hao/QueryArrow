@@ -20,7 +20,7 @@ data RemoteCommand  = GetName
   | DBCommit (Ptr ())
   | DBRollback (Ptr ())
   | DBStmtExec (Ptr ()) (NTDBQuery FormulaT) [MapResultRow]
-  | Quit
+  | Quit deriving Show
 
 data RemoteResultSet = StringResult String
   | PredListResult [Pred]

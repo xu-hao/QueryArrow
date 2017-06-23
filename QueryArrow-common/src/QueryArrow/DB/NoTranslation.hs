@@ -10,7 +10,7 @@ import QueryArrow.FO.Types
 import Data.Set
 
 data NoTranslationDatabase db = NoTranslationDatabase db
-data NTDBQuery form = NTDBQuery (Set Var) form (Set Var)
+data NTDBQuery form = NTDBQuery (Set Var) form (Set Var) deriving Show
 
 class INoTranslationDatabase01 db where
   type NTDBFormulaType db
