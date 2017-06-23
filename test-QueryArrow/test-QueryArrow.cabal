@@ -43,3 +43,24 @@ executable test_runner_main
                      QueryArrow-cli
     ghc-options:     -Wall
     other-modules:
+
+executable test_dedupper_main
+    hs-source-dirs:  src
+    main-is:         TestDedupper.hs
+    build-depends:
+                     base >= 4,
+                     containers,
+                     mtl,
+                     transformers,
+                     semigroups,
+                     semigroupoids,
+                     bytestring,
+                     unordered-containers,
+                     text >= 1.2.1.1,
+                     cryptonite,
+                     directory,
+                     filepath,
+                     QueryArrow-rpc-common,
+                     QueryArrow-cli
+    ghc-options:     -Wall
+    other-modules:
