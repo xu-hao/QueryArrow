@@ -46,7 +46,6 @@ testp dryrun addr h0 = do
       ) <|> try (do
       replicateM_ 10 (char '=')
       n <- integer
-      _ <- newline
       act0 <- replicateM (fromInteger n) anyChar
       _ <- newline
       let act = read act0
