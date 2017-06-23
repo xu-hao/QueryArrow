@@ -40,9 +40,11 @@ import Data.Aeson.TH
 import Data.List (find)
 import Debug.Trace
 
-functype :: Int -> TypeQ -> TypeQ
-functype 0 t = t
-functype n t = functype (n - 1) [t|CString -> $(t)|]
+functype :: [Type2] -> TypeQ -> TypeQ
+functype [] t = t
+functype (hd : tl) t = [t|$(case hd of
+                                StringListType -> [t|Ptr CString|]
+                                _ -> [t|CString|]) -> $(functype tl t)|]
 
 data Type2 = StringListType | StringType | IntType deriving (Show, Eq)
 
@@ -100,9 +102,9 @@ arrayToAllocateBuffer buf lenbuf txt = do
     poke buf arr
 
 param :: String -> Type2 -> ExpQ
-param i StringType = [| AbstractResultValue (StringValue $(varE (mkName i))) |] 
+param i StringType = [| AbstractResultValue (StringValue $(varE (mkName i))) |]
 param i IntType = [| AbstractResultValue (Int64Value $(varE (mkName i))) |]
-param i StringListType = [| AbstractResultValue (listValue (map StrinValue $(varE (mkName i)))) |]
+param i StringListType = [| AbstractResultValue (listValue (map StringValue $(varE (mkName i)))) |]
 
 queryFunction :: String -> [Type2] -> [Type2] -> DecsQ
 queryFunction name inputtypes outputtypes = do
@@ -231,7 +233,7 @@ queryAll2Function name inputtypes outputtypes = do
 hsQueryForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryForeign name inputtypes outputtypes = do
   runIO $ putStrLn ("generating foreign " ++ ("hs_get_" ++ name))
-  sequence [ForeignD <$> (ExportF CCall ("hs_get_" ++ name) (mkName ("hs_get_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) (case outputtypes of
+  sequence [ForeignD <$> (ExportF CCall ("hs_get_" ++ name) (mkName ("hs_get_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype inputtypes (case outputtypes of
     [StringType] -> [t|CString -> CInt -> IO Int|]
     [IntType] -> [t|CString -> CInt -> IO Int|]
     _ -> [t|Ptr CString -> CInt -> IO Int|]))|])]
@@ -242,9 +244,9 @@ hsQueryLongForeign name inputtypes outputtypes = do
     runIO $ putStrLn ("generating foreign " ++ fn)
     case outputtypes of
         [StringType] ->
-            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
+            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype inputtypes [t|Ptr CLong -> IO Int|])|])]
         [IntType] ->
-            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) [t|Ptr CLong -> IO Int|])|])]
+            sequence [ForeignD <$> (ExportF CCall ("hs_get_int_" ++ name) (mkName fn) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype inputtypes [t|Ptr CLong -> IO Int|])|])]
         _ -> do
             runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
             return []
@@ -252,17 +254,17 @@ hsQueryLongForeign name inputtypes outputtypes = do
 hsQuerySomeForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQuerySomeForeign name inputtypes _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_some_" ++ name))
-    sequence [ForeignD <$> (ExportF CCall ("hs_get_some_" ++ name) (mkName ("hs_get_some_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) ([t| CString -> CInt -> CInt -> IO Int|]))|])]
+    sequence [ForeignD <$> (ExportF CCall ("hs_get_some_" ++ name) (mkName ("hs_get_some_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype inputtypes ([t| CString -> CInt -> CInt -> IO Int|]))|])]
 
 hsQuerySome2Foreign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQuerySome2Foreign name inputtypes _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_some2_" ++ name))
-    sequence [ForeignD <$> (ExportF CCall ("hs_get_some2_" ++ name) (mkName ("hs_get_some2_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) ([t| Ptr CString -> Ptr CInt -> CInt -> IO Int|]))|])]
+    sequence [ForeignD <$> (ExportF CCall ("hs_get_some2_" ++ name) (mkName ("hs_get_some2_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype inputtypes ([t| Ptr CString -> Ptr CInt -> CInt -> IO Int|]))|])]
 
 hsQueryAllForeign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryAllForeign name inputtypes _ = do
     runIO $ putStrLn ("generating foreign " ++ ("hs_get_all_" ++ name))
-    sequence [ForeignD <$> (ExportF CCall ("hs_get_all_" ++ name) (mkName ("hs_get_all_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype (length inputtypes) ([t| Ptr (Ptr CString) -> Ptr CInt -> IO Int|]))|])]
+    sequence [ForeignD <$> (ExportF CCall ("hs_get_all_" ++ name) (mkName ("hs_get_all_" ++ name)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype inputtypes ([t| Ptr (Ptr CString) -> Ptr CInt -> IO Int|]))|])]
 
 hsQueryAll2Foreign :: String -> [Type2] -> [Type2] -> DecsQ
 hsQueryAll2Foreign name _ _ = do
@@ -422,7 +424,7 @@ hsQueryAll2Function n inputtypes _ = do
     let app = [|$(varE fn) svc session $(varE listarg)|]
     let b0 = [|do
                   let nargs = fromIntegral $(varE cnargs)
-                  $(varP listarg) <- liftIO $ peekArray nargs $(varE cargs) >>= mapM peekCString 
+                  $(varP listarg) <- liftIO $ peekArray nargs $(varE cargs) >>= mapM peekCString
                   svc <- liftIO $ deRefStablePtr svcptr
                   session <- liftIO $ deRefStablePtr sessionptr
                   $(app)|]
@@ -447,13 +449,12 @@ createFunction n pts = trace ("creating create function " ++ n ++ " " ++ show pt
 
 hsCreateForeign :: String -> [Type2] -> DecQ
 hsCreateForeign n pts = do
-    let a = length pts
-    ForeignD <$> (ExportF CCall ("hs_create_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype a [t|IO Int|])|])
+    ForeignD <$> (ExportF CCall ("hs_create_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype pts [t|IO Int|])|])
 
 hsUpdateForeign :: String -> [Type2] -> DecQ
 hsUpdateForeign n pts = do
     let a = length pts
-    ForeignD <$> (ExportF CCall ("hs_update_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype a [t|IO Int|])|])
+    ForeignD <$> (ExportF CCall ("hs_update_" ++ n) (mkName ("hs_create_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype pts [t|IO Int|])|])
 
 hsCreateFunction :: String -> [Type2] -> DecQ
 hsCreateFunction n pts = do
@@ -477,8 +478,12 @@ hsCreateFunction n pts = do
     funD fn2 [return (Clause ps (NormalB b) [])]
 
 typeToConverter :: Type2 -> ExpQ
-typeToConverter StringType = [| \ x -> AbstractResultValue (StringValue (Text.pack x)) |] 
+typeToConverter StringType = [| \ x -> AbstractResultValue (StringValue (Text.pack x)) |]
 typeToConverter IntType = [| \ x -> AbstractResultValue (Int64Value (read x)) |]
+typeToConverter StringListType = [| \ x -> AbstractResultValue (listValue (map (StringValue . Text.pack) (parseList x))) |]
+
+parseList :: String -> [String]
+parseList = words -- currently each item cannot contain space, need a proper parser before queryall2 is fully supported for string list input parameters
 
 createFunctionArray :: String -> [Type2] -> DecQ
 createFunctionArray n pts = do
@@ -536,8 +541,7 @@ deleteFunction n pts = do
 
 hsDeleteForeign :: String -> [Type2] -> DecQ
 hsDeleteForeign n pts = do
-    let a = length pts
-    ForeignD <$> (ExportF CCall ("hs_delete_" ++ n) (mkName ("hs_delete_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype a [t|IO Int|])|])
+    ForeignD <$> (ExportF CCall ("hs_delete_" ++ n) (mkName ("hs_delete_" ++ n)) <$> [t|forall a . StablePtr (QueryArrowService a) -> StablePtr a -> $(functype pts [t|IO Int|])|])
 
 hsDeleteFunction :: String -> [Type2] -> DecQ
 hsDeleteFunction n pts = do
@@ -613,7 +617,7 @@ functions path = do
                               queryAll2Function n inputtypes outputtypes, hsQueryAll2Function n inputtypes outputtypes, hsQueryAll2Foreign n inputtypes outputtypes]
                     ) qr
     ir1 <- concat <$> mapM (\(InsertRewritingRule (Atom name@(ObjectPath _ n0) args) _) ->
-                        let n = map toLower (drop 2 n0) 
+                        let n = map toLower (drop 2 n0)
                             (PredType _ ts) = fromMaybe (error "error") (lookup name ptm)
                             inputtypes = getInputTypes ts in
                             sequence [createFunction n inputtypes, hsCreateFunction n inputtypes, hsCreateForeign n inputtypes, hsUpdateForeign n inputtypes,
