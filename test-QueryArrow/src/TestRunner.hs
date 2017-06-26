@@ -7,7 +7,8 @@ import QueryArrow.RPC.Message
 import QueryArrow.Chopper.Data
 import Test.Hspec
 import Control.Monad
-import Data.Maybe
+import System.Process
+import Data.List
 
 import Text.Parsec
 import qualified Text.Parsec.Token as P
@@ -101,12 +102,20 @@ connect2 dryrun addr =
 
 main :: IO ()
 main = do
-  dryrun <- read <$> getEnv "dryrun"
-  udsaddr <- getEnv "udsaddr"
-  inp <- getEnv "inp"
+  dryrun <- read <$> getEnv "qat_dryrun"
+  udsaddr <- getEnv "qat_udsaddr"
+  inp <- getEnv "qat_inp"
+  setupscript <- getEnv "qat_setup"
   files0 <- getDirectoryContents inp
   files <- filterM (\filepath -> doesFileExist (inp ++ "/" ++ filepath)) files0
   hspec $ do
+    describe "setup" $ do
+      it "setup" $ do
+        setup <- readFile setupscript
+        let commands = lines setup
+        mapM_ (\command -> if command == "" || ("//" `isPrefixOf` command)
+                               then return ()
+                               else callProcess "QueryArrow" ["--udsaddr", udsaddr, command, ""]) commands
     describe "all tests" $ do
       mapM_ (\filepath -> it filepath $ do
             cnt <- readFile (inp ++ "/" ++ filepath)
