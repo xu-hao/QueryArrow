@@ -9,6 +9,7 @@ import System.FilePath.Posix  ((</>), takeFileName)
 import Control.Monad          (forM)
 import Text.Printf            (printf)
 import System.IO              (withFile, IOMode(ReadMode), hFileSize)
+import System.Posix (getFileStatus, fileSize)
 
 
 type File = (Digest MD5, -- md5hash
@@ -46,12 +47,13 @@ findDuplicates dir bytes = do
 findSameHashes :: [File] -> IO ()
 findSameHashes []     = return ()
 findSameHashes ((hash, fp):xs) = do
+  fps <- fileSize <$> getFileStatus fp
   case lookup hash xs of
     (Just dupFile) -> do
       printf "===========================\n\
-                            \Found duplicate:\n\
+                            \Found duplicate size = %s:\n\
                             \=> %s \n\
-                            \=> %s \n\n" fp dupFile
+                            \=> %s \n\n" (show fps) fp dupFile
       writeFile fp ("skip\n" ++ takeFileName dupFile)
       findSameHashes xs
     (_)            -> findSameHashes xs
