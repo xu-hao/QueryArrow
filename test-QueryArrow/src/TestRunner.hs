@@ -7,6 +7,7 @@ import QueryArrow.RPC.Message
 import QueryArrow.Chopper.Data
 import Test.Hspec
 import Control.Monad
+import Data.Maybe
 
 import Text.Parsec
 import qualified Text.Parsec.Token as P
@@ -72,8 +73,10 @@ testp dryrun addr h0 = do
                     return h0
                   else do
                     h <- getConnection addr h0
-                    rs2 <- receiveMsgPack h :: IO (Maybe ResultSet)
-                    show rs `shouldBe` show rs2
+                    mRs2 <- receiveMsgPack h :: IO (Maybe ResultSet)
+                    case mRs2 of
+                      Nothing -> expectationFailure "cannot parse message"
+                      Just rs2 -> show rs2 `shouldBe` show rs
                     return (Just h)
                 testp dryrun addr h1)
 
@@ -106,9 +109,7 @@ main = do
   hspec $ do
     describe "all tests" $ do
       mapM_ (\filepath -> it filepath $ do
-            h0 <- openFile (inp ++ "/" ++ filepath) ReadMode
-            cnt <- hGetContents h0
+            cnt <- readFile (inp ++ "/" ++ filepath)
             h <- connect2 dryrun udsaddr
             res <- runParserT (testp dryrun udsaddr h) () filepath cnt
-            res `shouldBe` Right ()
-            hClose h0) files where
+            res `shouldBe` Right ()) files

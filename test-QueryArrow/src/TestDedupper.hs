@@ -52,7 +52,7 @@ findSameHashes ((hash, fp):xs) = do
                             \Found duplicate:\n\
                             \=> %s \n\
                             \=> %s \n\n" fp dupFile
-      writeFile ("skip\n" ++ takeFileName dupFile) fp
+      writeFile fp ("skip\n" ++ takeFileName dupFile)
       findSameHashes xs
     (_)            -> findSameHashes xs
 
