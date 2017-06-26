@@ -61,6 +61,7 @@ executable test_dedupper_main
                      cryptonite,
                      directory,
                      filepath,
+                     unix,
                      QueryArrow-rpc-common,
                      QueryArrow-cli
     ghc-options:     -Wall

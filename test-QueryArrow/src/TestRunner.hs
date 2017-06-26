@@ -7,9 +7,8 @@ import QueryArrow.RPC.Message
 import QueryArrow.Chopper.Data
 import Test.Hspec
 import Control.Monad
-import Data.Maybe
 import System.Process
-
+import Data.List
 import Text.Parsec
 import qualified Text.Parsec.Token as P
 import Control.Monad.IO.Class
@@ -113,9 +112,9 @@ main = do
       it "setup" $ do
         setup <- readFile setupscript
         let commands = lines setup
-        mapM_ (\command -> do
-                   putStrLn ("exec: " ++ command)
-                   callProcess "QueryArrow" ["--udsaddr", udsaddr, command, ""]) commands
+        mapM_ (\command -> if command == "" || ("//" `isPrefixOf` command)
+                               then return ()
+                               else callProcess "QueryArrow" ["--udsaddr", udsaddr, command, ""]) commands
     describe "all tests" $ do
       mapM_ (\filepath -> it filepath $ do
             cnt <- readFile (inp ++ "/" ++ filepath)
