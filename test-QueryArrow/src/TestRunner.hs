@@ -104,9 +104,9 @@ main = do
   dryrun <- read <$> getEnv "qat_dryrun"
   udsaddr <- getEnv "qat_udsaddr"
   inp <- getEnv "qat_inp"
+  list <- getEnv "qat"
   setupscript <- getEnv "qat_setup"
-  files0 <- getDirectoryContents inp
-  files <- filterM (\filepath -> doesFileExist (inp ++ "/" ++ filepath)) files0
+  files <- lines <$> readFile list
   hspec $ do
     describe "setup" $ do
       it "setup" $ do
