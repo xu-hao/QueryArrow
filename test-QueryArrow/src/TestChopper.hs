@@ -35,13 +35,15 @@ testsuitep pid outlist out = do
   reserved "ALL"
   reserved "TEST"
   reserved "BEGIN"
-  _ <- many (testp pid outlist out)
+  h <- liftIO $ openFile outlist WriteMode
+  _ <- many (testp pid h out)
+  liftIO $ hClose h
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "END"
 
-testp :: String -> String -> String -> ParsecT String () IO ()
+testp :: String -> Handle -> String -> ParsecT String () IO ()
 testp pid outlist out = do
   try (do
       _ <- count 10 (char '*')
@@ -50,13 +52,13 @@ testp pid outlist out = do
   reserved "BEGIN"
   t <- identifier
   liftIO $ putStrLn ("parsing " ++ t ++ "...")
-  liftIO $ appendFile outlist (t ++ "\n")
+  liftIO $ hPutStrLn outlist t
   _ <- count 10 (char '*')
   reserved "TEST"
   reserved "END"
   _ <- identifier
   h <- liftIO $ openFile (out ++ "/" ++ t) WriteMode
-  r <- many (actionp pid h)
+  _ <- many (actionp pid h)
   liftIO $ hClose h
 
 actionp :: String -> Handle -> ParsecT String () IO ()
@@ -64,13 +66,13 @@ actionp pid h = do
   try (do
     a <- messagep '>' pid
     let str = show (SendAction (read a))
-    liftIO $ do 
+    liftIO $ do
       hPutStrLn h ("==========" ++ show (length str))
       hPutStrLn h str
     ) <|> (do
       b <- messagep '<' pid
       let str = show (RecvAction (read b))
-      liftIO $ do 
+      liftIO $ do
         hPutStrLn h ("==========" ++ show (length str))
         hPutStrLn h str
       )
