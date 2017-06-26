@@ -9,7 +9,6 @@ import Test.Hspec
 import Control.Monad
 import System.Process
 import Data.List
-
 import Text.Parsec
 import qualified Text.Parsec.Token as P
 import Control.Monad.IO.Class
