@@ -113,7 +113,9 @@ main = do
       it "setup" $ do
         setup <- readFile setupscript
         let commands = lines setup
-        mapM_ (\command -> callProcess "QueryArrow" ["--udsaddr", udsaddr, command, ""]) commands
+        mapM_ (\command -> do
+                   putStrLn ("exec: " ++ command)
+                   callProcess "QueryArrow" ["--udsaddr", udsaddr, command, ""]) commands
     describe "all tests" $ do
       mapM_ (\filepath -> it filepath $ do
             cnt <- readFile (inp ++ "/" ++ filepath)

@@ -29,20 +29,20 @@ identifier = P.identifier lexer
 reserved :: String -> ParsecT String () IO ()
 reserved = P.reserved lexer
 
-testsuitep :: String -> String -> ParsecT String () IO ()
-testsuitep pid out = do
+testsuitep :: String -> String -> String -> ParsecT String () IO ()
+testsuitep pid outlist out = do
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "BEGIN"
-  _ <- many (testp pid out)
+  _ <- many (testp pid outlist out)
   _ <- count 10 (char '*')
   reserved "ALL"
   reserved "TEST"
   reserved "END"
 
-testp :: String -> String -> ParsecT String () IO ()
-testp pid out = do
+testp :: String -> String -> String -> ParsecT String () IO ()
+testp pid outlist out = do
   try (do
       _ <- count 10 (char '*')
       reserved "TEST"
@@ -50,6 +50,7 @@ testp pid out = do
   reserved "BEGIN"
   t <- identifier
   liftIO $ putStrLn ("parsing " ++ t ++ "...")
+  liftIO $ appendFile outlist (t ++ "\n")
   _ <- count 10 (char '*')
   reserved "TEST"
   reserved "END"
@@ -95,11 +96,11 @@ messagep dir pid = do
 
 main :: IO ()
 main = do
-  [inp, pid, out] <- getArgs
+  [inp, pid, outlist, out] <- getArgs
   putStrLn "reading file..."
   cnt <- readFile inp
   putStrLn "parsing file..."
-  res <- runParserT (testsuitep pid out) () inp cnt
+  res <- runParserT (testsuitep pid outlist out) () inp cnt
   case res of
     Left err -> print err
     Right _ -> return ()
