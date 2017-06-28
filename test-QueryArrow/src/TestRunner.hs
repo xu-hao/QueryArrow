@@ -12,6 +12,17 @@ import Data.List
 import Text.Parsec
 import qualified Text.Parsec.Token as P
 import Control.Monad.IO.Class
+import qualified Data.Map as M
+import Data.Time.Clock
+import QueryArrow.FO.Data
+
+normalizeResultSet :: ResultSet -> ResultSet
+normalizeResultSet rset@(ResultSetError _) = rset
+normalizeResultSet (ResultSetNormal rl) = ResultSetNormal (map (M.map (\(AbstractResultValue rv) -> AbstractResultValue (toConcreteResultValue rv))) rl)
+
+sortResultSet :: ResultSet -> ResultSet
+sortResultSet rset@(ResultSetError _) = rset
+sortResultSet (ResultSetNormal rl) = ResultSetNormal (sort rl)
 
 lexer :: P.GenTokenParser String () IO
 lexer = P.makeTokenParser P.LanguageDef {
@@ -38,8 +49,8 @@ integer = P.integer lexer
 reserved :: String -> ParsecT String () IO ()
 reserved = P.reserved lexer
 
-testp :: Bool -> String -> Maybe Handle -> ParsecT String () IO ()
-testp dryrun addr h0 = do
+testp :: Handle -> Bool -> String -> Maybe Handle -> ParsecT String () IO ()
+testp log dryrun addr h0 = do
   try eof <|> try (do
       reserved "skip"
       ref <- identifier
@@ -50,14 +61,15 @@ testp dryrun addr h0 = do
       act0 <- replicateM (fromInteger n) anyChar
       _ <- newline
       let act = read act0
-      case act of
-        SendAction qs -> do
-                h1 <- liftIO $ if dryrun
+      h1 <- liftIO $ case act of
+        SendAction qs ->
+                if dryrun
                           then do
                             putStrLn ("send " ++ show qs)
                             return h0
                           else do
                             h <- getConnection addr h0
+                            hPutStrLn log ("send " ++ show qs)
                             sendMsgPack h qs
                             case qs of
                               QuerySet _ Quit _ -> do
@@ -65,9 +77,8 @@ testp dryrun addr h0 = do
                                 return Nothing
                               _ ->
                                 return (Just h)
-                testp dryrun addr h1
-        RecvAction rs -> do
-                h1 <- liftIO $ if dryrun
+        RecvAction rs ->
+                if dryrun
                   then do
                     putStrLn ("recv " ++ show rs)
                     return h0
@@ -76,9 +87,14 @@ testp dryrun addr h0 = do
                     mRs2 <- receiveMsgPack h :: IO (Maybe ResultSet)
                     case mRs2 of
                       Nothing -> expectationFailure "cannot parse message"
-                      Just rs2 -> show rs2 `shouldBe` show rs
+                      Just rs2 -> 
+                          let rs2' = normalizeResultSet rs2 in
+                              -- if rs2' /= rs
+                                  -- then 
+                                      sortResultSet rs2' `shouldBe` sortResultSet rs
+                                  -- else return ()
                     return (Just h)
-                testp dryrun addr h1)
+      testp log dryrun addr h1)
 
 getConnection :: String -> Maybe Handle -> IO Handle
 getConnection addr h0 = do
@@ -107,17 +123,32 @@ main = do
   list <- getEnv "qat"
   setupscript <- getEnv "qat_setup"
   files <- lines <$> readFile list
+  logfilehandle <- openFile "/tmp/qat" WriteMode
+  ti <- getCurrentTime
   hspec $ do
     describe "setup" $ do
       it "setup" $ do
         setup <- readFile setupscript
         let commands = lines setup
+        h <- connect1 udsaddr
         mapM_ (\command -> if command == "" || ("//" `isPrefixOf` command)
                                then return ()
-                               else callProcess "QueryArrow" ["--udsaddr", udsaddr, command, ""]) commands
+                               else do
+                                   sendMsgPack h (QuerySet mempty (Dynamic command) mempty)
+                                   mrset <- receiveMsgPack h :: IO (Maybe ResultSet)
+                                   case mrset of
+                                       Just (ResultSetError err) -> error (show err)
+                                       Just (ResultSetNormal _) -> return ()
+                                       Nothing -> error "cannot parse response") commands
+        sendMsgPack h Quit
+        hClose h
     describe "all tests" $ do
-      mapM_ (\filepath -> it filepath $ do
+      zipWithM_ (\filepath n -> it filepath $ do
+            t0 <- getCurrentTime
             cnt <- readFile (inp ++ "/" ++ filepath)
             h <- connect2 dryrun udsaddr
-            res <- runParserT (testp dryrun udsaddr h) () filepath cnt
-            res `shouldBe` Right ()) files
+            res <- runParserT (testp logfilehandle dryrun udsaddr h) () filepath cnt
+            res `shouldBe` Right ()
+            t1 <- liftIO $ getCurrentTime
+            liftIO $ putStrLn (show n ++ "/" ++ show (length files) ++ " " ++ show (diffUTCTime t1 t0) ++ " avg: " ++ show (diffUTCTime t1 ti / fromIntegral n))) files [1..]
+  hClose logfilehandle
