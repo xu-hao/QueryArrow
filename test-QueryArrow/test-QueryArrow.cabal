@@ -40,6 +40,8 @@ executable test_runner_main
                      hspec,
                      hspec-expectations,
                      process,
+                     time,
+                     QueryArrow-common,
                      QueryArrow-rpc-common,
                      QueryArrow-cli
     ghc-options:     -Wall

@@ -18,7 +18,7 @@ import QueryArrow.DB.DB
 import QueryArrow.Utils
 import QueryArrow.FFI.Service
 
-data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show, Read)
+data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show, Read, Eq)
 
 data QuerySet = QuerySet {
     qsheaders :: Set Var,

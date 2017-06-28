@@ -603,7 +603,7 @@ rewrite D_MAX_REPL_NUM(id, c)
 
 predicate D_DIFF_REPL_NUM property (key input int64, key input int64, input output int64)
 rewrite D_DIFF_REPL_NUM(id, rnum, rnum2)
-    DATA_REPL_NUM( id, rid, rnum2) ~eq(rnum2,  rnum)
+    order by rnum2 asc (DATA_REPL_NUM( id, rid, rnum2) ~eq(rnum2,  rnum))
 
 predicate D_REPL_BY_NAME object (key input text, key input text, key input int64)
 rewrite delete D_REPL_BY_NAME(cn, n, rnum)
