@@ -55,7 +55,7 @@ testp log dryrun addr h0 = do
       reserved "skip"
       ref <- identifier
       liftIO $ putStrLn ("skipped " ++ ref)
-      ) <|> try (do
+      ) <|> (do
       replicateM_ 10 (char '=')
       n <- integer
       act0 <- replicateM (fromInteger n) anyChar
@@ -145,10 +145,12 @@ main = do
     describe "all tests" $ do
       zipWithM_ (\filepath n -> it filepath $ do
             t0 <- getCurrentTime
-            cnt <- readFile (inp ++ "/" ++ filepath)
+            hdlinp <- openFile (inp ++ "/" ++ filepath) ReadMode
+            cnt <- hGetContents hdlinp
             h <- connect2 dryrun udsaddr
             res <- runParserT (testp logfilehandle dryrun udsaddr h) () filepath cnt
             res `shouldBe` Right ()
             t1 <- liftIO $ getCurrentTime
+            hClose hdlinp
             liftIO $ putStrLn (show n ++ "/" ++ show (length files) ++ " " ++ show (diffUTCTime t1 t0) ++ " avg: " ++ show (diffUTCTime t1 ti / fromIntegral n))) files [1..]
   hClose logfilehandle
