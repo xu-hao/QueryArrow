@@ -138,7 +138,7 @@ instance Show2 SQLExpr where
     show2 (SQLCastExpr arg ty) sqlvar =  "cast(" ++ show2 arg sqlvar ++ " as " ++ ty ++ ")"
     show2 (SQLArrayExpr arr inx) sqlvar = "(" ++ show2 arr sqlvar ++ ")[" ++ show2 inx sqlvar ++ "]"
     show2 (SQLInfixFuncExpr fn a b) sqlvar = "(" ++ show2 a sqlvar ++ fn ++ show2 b sqlvar ++ ")"
-    show2 (SQLListExpr args) sqlvar = "{" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ "}"
+    show2 (SQLListExpr args) sqlvar = "ARRAY[" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ "]"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
     show2 (SQLFuncExpr2 fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
     show2 (SQLExprText s) _ = s
