@@ -31,7 +31,7 @@ deriving instance Eq FormulaT
 deriving instance Ord FormulaT
 
 instance Subst VarTypeMap where
-  subst s = fromList . concatMap (\(k, v) -> 
+  subst s = fromList . concatMap (\(k, v) ->
 		case lookup k s of
                     Just (VarExpr v2) -> [(v2, v)]
                     Nothing -> [(k, v)]
@@ -136,6 +136,7 @@ instantiate (TypeUniv tv ty) = do
     tv' <- newTVar tv
     ty' <- instantiate ty
     return (tcsubst (singleton tv (TypeVar tv')) ty')
+instantiate ty = return ty
 
 instantiatePredType :: PredType -> TCMonad PredType
 instantiatePredType pt = do
@@ -164,7 +165,7 @@ instance Typecheck Atom () where
 instance Typecheck (Expr, ParamType) () where
   typecheck (arg, paramtype) = do
                   (_, tvm) <- lift get
-                  let pt'@(ParamType _ _ _ t') = tcsubst tvm paramtype 
+                  let pt'@(ParamType _ _ _ t') = tcsubst tvm paramtype
                   case arg of
                               VarExpr v ->
                                   context ("typecheck: arg " ++ serialize arg) $ checkVarType v pt'
@@ -227,13 +228,13 @@ instance Typecheck Aggregator () where
       lift $ modify (const mempty *** id)
   typecheck  Not =
       lift $ modify (const mempty *** id)
-  typecheck  (OrderByDesc _) = 
+  typecheck  (OrderByDesc _) =
       return ()
-  typecheck  (OrderByAsc _) = 
+  typecheck  (OrderByAsc _) =
       return ()
-  typecheck  Distinct = 
+  typecheck  Distinct =
       return ()
-  typecheck  (Limit n) = 
+  typecheck  (Limit n) =
       return ()
 
 combineAggVtm :: Aggregator -> VarTypeMap -> TCMonad ()
@@ -251,13 +252,13 @@ combineAggVtm  Exists vtm =
       lift $ modify (const vtm *** id)
 combineAggVtm  Not vtm =
       lift $ modify (const vtm *** id)
-combineAggVtm  (OrderByDesc _) _ = 
+combineAggVtm  (OrderByDesc _) _ =
       return ()
-combineAggVtm  (OrderByAsc _) _ = 
+combineAggVtm  (OrderByAsc _) _ =
       return ()
 combineAggVtm  Distinct _ =
       return ()
-combineAggVtm  (Limit n) _ = 
+combineAggVtm  (Limit n) _ =
       return ()
 
 instance Typecheck Formula FormulaT where
