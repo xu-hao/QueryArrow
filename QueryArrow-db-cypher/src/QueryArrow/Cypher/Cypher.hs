@@ -264,7 +264,7 @@ cypherStringUnescape (a : t) = a : cypherStringUnescape t
 cypherStringUnescape "" = ""
 
 {- showN _ 0 = "..."
-showN (CypherCompCond op lhs rhs s) n = 
+showN (CypherCompCond op lhs rhs s) n =
       let a = show lhs ++ " " ++ op ++ " " ++ show rhs in
           case s of
               Pos -> a
@@ -274,8 +274,8 @@ showN (CypherPatternCond (GraphPattern [])) _ = "@Graph"
 showN (CypherPatternCond (GraphPattern as)) n = "(" ++ intercalate " AND " (map show (as)) ++ ")"
 showN (CypherAndCond a b) n = "(" ++ showN a (n-1) ++ " AND " ++ showN b (n-1) ++ ")" -}
 instance Serialize CypherCond where
-    serialize (CypherCompCond op lhs rhs s) = 
-      let a = if op == "in" 
+    serialize (CypherCompCond op lhs rhs s) =
+      let a = if op == "in"
                   then serialize lhs ++ " " ++ op ++ " " ++ parseStringList (serialize rhs) -- need to add proper list type
                   else serialize lhs ++ " " ++ op ++ " " ++ serialize rhs in
           case s of
@@ -723,7 +723,7 @@ instance Convertible Expr CypherExpr where
     safeConvert (StringExpr i) = Right (CypherStringConstExpr i)
     safeConvert (VarExpr (Var i)) = Right (CypherVarExpr (CypherVar i))
     safeConvert (NullExpr) = Right (CypherNullExpr)
-    safeConvert e@(ConsExpr _ _) = Right (CypherListExpr (cypherExprListFromArg e))
+    safeConvert e@(ListConsExpr _ _) = Right (CypherListExpr (cypherExprListFromArg e))
     safeConvert e@NilExpr = Right (CypherListExpr (cypherExprListFromArg e))
     safeConvert (CastExpr TextType e) = Right (CypherAppExpr "toString" [convert e])
     safeConvert (CastExpr Int64Type e) = Right (CypherAppExpr "toInt" [convert e])

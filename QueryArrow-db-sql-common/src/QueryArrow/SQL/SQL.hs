@@ -351,7 +351,7 @@ sqlExprFromArg arg = do
             return (Left (SQLIntConstExpr i))
         StringExpr s ->
             return (Left (SQLStringConstExpr s))
-        ConsExpr a b -> do
+        ListConsExpr a b -> do
             l <- sqlExprListFromArg arg
             return (Left (SQLListExpr l))
         NilExpr -> do
@@ -599,14 +599,14 @@ translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
                 addVarRep v (SQLColExpr2 vn)
                 return r) funcs
     groupbyreps <- mapM findRep groupby
-    
+
     if null sel
-        then 
+        then
             return (sqlsummarize funcs' groupbyreps sql)
         else do
             qv <- freshSQLVar "qu"
             return (sqlsummarize2 funcs' groupbyreps sql qv)
-           
+
 
 translateFormulaToSQL (Aggregate (Limit n) form) =
     sqllimit (IntLattice n) <$> translateFormulaToSQL form
@@ -914,7 +914,7 @@ pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomi
                 then return ()
                 else case lookup n predtablemap of
                     Nothing ->
-                        -- trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $ 
+                        -- trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $
                         return ()
                     Just (OneTable tablename _, _) ->
                         case lookup n ptm of

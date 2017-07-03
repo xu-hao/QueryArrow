@@ -50,12 +50,12 @@ dot = T.dot lexer
 type FOParser = GenParser Char ()
 
 casttypep :: FOParser CastType
-casttypep = 
-    (reserved "text" >> return TextType) 
-    <|> (reserved "int64" >> return Int64Type) 
-    <|> (reserved "bytestring" >> return ByteStringType) 
+casttypep =
+    (reserved "text" >> return TextType)
+    <|> (reserved "int64" >> return Int64Type)
+    <|> (reserved "bytestring" >> return ByteStringType)
     <|> (brackets (ListType <$> casttypep))
-    <|> (reserved "forall" >> TypeUniv <$> identifier <*> (dot >> casttypep)) 
+    <|> (reserved "forall" >> TypeUniv <$> identifier <*> (dot >> casttypep))
 
 argp :: FOParser Expr
 argp =
@@ -63,7 +63,7 @@ argp =
     <|> (CastExpr <$> casttypep <*> argp)
     <|> (VarExpr <$> Var <$> identifier)
     <|> (IntExpr . fromIntegral <$> integer)
-    <|> (brackets (foldr ConsExpr NilExpr <$> sepBy argp comma))
+    <|> (brackets (foldr ListConsExpr NilExpr <$> sepBy argp comma))
     <|> (StringExpr . TE.pack <$> stringp)
 
 arglistp :: FOParser [Expr]

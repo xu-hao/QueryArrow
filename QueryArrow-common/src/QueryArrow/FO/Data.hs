@@ -57,7 +57,7 @@ pattern Int64Type = TypeCons "int64"
 pattern Int32Type = TypeCons "int32"
 pattern ByteStringType = TypeCons "bytestring"
 pattern ListType a = TypeApp (TypeCons "[]") a
-pattern FuncType a b = TypeApp (TypeApp (TypeCons "->") a) b 
+pattern FuncType a b = TypeApp (TypeApp (TypeCons "->") a) b
 
 -- http://stackoverflow.com/questions/27157717/boilerplate-free-annotation-of-asts-in-haskell
 newtype Tie f = Tie (f (Tie f))
@@ -80,7 +80,7 @@ instance Functor f => Unannotate (Annotated a) f where
   mapA g f (Annotated a b) = Annotated (g a) (f (fmap (mapA g f) b))
 
 -- expression
-data Expr0 a = VarExpr0 Var | IntExpr0 Integer | StringExpr0 T.Text | AppExpr0 a a | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
+data Expr0 a = VarExpr0 Var | ConsExpr0 String | IntExpr0 Integer | StringExpr0 T.Text | AppExpr0 a a | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
 
 type Expr1 a = a Expr0
 
@@ -92,19 +92,20 @@ deriving instance Show Expr
 deriving instance Read Expr
 
 pattern VarExpr a = Tie (VarExpr0 a)
+pattern ConsExpr a = Tie (ConsExpr0 a)
 pattern IntExpr a = Tie (IntExpr0 a)
 pattern StringExpr a = Tie (StringExpr0 a)
 pattern AppExpr a b = Tie (AppExpr0 a b)
 pattern NullExpr = Tie NullExpr0
 pattern CastExpr a b = Tie (CastExpr0 a b)
-pattern ConsExpr a b = AppExpr (AppExpr (VarExpr (Var "(:)")) a) b
-pattern NilExpr = VarExpr (Var "[]")
+pattern ListConsExpr a b = AppExpr (AppExpr (ConsExpr "(:)") a) b
+pattern NilExpr = ConsExpr "[]"
 
 listExpr :: [Expr] -> Expr
-listExpr = foldr ConsExpr NilExpr 
+listExpr = foldr ListConsExpr NilExpr
 
 exprListFromExpr :: Expr -> [Expr]
-exprListFromExpr (ConsExpr a b) = let tl = exprListFromExpr b in
+exprListFromExpr (ListConsExpr a b) = let tl = exprListFromExpr b in
                                       a:tl
 exprListFromExpr NilExpr = []
 exprListFromExpr a = error ("sqlExprListFromArg: malformatted list " ++ serialize a)
@@ -196,6 +197,7 @@ instance Unannotate a Expr0 => FreeVars (Expr1 a) where
     freeVars e1 = case unannotate e1 of
       CastExpr0 _ e -> freeVars e
       VarExpr0 var0 -> Set.singleton var0
+      ConsExpr0 var0 -> bottom
       IntExpr0 _ -> bottom
       StringExpr0 _ -> bottom
       AppExpr0 a b -> freeVars a \/ freeVars b
@@ -469,6 +471,7 @@ instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Atom1 a) wher
 instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Expr1 a) where
     serialize e1 = serializeAnnotation e1 ++ case unannotate e1 of
       VarExpr0 var0 -> serialize var0
+      ConsExpr0 var0 -> var0
       IntExpr0 i -> show i
       StringExpr0 s -> show s
       AppExpr0 a b -> "(" ++ serialize a ++ " " ++ serialize b ++ ")"
@@ -477,8 +480,8 @@ instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Expr1 a) wher
 
 instance Serialize CastType where
     serialize (TypeCons ty) = "(cons " ++ ty ++ ")"
-    serialize (TypeApp ty1 ty2) = "(" ++ serialize ty1 ++ " " ++ serialize ty2 ++ ")" 
-    serialize (TypeUniv tv ty) = "(forall " ++ tv ++ "." ++ serialize ty ++ ")" 
+    serialize (TypeApp ty1 ty2) = "(" ++ serialize ty1 ++ " " ++ serialize ty2 ++ ")"
+    serialize (TypeUniv tv ty) = "(forall " ++ tv ++ "." ++ serialize ty ++ ")"
     serialize (TypeVar v) = "(var " ++ v ++ ")"
 
 instance Serialize Var where
@@ -956,4 +959,3 @@ instance Enum ConcreteResultValue where
 instance Integral ConcreteResultValue where
   Int64Value a `quotRem` Int64Value b = let (q, r) = a `quotRem` b in (Int64Value q, Int64Value r)
   toInteger (Int64Value a) = toInteger a
-
