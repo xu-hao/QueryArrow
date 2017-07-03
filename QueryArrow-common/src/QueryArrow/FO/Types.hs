@@ -119,6 +119,21 @@ checkVarType v (ParamType pk inp out t) = do
         let t' = tcsubst tvm t
         lift $ modify (insert v (ParamType pk True False t') *** id)
 
+consTypeMap :: Map String CastType
+consTypeMap = fromList [("(:)", TypeUniv "a" (TypeVar "a" `FuncType` (ListType (TypeVar "a") `FuncType` (ListType (TypeVar "a"))))),
+                        ("[]", TypeUniv "a" (ListType (TypeVar "a")))]
+
+checkConsType :: String -> ParamType -> TCMonad ()
+checkConsType v (ParamType _ False True _) =
+  throwError ("checkConsType: a constructor cannot be used as an output parameter: " ++ show v)
+checkConsType v (ParamType _ _ _ t) = do
+  case lookup v consTypeMap of
+    Nothing ->
+        throwError ("checkVarType: undefined constructor: " ++ show v)
+    Just t2 -> do
+        t2' <- instantiate t2
+        context ("checkVarType: " ++ v ++ " " ++ show consTypeMap ++ " expected and encountered") $ tcunify t t2'
+
 unbounded :: VarTypeMap -> Set Var -> Set Var
 unbounded vtm  = Set.filter (\var0 -> case lookup var0 vtm of
                                         Nothing -> True
@@ -167,6 +182,8 @@ instance Typecheck (Expr, ParamType) () where
                   (_, tvm) <- lift get
                   let pt'@(ParamType _ _ _ t') = tcsubst tvm paramtype
                   case arg of
+                              ConsExpr v ->
+                                  context ("typecheck: arg " ++ serialize arg) $ checkConsType v pt'
                               VarExpr v ->
                                   context ("typecheck: arg " ++ serialize arg) $ checkVarType v pt'
                               IntExpr _ ->
