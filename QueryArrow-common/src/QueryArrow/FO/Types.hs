@@ -64,6 +64,11 @@ instance TCUnify CastType where
     equal a t
   tcunify t (TypeVar a) =
     equal a t
+  tcunify (TypeApp a b) (TypeApp a2 b2) = do
+    tcunify a a2
+    tcunify b b2
+  tcunify s@(TypeUniv _ _) t@(TypeUniv _ _) =
+    throwError ("unify: unsupported higher-order unification " ++ show s ++ " and " ++ show t)
   tcunify s t =
     throwError ("unify: type mismatch " ++ show s ++ " and " ++ show t)
 
@@ -129,10 +134,10 @@ checkConsType v (ParamType _ False True _) =
 checkConsType v (ParamType _ _ _ t) = do
   case lookup v consTypeMap of
     Nothing ->
-        throwError ("checkVarType: undefined constructor: " ++ show v)
+        throwError ("checkConsType: undefined constructor: " ++ show v)
     Just t2 -> do
         t2' <- instantiate t2
-        context ("checkVarType: " ++ v ++ " " ++ show consTypeMap ++ " expected and encountered") $ tcunify t t2'
+        context ("checkConsType: " ++ v ++ " " ++ show consTypeMap ++ " expected and encountered") $ tcunify t t2'
 
 unbounded :: VarTypeMap -> Set Var -> Set Var
 unbounded vtm  = Set.filter (\var0 -> case lookup var0 vtm of
