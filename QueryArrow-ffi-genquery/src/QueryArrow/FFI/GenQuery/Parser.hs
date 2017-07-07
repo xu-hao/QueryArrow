@@ -51,11 +51,11 @@ stringp = do
   whiteSpace
   return str
 
-instringp :: GenQueryParser String
+instringp :: GenQueryParser [String]
 instringp = do
-  strs <- sepBy instringp0 (comma <|> return ",")
+  strs <- sepBy instringp0 (optional comma)
   whiteSpace
-  return (intercalate "," (map (\s -> "'" ++ s ++ "'") strs)) where
+  return strs where
     instringp0 = do
       char '\''
       str <- many (noneOf ['\''])
@@ -83,7 +83,7 @@ countP = reserved "count" <|> reserved "COUNT"
 maxP = reserved "max" <|> reserved "MAX"
 minP = reserved "min" <|> reserved "MIN"
 inP = reserved "in" <|> reserved "IN"
-		
+
 genQueryP :: GenQueryParser GenQuery
 genQueryP = do
     selectP
@@ -128,5 +128,5 @@ cond2P' = try (EqString <$> (reservedOp "=" >> stringp)) <|>
           try (LeString <$> (reservedOp "<=" >> stringp)) <|>
           try (LeInteger <$> (reservedOp "<=" >> integer)) <|>
           try (LikeCond <$> (likeP >> stringp)) <|>
-          try (InCond <$> (inP >> parens (sepBy stringp comma))) <|>
+          try (InCond <$> (inP >> instringp)) <|>
           ParentOfCond <$> (parentOfP >> stringp)

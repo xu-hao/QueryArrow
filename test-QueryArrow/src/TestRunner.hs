@@ -139,7 +139,8 @@ main = do
                                    case mrset of
                                        Just (ResultSetError err) -> error (show err)
                                        Just (ResultSetNormal _) -> return ()
-                                       Nothing -> error "cannot parse response") commands
+                                       Nothing -> error "cannot parse response") (commands ++ ["nextid(x)"] -- this account for the test iput run by the install script
+                                          )
         sendMsgPack h Quit
         hClose h
     describe "all tests" $ do

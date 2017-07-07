@@ -46,3 +46,46 @@ library
                    template-haskell
   ghc-options:     -Wall -fPIC -shared -dynamic
   other-modules:
+
+executable GenQueryTrans
+  hs-source-dirs:  src
+  main-is:         Main.hs
+  build-depends:
+                   base >= 4,
+                   containers,
+                   mtl,
+                   transformers,
+                   semigroups,
+                   parsec,
+                   semigroupoids,
+                   aeson,
+                   bytestring,
+                   unordered-containers,
+                   convertible,
+                   text >= 1.2.1.1,
+                   scientific,
+                   array,
+                   temporary,
+                   process,
+                   resourcet,
+                   async,
+                   time,
+                   hslogger,
+                   exceptions,
+                   utf8-string,
+                   regex-tdfa,
+                   monad-control,
+                   lifted-async,
+                   namespace >= 0.1.2.2,
+                   lattices,
+                   semibounded-lattices,
+                   monad-logger,
+                   fast-logger,
+                   constraints,
+                   either,
+                   QueryArrow-common,
+                   QueryArrow-ffi-service,
+                   QueryArrow-ffi-genquery,
+                   template-haskell
+  ghc-options:     -Wall
+  other-modules:

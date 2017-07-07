@@ -26,6 +26,7 @@ import Data.Int (Int64, Int32)
 import Data.Binary.Get
 import Data.Binary.Put
 import Data.ByteString.Lazy (fromStrict, toStrict)
+import qualified Data.ByteString.Lazy as BSL
 import Data.Typeable (Typeable)
 import Text.Read (Read(..), ReadPrec)
 import Debug.Trace
@@ -108,7 +109,7 @@ exprListFromExpr :: Expr -> [Expr]
 exprListFromExpr (ListConsExpr a b) = let tl = exprListFromExpr b in
                                       a:tl
 exprListFromExpr NilExpr = []
-exprListFromExpr a = error ("sqlExprListFromArg: malformatted list " ++ serialize a)
+exprListFromExpr a = error ("exprListFromExpr: malformatted list " ++ serialize a)
 
 -- atoms
 data Atom1 a = Atom1 { atomPred :: PredName, atomArgs :: [Expr1 a] }
@@ -891,10 +892,17 @@ pattern ListNilValue = ConsValue "[]"
 
 pattern ListConsValue :: ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue
 pattern ListConsValue a b = ConsValue "(:)" `AppValue` a `AppValue` b
+pattern NilValue = ConsValue "[]"
 
 listValue :: [ConcreteResultValue] -> ConcreteResultValue
 listValue = foldr ListConsValue ListNilValue
 
+valueListFromValue :: ConcreteResultValue -> [ConcreteResultValue]
+valueListFromValue (ListConsValue a b) = let tl = valueListFromValue b in
+                                      a:tl
+valueListFromValue NilValue = []
+valueListFromValue a = error ("valueListFromValue: malformatted list " ++ show a)
+ 
 data NetworkResultValue = NetworkResultValue (Maybe CastType) ByteString deriving (Eq , Ord, Show, Read)
 
 deriving instance Generic NetworkResultValue
@@ -909,6 +917,27 @@ instance MessagePack AbstractResultValue where
     return (AbstractResultValue (b :: NetworkResultValue))
   toObject (AbstractResultValue a) = toObject (toNetworkResultValue a)
 
+splitByteString :: ByteString -> [ByteString]
+splitByteString bs = runGet splitByteString' (fromStrict bs) where
+  splitByteString' = do
+    b <- isEmpty
+    if b
+      then return []
+      else do
+        len <- getWord64be
+        bs <- getByteString (fromIntegral len)
+        bss <- splitByteString'
+        return (bs : bss)
+
+listValueToByteString :: ConcreteResultValue -> ByteString
+listValueToByteString crv = 
+  let vlist = valueListFromValue crv in
+      toStrict (runPut $ mapM_ (\rv -> do
+        let nrv = toNetworkResultValue rv
+        let bs = pack nrv
+        putWord64be (fromIntegral (BSL.length bs))
+        putByteString (toStrict bs)) vlist)
+
 instance ResultValue NetworkResultValue where
   toConcreteResultValue (NetworkResultValue ty bs) =
     case ty of
@@ -916,6 +945,7 @@ instance ResultValue NetworkResultValue where
       Just Int32Type -> Int32Value (fromIntegral (runGet getWord32be (fromStrict bs)))
       Just TextType -> StringValue (decodeUtf8 bs)
       Just ByteStringType -> ByteStringValue bs
+      Just (ListType _) -> listValue (map ((toConcreteResultValue :: NetworkResultValue -> ConcreteResultValue) . fromMaybe (error "toConcreteResultValue: cannot unpack bytestring") . unpack . fromStrict) (splitByteString bs))
       Nothing -> Null
       _ -> error ("toConcreteResultValue: unsupported network value type: " ++ show ty)
   toNetworkResultValue = id
@@ -929,11 +959,15 @@ instance ResultValue ConcreteResultValue where
   toNetworkResultValue (StringValue s) = NetworkResultValue (Just TextType) (encodeUtf8 s)
   toNetworkResultValue (ByteStringValue bs) = NetworkResultValue (Just ByteStringType) bs
   toNetworkResultValue (Null) = NetworkResultValue Nothing BS.empty
+  toNetworkResultValue crv@NilValue = NetworkResultValue (Just (ListType (TypeVar "<list elem>"))) (listValueToByteString crv)
+  toNetworkResultValue crv@(ListConsValue _ _) = NetworkResultValue (Just (ListType (TypeVar "<list elem>"))) (listValueToByteString crv)
   toNetworkResultValue (ConsValue _) = error ("cannot convert cons value to network result value")
   castTypeOf (Int64Value _) = Int64Type
   castTypeOf (Int32Value _) = TextType
   castTypeOf (StringValue _) = TextType
   castTypeOf (ByteStringValue _) = ByteStringType
+  castTypeOf NilValue = ListType (TypeVar "<list elem>")
+  castTypeOf (ListConsValue _ _) = ListType (TypeVar "<list elem>")
   castTypeOf (ConsValue _) = error "typeOf: cons value"
   castTypeOf Null = error "typeOf: null value"
 

@@ -236,16 +236,6 @@ ancestors = ancestor "" where
            ancestor a (hd : tl) = ancestor (hd : a) tl
            ancestor a "" = [reverse a]
 
-escapeSQLTextArrayString :: String -> String
-escapeSQLTextArrayString "" = ""
-escapeSQLTextArrayString ('\"' : tl) = "\\\"" ++ escapeSQLTextArrayString tl
-escapeSQLTextArrayString ('\\' : tl) = "\\\\" ++ escapeSQLTextArrayString tl
-escapeSQLTextArrayString (hd : tl) = hd : escapeSQLTextArrayString tl
-
-quote :: String -> String
-quote a = "\"" ++ a ++ "\""
-
-
 toCondPredicate :: Cond ->  Formula
 toCondPredicate  (Cond col (EqString str)) =
   "eq" @@ [CastExpr TextType (VarExpr (toVariable col)), StringExpr (pack str)]

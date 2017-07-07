@@ -14,13 +14,39 @@ import Data.Map.Strict (empty, insert, lookup)
 import System.Log.Logger
 import Data.Convertible
 import Data.Ratio
+import Data.Text (unpack)
+import Data.List (intercalate)
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
+
+escapeSQLTextArrayString :: String -> String
+escapeSQLTextArrayString "" = ""
+escapeSQLTextArrayString ('\"' : tl) = "\\\"" ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString ('\\' : tl) = "\\\\" ++ escapeSQLTextArrayString tl
+escapeSQLTextArrayString (hd : tl) = hd : escapeSQLTextArrayString tl
+
+quote :: String -> String
+quote a = "\"" ++ a ++ "\""
+
+convertResultValueToSQLText :: ConcreteResultValue -> String
+convertResultValueToSQLText (Int64Value i) = show i
+convertResultValueToSQLText (StringValue s) = quote (escapeSQLTextArrayString (unpack s))
+convertResultValueToSQLText crv@NilValue = listToSQLText crv
+convertResultValueToSQLText crv@(ListConsValue _ _) = listToSQLText crv
+convertResultValueToSQLText e = error ("unsupported sql value type: " ++ show e)
+
+listToSQLText :: ConcreteResultValue -> String
+listToSQLText crv = "{" ++ (intercalate "," (map convertResultValueToSQLText (valueListFromValue crv))) ++ "}"
+
+listToSql :: ConcreteResultValue -> SqlValue
+listToSql crv = toSql (listToSQLText crv)
 
 convertResultValueToSQL :: ConcreteResultValue -> SqlValue
 convertResultValueToSQL (Int64Value i) = toSql i
 convertResultValueToSQL (StringValue s) = toSql s
 convertResultValueToSQL (ByteStringValue s) = toSql s
+convertResultValueToSQL crv@NilValue = listToSql crv
+convertResultValueToSQL crv@(ListConsValue _ _) = listToSql crv
 convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
