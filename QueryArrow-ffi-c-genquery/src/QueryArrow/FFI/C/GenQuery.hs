@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.C.GenQuery where
 
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 
 import Prelude hiding (lookup)
 import qualified Data.Text as Text
@@ -17,6 +17,7 @@ import System.Log.Logger (errorM, infoM, debugM)
 import Data.Maybe (fromMaybe)
 import Control.Monad.Trans.Either
 import Text.Parsec (runParser)
+import qualified Data.Vector as V
 
 import QueryArrow.FFI.GenQuery.Parser
 import QueryArrow.FFI.Service
@@ -41,11 +42,11 @@ hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cticket cqu cout c
   let (gq, (vars, form)) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
                 Right gq -> (gq, translateGenQueryToQAL (dist /= 0) (case acc of
-                                                                    1 -> if null ticket then UserAccessControl uz un else TicketAccessControl ticket 
+                                                                    1 -> if null ticket then UserAccessControl uz un else TicketAccessControl ticket
                                                                     -1 -> NoAccessControl
                                                                     0 -> AccessControlTicket) gq)
   debugM "GENQUERY" ("translateGenQueryToQAL: \n------------------\n" ++ show gq ++ "\n----------------->\n" ++ serialize form ++ "\n------------------------" )
-  res <- runEitherT (getAllResult svc session vars ( form) mempty)
+  res <- runEitherT (getAllResult svc session vars ( form) mempty mempty)
   case res of
     Left err -> error (show err)
     Right res -> do
@@ -57,7 +58,7 @@ hs_gen_query svcptr sessionptr cdist cacc cuserzone cusername cticket cqu cout c
           poke ccol (fromIntegral col)
           poke crow (fromIntegral row)
           infoM "Plugin" ("GenQuery " ++ show res)
-          arrelems <- mapM newCString (concatMap (\r -> map (\v -> Text.unpack (resultValueToString (fromMaybe (error ("cannot find column " ++ show v ++ show r)) (lookup v r)))) vars ) res)
+          arrelems <- mapM newCString (concatMap (\r -> V.toList (V.map (\v -> Text.unpack (resultValueToString v) ) r)) res)
           arr <- newArray arrelems
           poke cout arr
           return 0

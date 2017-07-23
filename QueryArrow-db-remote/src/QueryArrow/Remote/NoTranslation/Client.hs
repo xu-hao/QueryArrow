@@ -4,13 +4,23 @@ module QueryArrow.Remote.NoTranslation.Client where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
-import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Semantics.ResultHeader
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+import QueryArrow.Semantics.ResultSet.HandleResultSet
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import Foreign.Ptr
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
 import QueryArrow.Remote.Definitions
+import Data.Conduit
+import Data.Conduit.List
+import Data.Set (toAscList)
 
 data QueryArrowClient a where
   QueryArrowClient :: a -> String -> [Pred] -> QueryArrowClient a
@@ -55,11 +65,14 @@ instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet
     processRes res
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBStatement (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT) where
-  type RowType (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT) = MapResultRow
-  dbStmtExec (QueryArrowClientDBConnection chan connSP, qu) rows = do
-      row <- rows
-      RowListResult rows' <- liftIO $ rpc chan (DBStmtExec connSP  qu  [row])
-      listResultStream rows'
+  type InputRowType (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT) = VectorResultRow AbstractResultValue
+  type ResultSetType (ConnectionType (QueryArrowClient  a), NTDBQuery FormulaT) = ResultStreamResultSet (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue)
+  dbStmtExec (QueryArrowClientDBConnection chan connSP, qu@(NTDBQuery ret _ _)) rset = do
+      let rs = toResultStream rset
+      let hdr = toHeader (toAscList ret)
+      return (ResultStreamResultSet RSId hdr (ResultStream (runResultStream rs =$= awaitForever (\ row -> do
+        RowListResult rows' <- liftIO $ rpc chan (DBStmtExec connSP  qu hdr [row]) -- assuming that remote will return rows with the same header
+        sourceList rows'))))
   dbStmtClose _ = return ()
 
 instance (Channel a, SendType a ~ RemoteCommand, ReceiveType a ~ RemoteResultSet) => IDBConnection (ConnectionType (QueryArrowClient  a)) where

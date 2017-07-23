@@ -24,7 +24,6 @@ class (ResultSet (PSResultSetType stmt)) => IPSDBStatement stmt where
 newtype PSDBStatement stmt = PSDBStatement stmt
 
 instance forall stmt . (IPSDBStatement stmt, Convertible (HeaderType (ResultSetRowType (PSResultSetType stmt)), ResultSetRowType (PSResultSetType stmt)) (ParameterType stmt)) => IDBStatement (PSDBStatement stmt) where
-    type RowType (PSDBStatement stmt) = ResultSetRowType (PSResultSetType stmt)
     type InputRowType (PSDBStatement stmt) = ResultSetRowType (PSResultSetType stmt)
     type ResultSetType (PSDBStatement stmt) = ResultSetResultStreamResultSet (ResultSetTransType (PSResultSetType stmt)) (PSResultSetType stmt)
     dbStmtClose (PSDBStatement stmt) = psdbStmtClose stmt

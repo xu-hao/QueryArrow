@@ -2,7 +2,10 @@
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Types
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Syntax.Types
 import QueryArrow.Config
 import QueryArrow.Translation
 import QueryArrow.Cache
@@ -26,9 +29,9 @@ import qualified QueryArrow.SQL.HDBC.Sqlite3 as Sqlite3
 import qualified QueryArrow.FileSystem.FileSystem as FileSystem
 import qualified QueryArrow.SQL.LibPQ.PostgreSQL as LibPQ
 
-type DBMap = Map String (AbstractPlugin MapResultRow)
+type DBMap = Map String (AbstractPlugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue))
 
-getDB2 :: DBMap -> GetDBFunction MapResultRow
+getDB2 :: DBMap -> GetDBFunction (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue)
 getDB2 dbMap ps = case lookup (catalog_database_type ps) dbMap of
     Just (AbstractPlugin getDBFunc) ->
         getDB getDBFunc (getDB2 dbMap) ps
@@ -54,6 +57,6 @@ dbMap0 = fromList [
     ];
 
 
-transDB :: TranslationInfo -> IO (AbstractDatabase MapResultRow FormulaT)
+transDB :: TranslationInfo -> IO (AbstractDatabase (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) FormulaT)
 transDB transinfo =
     getDB2 dbMap0 (db_plugin transinfo)

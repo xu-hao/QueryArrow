@@ -9,6 +9,9 @@ import QueryArrow.Config
 import QueryArrow.SQL.SQL
 import Data.Aeson
 import GHC.Generics
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
 import QueryArrow.Plugin
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.DB.AbstractDatabaseList
@@ -55,7 +58,7 @@ data PostgreSQLDBConfig = PostgreSQLDBConfig {
 
 data PostgreSQLPlugin = PostgreSQLPlugin
 
-instance Plugin PostgreSQLPlugin MapResultRow where
+instance Plugin PostgreSQLPlugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) where
   getDB _ _ ps = do
       let fsconf = getDBSpecificConfig ps
       db <- makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) (Just "nextid") (PostgreSQLDB fsconf)

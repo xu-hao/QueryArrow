@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs #-}
 module QueryArrow.Cypher.ICAT where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import QueryArrow.Cypher.Neo4jConnection
 import QueryArrow.Cypher.Cypher
 import QueryArrow.Cypher.BuiltIn

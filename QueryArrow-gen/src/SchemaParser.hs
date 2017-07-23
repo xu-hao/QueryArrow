@@ -6,7 +6,7 @@ import qualified Text.Parsec.Token as T
 import Text.ParserCombinators.Parsec
 import Control.Applicative ((*>), (<*), (<$>), (<*>))
 import Language.Haskell.TH
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import QueryArrow.SQL.SQL
 import QueryArrow.Utils
 import System.IO.Unsafe

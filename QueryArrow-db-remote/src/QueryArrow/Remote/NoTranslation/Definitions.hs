@@ -4,11 +4,14 @@ module QueryArrow.Remote.NoTranslation.Definitions where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import Data.Set
 import Foreign.Ptr
 import Data.Map.Strict
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
 
 data RemoteCommand  = GetName
   | GetPreds
@@ -19,9 +22,8 @@ data RemoteCommand  = GetName
   | DBPrepare (Ptr ())
   | DBCommit (Ptr ())
   | DBRollback (Ptr ())
-  | DBStmtExec (Ptr ()) (NTDBQuery FormulaT) [MapResultRow]
-  | Quit deriving Show
-
+  | DBStmtExec (Ptr ()) (NTDBQuery FormulaT) ResultHeader [VectorResultRow AbstractResultValue]
+  | Quit
 data RemoteResultSet = StringResult String
   | PredListResult [Pred]
   | PredIntListMapResult (Map PredName [Int])
@@ -29,4 +31,4 @@ data RemoteResultSet = StringResult String
   | ErrorResult (Int, String)
   | ConnectionResult (Ptr ())
   | UnitResult
-  | RowListResult [MapResultRow] deriving (Show)
+  | RowListResult [VectorResultRow AbstractResultValue] deriving (Show)

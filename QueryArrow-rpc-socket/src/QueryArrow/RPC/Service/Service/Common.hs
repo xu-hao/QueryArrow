@@ -11,10 +11,16 @@ import QueryArrow.RPC.Message
 import Control.Monad.Trans.Either
 import QueryArrow.RPC.DB
 import System.IO (Handle)
-import QueryArrow.FO.Types
-import QueryArrow.FFI.Auxiliary
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultSet
 
-worker :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
+worker :: (IDatabase db, DBFormulaType db ~ FormulaT,
+          InputRowType (StatementType (ConnectionType db)) ~ VectorResultRow AbstractResultValue,
+          ResultSetRowType (ResultSetType (StatementType (ConnectionType db))) ~ VectorResultRow AbstractResultValue,
+          ResultSetTransType (ResultSetType (StatementType (ConnectionType db))) ~ ResultSetTransformer AbstractResultValue) => Handle -> db -> ConnectionType db -> IO ()
 worker handle tdb conn = do
                 t0 <- getCurrentTime
                 req <- receiveMsgPack handle
@@ -28,6 +34,7 @@ worker handle tdb conn = do
                     Just qs -> do
                         let qu = qsquery qs
                             hdr = qsheaders qs
+                            hdr0 = qsparamheaders qs
                             par = qsparams qs
                         case qu of
                             Quit -> do -- disconnect when qu field is null
@@ -36,7 +43,7 @@ worker handle tdb conn = do
                                 return (t2, t3, True)
                             Static qu -> do
                                 t2 <- getCurrentTime
-                                ret <- runEitherT (run3 hdr qu par tdb conn)
+                                ret <- runEitherT (run3 hdr qu hdr0 par tdb conn)
                                 t3 <- getCurrentTime
                                 case ret of
                                     Left e ->
@@ -47,7 +54,7 @@ worker handle tdb conn = do
                             Dynamic qu -> do
                                 t2 <- getCurrentTime
                                 infoM "RPC_TCP_SERVER" "**************"
-                                ret <- runEitherT (run hdr qu par tdb conn)
+                                ret <- runEitherT (run hdr qu hdr0 par tdb conn)
                                 infoM "RPC_TCP_SERVER" "**************"
                                 t3 <- getCurrentTime
                                 case ret of

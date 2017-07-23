@@ -2,10 +2,10 @@
 
 module QueryArrow.Binding.Binding where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import QueryArrow.Utils
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultStream
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import Data.Set (Set, member)
@@ -14,7 +14,20 @@ import qualified Data.Map.Strict as Map
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (find)
 import Data.Maybe
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Data.Some
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import qualified Data.Vector as V
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Semantics.ResultSet
+import Data.Conduit
+import QueryArrow.Semantics.ResultHeader
+import Data.Conduit.List (sourceList)
+import QueryArrow.Data.Monoid.Action
 
 -- dbName :: a -> String
 data ParamIO = I | O
@@ -64,11 +77,15 @@ argsToIO row =
     VarExpr a | not (a `member` row) -> O
     _ -> I)
 
-argsToIOs :: MapResultRow -> [Expr] -> ([ParamIO], [ConcreteResultValue], [Var])
-argsToIOs row =
+argsToIOs :: ResultHeader -> [Expr] -> ([ParamIO], [Expr], [Var])
+argsToIOs hdr =
   mconcat . map (\arg -> case arg of
-    VarExpr a | not (a `Map.member` row) -> ([O], [], [a])
-    _ -> ([I], [case evalExpr row arg of AbstractResultValue arv -> toConcreteResultValue arv], []))
+    VarExpr a | not (a `V.elem` hdr) -> ([O], [], [a])
+    _ -> ([I], [arg], []))
+
+evalArgs :: ResultHeader -> VectorResultRow AbstractResultValue -> [Expr] -> [ConcreteResultValue]
+evalArgs hdr row =
+  map (\arg -> case evalExpr hdr row arg of Some arv -> toConcreteResultValue arv)
 
 instance IDatabase0 BindingDatabase where
     type DBFormulaType BindingDatabase = FormulaT
@@ -85,22 +102,35 @@ instance IDatabase1 BindingDatabase where
 
 instance INoConnectionDatabase2 BindingDatabase where
     type NoConnectionQueryType BindingDatabase = (Set Var, FormulaT, Set Var)
-    type NoConnectionRowType BindingDatabase = MapResultRow
-    noConnectionDBStmtExec (BindingDatabase _ db) (_,  FAtomic2 _ (Atom predname args), _) stream = do
-        row <- stream
-        let (ios, ivals, ovars) = argsToIOs row args
-        rs <- liftIO $ bindingExec (getBindingByPredName predname db) ios ivals
-        listResultStream (map (\ovals -> fromList (zip ovars (map AbstractResultValue ovals))) rs)
-    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Pos (Atom predname as)), _) stream = do
-        row <- stream
-        let avals = map (evalExpr row) as
-        liftIO $ bindingInsert (getBindingByPredName predname db) (map (\(AbstractResultValue arv) -> toConcreteResultValue arv) avals)
-        return mempty
-    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Neg (Atom predname as)), _) stream = do
-        row <- stream
-        let avals = map (evalExpr row) as
-        liftIO $ bindingDelete (getBindingByPredName predname db) (map (\(AbstractResultValue arv) -> toConcreteResultValue arv) avals)
-        return mempty
+    type NoConnectionInputRowType BindingDatabase = VectorResultRow AbstractResultValue
+    type NoConnectionResultSetType BindingDatabase = ResultStreamResultSet (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue)
+    noConnectionDBStmtExec (BindingDatabase _ db) (_,  FAtomic2 _ (Atom predname args), _) rset = do
+        let (ResultStream stream) = toResultStream rset
+        let hdr = getHeader rset
+        let (ios, iexprs, ovars) = argsToIOs hdr args
+        let hdr2 = toHeader ovars
+        let hdr3 = hdr V.++ hdr2
+        return (ResultStreamResultSet RSId hdr3 (ResultStream (stream =$= awaitForever (\row -> do
+          let ivals = evalArgs hdr row iexprs
+          let rowtrans = tconvert (combineRow hdr row hdr2 :: ResultSetTransformer AbstractResultValue) :: ResultRowTransformer AbstractResultValue
+          rs <- liftIO $ bindingExec (getBindingByPredName predname db) ios ivals
+          sourceList (map (\ovals -> rowtrans `act` V.map Some (V.fromList ovals)) rs)))))
+    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Pos (Atom predname as)), _) rset = do
+      let (ResultStream stream) = toResultStream rset
+      let hdr = getHeader rset
+      return (ResultStreamResultSet RSId hdr (ResultStream (stream =$= awaitForever (\row -> do
+        let avals = evalArgs hdr row as
+        liftIO $ bindingInsert (getBindingByPredName predname db) avals
+        yield row
+        ))))
+    noConnectionDBStmtExec (BindingDatabase _ db) (_, FInsert2 _ (Lit Neg (Atom predname as)), _) rset = do
+      let (ResultStream stream) = toResultStream rset
+      let hdr = getHeader rset
+      return (ResultStreamResultSet RSId hdr (ResultStream (stream =$= awaitForever (\row -> do
+        let avals = evalArgs hdr row as
+        liftIO $ bindingDelete (getBindingByPredName predname db) avals
+        yield row
+        ))))
 
     noConnectionDBStmtExec _ qu _ = error ("noConnectionDBStmtExec: unsupported Formula " ++ show qu)
 

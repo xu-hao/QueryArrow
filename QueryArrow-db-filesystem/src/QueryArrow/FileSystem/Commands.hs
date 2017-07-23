@@ -10,12 +10,17 @@ module QueryArrow.FileSystem.Commands (
     interpret,
     makeLocalInterpreter, makeRemoteInterpreter,
     makeLocalInterpreter2, makeRemoteToLocalInterpreter2, makeRemoteToRemoteInterpreter2, makeLocalToRemoteInterpreter2,
-    Interpreter(..), Interpreter2(..)
+    Interpreter(..), Interpreter2(..), LIO(..)
           ) where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import QueryArrow.DB.DB
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Data.Some
 import Data.ByteString (ByteString)
 import QueryArrow.Utils
 import QueryArrow.FileSystem.LocalCommands
@@ -24,11 +29,14 @@ import Control.Monad.Free
 import Control.Monad.Trans.State (StateT, get, modify)
 import Control.Monad.Trans.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Map.Strict (insert)
 import Data.Time.Clock
 import Data.Maybe
+import qualified Data.Vector as V
+import Control.Arrow ((***))
 import QueryArrow.FileSystem.Interpreter
-import Data.MessagePack
+import Data.MessagePack hiding (Some)
 
 data FSCommand x where
    DirExists :: File -> (Bool -> x) -> FSCommand x
@@ -201,7 +209,29 @@ setResultValue var expr = liftF (SetResultValue var expr ())
 evalResultValue :: Expr -> FSProgram ConcreteResultValue
 evalResultValue expr = liftF (EvalResultValue expr id)
 
-type InterMonad = StateT MapResultRow (ReaderT ([((String, String), Interpreter)], [((String, String, String, String), Interpreter2)]) DBResultStream)
+newtype LIO a = LIO {runLIO :: IO [a]}
+
+instance Functor LIO where
+  fmap f (LIO a) = LIO (fmap (map f) a)
+
+instance Applicative LIO where
+  f <*> a = do
+    a2 <- a
+    f2 <- f
+    return (f2 a2)
+
+instance Monad LIO where
+  return a = LIO (return [a])
+  LIO a >>= f = LIO (do
+    as <- a
+    concat <$> mapM (runLIO . f) as)
+
+instance MonadIO LIO where
+  liftIO a = LIO (do
+    a2 <- a
+    return [a2])
+
+type InterMonad = StateT (ResultHeader, VectorResultRow AbstractResultValue) (ReaderT ([((String, String), Interpreter)], [((String, String, String, String), Interpreter2)]) LIO) -- (DBResultStream (VectorResultRow AbstractResultValue))
 
 redirect :: (Show a, MessagePack a) => LocalizedFSCommand a -> String -> String -> InterMonad a
 redirect cmd hosta roota = do
@@ -225,7 +255,7 @@ runPredicateMaybe predicate = do
   (hostmap, _) <- lift ask
   rpm hostmap where
     rpm [] = return Nothing
-    rpm ((_, ia) : hm2) = do 
+    rpm ((_, ia) : hm2) = do
       a <- interpreter ia predicate
       case a of
         Nothing -> rpm hm2
@@ -384,17 +414,16 @@ interpret (FindDirsByModficationTime n next) = do
   fs <- runPredicate (LFindDirsByModficationTime n)
   next fs
 
-interpret (Foreach as next) = do
-  a <- lift . lift $ listResultStream as
-  next a
+interpret (Foreach as next) =
+  mapM_ next as
 
 interpret (EvalResultValue a next) = do
-  row <- get
-  next (case evalExpr row a of AbstractResultValue arv -> toConcreteResultValue arv)
+  (hdr, row) <- get
+  next (case evalExpr hdr row a of Some arv -> toConcreteResultValue arv)
 
 interpret (SetResultValue a b next) = do
-  modify (insert a (AbstractResultValue b))
+  modify ((`V.snoc` a) *** (`V.snoc` (Some b)))
   next
 
 interpret Stop =
-  lift . lift $ emptyResultStream
+  lift . lift $ LIO (return [])

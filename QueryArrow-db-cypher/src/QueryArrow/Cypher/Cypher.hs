@@ -6,10 +6,10 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     nodev, nodel, nodevl, nodevp, nodevlp, nodelp, nodep, edgel, edgevl, edgevlp, var, cnull, dot, app, match,
     create, set, delete, cwhere, creturn) where
 
-import QueryArrow.FO.Data hiding (Subst(..), var)
-import QueryArrow.FO.Types hiding (instantiate)
-import QueryArrow.FO.Utils
-import QueryArrow.FO.ResultValue
+import QueryArrow.Syntax.Data hiding (Subst(..), var)
+import QueryArrow.Syntax.Types
+import QueryArrow.Syntax.Utils
+import QueryArrow.Semantics.ResultValue
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
 import QueryArrow.ListUtils

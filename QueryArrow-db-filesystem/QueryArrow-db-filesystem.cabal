@@ -41,10 +41,12 @@ library
                    QueryArrow-common,
                    QueryArrow-rpc-common,
                    data-msgpack,
+                   conduit,
                    resource-pool,
                    async-pool,
                    vector,
                    network,
-                   unix
+                   unix,
+                   data-some
   ghc-options:     -Wall -fPIC
   other-modules:

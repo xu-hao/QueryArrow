@@ -4,18 +4,28 @@ module QueryArrow.Remote.NoTranslation.Server where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
 import Foreign.StablePtr
 import Control.Monad.Trans.Resource
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
 import QueryArrow.Remote.Definitions
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Types
 import Control.Exception.Lifted (catch, SomeException)
+import Data.Conduit.List (sourceList)
+
 
 runQueryArrowServer :: forall db a. (Channel a, SendType a ~ RemoteResultSet, ReceiveType a ~ RemoteCommand,
         DBFormulaType db ~ FormulaT,
-        RowType (StatementType (ConnectionType db)) ~ MapResultRow, IDatabase db) => a -> db -> ResourceT IO ()
+        ResultSetRowType (ResultSetType (StatementType (ConnectionType db))) ~ VectorResultRow AbstractResultValue,
+        ResultSetTransType (ResultSetType (StatementType (ConnectionType db))) ~ ResultSetTransformer AbstractResultValue,
+        InputRowType (StatementType (ConnectionType db)) ~ VectorResultRow AbstractResultValue,
+        IDatabase db) => a -> db -> ResourceT IO ()
 runQueryArrowServer chan db = do
   cmd <- liftIO $ receive chan
   case cmd of
@@ -59,12 +69,13 @@ runQueryArrowServer chan db = do
               dbRollback conn
               return UnitResult
               ) (\e -> return (ErrorResult (-1, show (e::SomeException))))
-        DBStmtExec connSP (NTDBQuery vars2 form vars) rows ->
+        DBStmtExec connSP (NTDBQuery vars2 form vars) hdr rows ->
           catch (do
             (_, conn, _) <- liftIO $ deRefStablePtr (castPtrToStablePtr connSP :: StablePtr (db, ConnectionType db, ReleaseKey))
             qu <- liftIO $ translateQuery db vars2 form vars
             stmt <- liftIO $ prepareQuery conn qu
-            rows' <- getAllResultsInStream (dbStmtExec stmt (listResultStream rows))
+            rset <- liftIO $ dbStmtExec stmt (ResultStreamResultSet RSId hdr (ResultStream (sourceList rows)))
+            rows' <- getAllResultsInStream (toResultStream rset)
             liftIO $ dbStmtClose stmt
             return (RowListResult rows')
             ) (\e -> return (ErrorResult (-1, show (e::SomeException))))

@@ -23,8 +23,9 @@ library
                    parsec,
                    text,
                    base64-bytestring,
-                   unix,
+                   vector,
                    data-msgpack,
+                   data-some,
                    log-adapter,
                    QueryArrow-common,
                    QueryArrow-ffi-service

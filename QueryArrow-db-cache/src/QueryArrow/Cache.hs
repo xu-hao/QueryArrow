@@ -2,12 +2,10 @@
 module QueryArrow.Cache where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import QueryArrow.QueryPlan
 import QueryArrow.Plugin
-import QueryArrow.Data.Heterogeneous.List
-import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Config
 
 import Prelude  hiding (lookup)
@@ -17,7 +15,6 @@ import Data.Cache.LRU.IO
 import System.Log.Logger
 import Data.Aeson
 import GHC.Generics
-import Data.Maybe
 
 type TransCache query = AtomicLRU (Set Var, FormulaT, Set Var) query
 
@@ -77,7 +74,7 @@ instance ToJSON ICATCacheConnInfo
 instance FromJSON ICATCacheConnInfo
 
 data CachePlugin = CachePlugin
-instance Plugin CachePlugin row where
+instance Plugin CachePlugin trans row where
   getDB _ getDB0 ps = do
     let fsconf = getDBSpecificConfig ps
     db0 <- getDB0 (cache_db_plugin fsconf)

@@ -31,15 +31,14 @@ data Command = Begin | Prepare | Commit | Rollback | Execute Formula
 -}
 
 
-class (ResultSet (ResultSetType stmt), ResultSetRowType (ResultSetType stmt) ~ RowType stmt) => IDBStatement stmt where
+class (ResultSet (ResultSetType stmt)) => IDBStatement stmt where
     type InputRowType stmt
-    type RowType stmt
     type ResultSetType stmt
     -- give a stream of stores, return a stream of combined stores
-    dbStmtExec :: (ResultSet b, ResultSetRowType b ~ InputRowType stmt) => stmt -> b -> IO (ResultSetType stmt)
+    dbStmtExec :: (ResultSet b, ResultSetRowType b ~ InputRowType stmt, ResultSetTransType b ~ ResultSetTransType (ResultSetType stmt)) => stmt -> b -> IO (ResultSetType stmt)
     dbStmtClose :: stmt -> IO ()
 
-data AbstractDBStatement trans inputrow row = forall stmt. (IDBStatement stmt, trans ~ ResultSetTransType (ResultSetType stmt), row ~ RowType stmt, inputrow ~ InputRowType stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
+data AbstractDBStatement trans inputrow row = forall stmt. (IDBStatement stmt, trans ~ ResultSetTransType (ResultSetType stmt), row ~ ResultSetRowType (ResultSetType stmt), inputrow ~ InputRowType stmt) => AbstractDBStatement {unAbstractDBStatement :: stmt}
 
 
 -- connection
@@ -82,7 +81,7 @@ class (IDBConnection (ConnectionType db)) => IDatabase2 db where
 class (IDatabase0 db, IDatabase1 db, IDatabase2 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db where
 
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
-data AbstractDatabase trans row form = forall db. (IDatabase db, row ~ RowType (StatementType (ConnectionType db)), form ~ DBFormulaType db, ResultSetTransType (ResultSetType (StatementType (ConnectionType db))) ~ trans, InputRowType (StatementType (ConnectionType db)) ~ row) => AbstractDatabase { unAbstractDatabase :: db }
+data AbstractDatabase trans row form = forall db. (IDatabase db, row ~ ResultSetRowType (ResultSetType (StatementType (ConnectionType db))), form ~ DBFormulaType db, ResultSetTransType (ResultSetType (StatementType (ConnectionType db))) ~ trans, InputRowType (StatementType (ConnectionType db)) ~ row) => AbstractDatabase { unAbstractDatabase :: db }
 
 instance IDatabase0 (AbstractDatabase trans row form) where
     type DBFormulaType (AbstractDatabase trans row form) = form
@@ -98,7 +97,7 @@ checkQuery db vars2 qu vars = do
   typeCheckFormula ptm vtm qu
 
 -- | Runs query/update and returns a result set, without commit. The result set may pull rows lazily from the connection.
-doQueryWithConnResultSet :: forall db a . (IDatabase db, DBFormulaType db ~ FormulaT, ResultSet a, ResultSetRowType a ~ InputRowType (StatementType (ConnectionType db))) =>
+doQueryWithConnResultSet :: forall db a . (IDatabase db, DBFormulaType db ~ FormulaT, ResultSet a, ResultSetRowType a ~ InputRowType (StatementType (ConnectionType db)), ResultSetTransType a ~ ResultSetTransType (ResultSetType (StatementType (ConnectionType db)))) =>
                     db -> ConnectionType db -> VarTypeMap -> Formula -> VarTypeMap -> a ->
                     IO (ResultSetType (StatementType (ConnectionType db)))
 doQueryWithConnResultSet db conn vars2 qu vars  rs = do
@@ -110,18 +109,18 @@ doQueryWithConnResultSet db conn vars2 qu vars  rs = do
       stmt <- prepareQuery conn qu'
       dbStmtExec stmt rs
 
-doQuery :: (IDatabase db, DBFormulaType db ~ FormulaT, ResultSet a, ResultSetRowType a ~ InputRowType (StatementType (ConnectionType db))) =>
+doQuery :: (IDatabase db, DBFormulaType db ~ FormulaT, ResultSet a, ResultSetRowType a ~ InputRowType (StatementType (ConnectionType db)), ResultSetTransType a ~ ResultSetTransType (ResultSetType (StatementType (ConnectionType db)))) =>
             db -> VarTypeMap -> Formula -> VarTypeMap -> a ->
-            IO (HeaderType (RowType (StatementType (ConnectionType db))), DBResultStream (RowType (StatementType (ConnectionType db))))
+            IO (HeaderType (ResultSetRowType (ResultSetType (StatementType (ConnectionType db)))), DBResultStream (ResultSetRowType (ResultSetType (StatementType (ConnectionType db)))))
 doQuery db vars2 qu vars rs = do
         conn <- dbOpen db
         (hdr, ResultStream rs2) <- onException (doQueryWithConn db conn vars2 qu vars rs) (dbClose conn)
         return (hdr, ResultStream (bracketP (return conn) dbClose (const rs2)))
 
 -- | Runs query/update and returns a result stream. Adds commit at the end of the stream.
-doQueryWithConn :: forall db a . (IDatabase db, DBFormulaType db ~ FormulaT, ResultSet a, ResultSetRowType a ~ InputRowType (StatementType (ConnectionType db))) =>
+doQueryWithConn :: forall db a . (IDatabase db, DBFormulaType db ~ FormulaT, ResultSet a, ResultSetRowType a ~ InputRowType (StatementType (ConnectionType db)), ResultSetTransType a ~ ResultSetTransType (ResultSetType (StatementType (ConnectionType db)))) =>
                     db -> ConnectionType db -> VarTypeMap -> Formula -> VarTypeMap -> a ->
-                    IO (HeaderType (RowType (StatementType (ConnectionType db))), DBResultStream (RowType (StatementType (ConnectionType db))))
+                    IO (HeaderType (ResultSetRowType (ResultSetType (StatementType (ConnectionType db)))), DBResultStream (ResultSetRowType (ResultSetType (StatementType (ConnectionType db)))))
 doQueryWithConn db conn vars2 qu vars  rs = do
       rset <- doQueryWithConnResultSet db conn vars2 qu vars rs
       let hdr = getHeader rset

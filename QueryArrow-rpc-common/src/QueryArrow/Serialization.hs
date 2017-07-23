@@ -1,29 +1,39 @@
 {-# LANGUAGE DeriveGeneric, StandaloneDeriving, FlexibleInstances #-}
 module QueryArrow.Serialization where
 
-import Data.MessagePack
+import Data.MessagePack hiding (Some)
 import GHC.Generics
 import Data.Namespace.Path
 import Data.Set (Set, fromList, toAscList)
 import Data.ByteString (ByteString)
-import Data.Text.Encoding
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Aeson
 import Data.Int
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as B8
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Data.Some
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.AbstractResultSet
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
 import QueryArrow.DB.DB
 import QueryArrow.Utils
 import QueryArrow.FFI.Service
 
-data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show, Read, Eq)
+data ResultSet = ResultSet {
+    errorstr :: String,
+    results :: [VectorResultRow AbstractResultValue]
+} deriving (Generic, Show, Read, Eq)
 
 data QuerySet = QuerySet {
     qsheaders :: Set Var,
     qsquery :: DynCommand,
-    qsparams :: MapResultRow
+    qsparamheaders :: ResultHeader,
+    qsparams :: VectorResultRow AbstractResultValue
 } deriving (Generic, Show, Read)
 
 data DynCommand = Quit | Dynamic String | Static [Command] deriving (Generic, Show, Read)
@@ -44,7 +54,6 @@ deriving instance Generic (Expr0 a)
 deriving instance Generic Expr
 deriving instance Generic Aggregator
 deriving instance Generic Summary
-deriving instance Generic ConcreteResultValue
 deriving instance Show Command
 deriving instance Read Command
 
@@ -77,6 +86,7 @@ instance MessagePack Atom
 instance MessagePack Pred
 instance MessagePack PredType
 instance MessagePack PredKind
+instance MessagePack CastType
 instance MessagePack ParamType
 instance MessagePack a => MessagePack (Expr0 a)
 instance MessagePack Expr
@@ -87,6 +97,12 @@ instance MessagePack Command
 instance MessagePack DynCommand
 instance MessagePack ResultSet
 instance MessagePack QuerySet
+instance MessagePack ConcreteResultValue
+instance MessagePack AbstractResultValue where
+  toObject (Some a) = toObject (toConcreteResultValue a)
+  fromObject a = do
+    rv <- fromObject a
+    return (Some (rv :: ConcreteResultValue))
 
 instance FromJSON (ObjectPath String) where
     parseJSON str = do
@@ -143,10 +159,10 @@ instance ToJSON QuerySet
 
 instance FromJSON ConcreteResultValue
 instance FromJSON AbstractResultValue where
-  parseJSON a = (AbstractResultValue :: ConcreteResultValue -> AbstractResultValue) <$> parseJSON a
+  parseJSON a = (Some :: ConcreteResultValue -> AbstractResultValue) <$> parseJSON a
 instance ToJSON ConcreteResultValue
 instance ToJSON AbstractResultValue where
-  toJSON (AbstractResultValue a) = toJSON (toConcreteResultValue a)
+  toJSON (Some a) = toJSON (toConcreteResultValue a)
 
 instance FromJSON ByteString where
   parseJSON a = do
@@ -158,7 +174,7 @@ instance FromJSON ByteString where
 instance ToJSON ByteString where
   toJSON a = toJSON (B8.unpack (B64.encode a))
 
-resultSet :: [MapResultRow] -> ResultSet
+resultSet :: [VectorResultRow AbstractResultValue] -> ResultSet
 resultSet rows =
     ResultSetNormal rows
 

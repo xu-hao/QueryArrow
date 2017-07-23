@@ -21,7 +21,7 @@ library
                    scientific,
                    array,
                    process,
-                   
+
                    resourcet,
                    time,
                    hslogger,
@@ -31,6 +31,8 @@ library
                    monad-logger,
                    fast-logger,
                    constraints,
+                   conduit,
+                   vector,
                    either,
                    QueryArrow-common,
                    QueryArrow,

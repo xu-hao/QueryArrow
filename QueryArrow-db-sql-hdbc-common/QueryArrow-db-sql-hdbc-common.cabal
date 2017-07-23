@@ -18,9 +18,11 @@ library
                    convertible,
                    text >= 1.2.1.1,
                    hslogger,
+                   vector,
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
+                   data-some,
                    QueryArrow-db-sql-common,
                    QueryArrow-common
   ghc-options:     -Wall -fPIC

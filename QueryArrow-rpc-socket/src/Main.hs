@@ -9,7 +9,7 @@ import Prelude hiding (lookup)
 import System.Log.Logger
 import QueryArrow.Logging
 import QueryArrow.Control.Monad.Logger.HSLogger ()
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Types
 import Options.Applicative hiding (Success)
 import Data.Maybe
 import Data.Map.Strict
@@ -18,6 +18,9 @@ import QueryArrow.RPC.Service.Service.TCP
 import QueryArrow.RPC.Service.Service.UDS
 import QueryArrow.RPC.Service.Service.HTTP
 import QueryArrow.RPC.Service.FileSystem.TCP
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
 import Data.Monoid ((<>))
 
 main::IO()
@@ -44,7 +47,7 @@ serviceMap = fromList [
     ("file system/tcp", AbstractRPCService FileSystemRPCService)
     ]
 
-runtcpmulti :: AbstractDatabase MapResultRow FormulaT -> [DBServer] -> IO ()
+runtcpmulti :: AbstractDatabase (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) FormulaT -> [DBServer] -> IO ()
 runtcpmulti db pss = mapM_ (\ps0 -> do
     let protocol = server_protocol ps0
     case lookup protocol serviceMap of

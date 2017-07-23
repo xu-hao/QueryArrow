@@ -5,12 +5,12 @@ module QueryArrow.ElasticSearch.ESQL where
 -- http://swizec.com/blog/writing-a-rest-client-in-haskell/swizec/6152
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (lookup, fromList, Map, keys)
+import Data.Map.Strict (lookup, fromList, Map)
 import Data.Text (Text)
 import Data.Set (toAscList)
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import QueryArrow.DB.GenericDatabase
 
 import Debug.Trace

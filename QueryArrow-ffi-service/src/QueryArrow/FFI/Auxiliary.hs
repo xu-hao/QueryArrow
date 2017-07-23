@@ -2,8 +2,13 @@
 
 module QueryArrow.FFI.Auxiliary where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Data.Some
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)
@@ -15,13 +20,9 @@ import Control.Monad.Error.Class (throwError)
 import Control.Monad.IO.Class (liftIO)
 import Data.Int
 import QueryArrow.FFI.Service
-import Data.Text.Encoding
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.ByteString.UTF8 as BSUTF8
-import Control.Exception
-import Database.HDBC
-import System.Log.Logger (debugM, errorM)
-import Debug.Trace
-import QueryArrow.Utils
+import qualified Data.Vector as V
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -808000
@@ -48,93 +49,81 @@ convertException e =
                         let errstr = show e in
                             (-1, Text.pack("catchErrors: SomeException = " ++ errstr))
 
-execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
-execAbstract svc session form params = do
-  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form) 
-  r <- liftIO $ catchErrors (runEitherT (execQuery svc session form params))
+execAbstract :: QueryArrowService b -> b -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO ()
+execAbstract svc session form hdr params = do
+  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form)
+  r <- liftIO $ catchErrors (runEitherT (execQuery svc session form hdr params))
   case r of
     Left err -> do
       liftIO $ errorM "FFI" ("execAbstract: ++++++++++++++++++++++++++++ caught error " ++ show err)
       throwError err
     Right a -> return a
 
-getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow]
-getAllResultAbstract svc session vars form params = do
+getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [MapResultRow]
+getAllResultAbstract svc session vars form hdr params = do
   liftIO $ debugM "FFI" ("getAllResultValues: form " ++ serialize form)
-  r <- liftIO $ catchErrors (runEitherT (getAllResult svc session vars form params))
+  r <- liftIO $ catchErrors (runEitherT (getAllResult svc session vars form hdr params))
   case r of
     Left err -> do
       liftIO $ errorM "FFI" ("getAllResultValues: caught error " ++ show err)
       throwError err
     Right a -> return a
 
-getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> Int -> EitherT Error IO [MapResultRow]
-getSomeResults svc session vars form params n =
-  getAllResultAbstract svc session vars (Aggregate (Limit n) form) params
+getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> Int -> EitherT Error IO [MapResultRow]
+getSomeResults svc session vars form hdr params n =
+  getAllResultAbstract svc session vars (Aggregate (Limit n) form) hdr params
 
-getResultValues :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [AbstractResultValue]
-getResultValues svc session vars form params = do
-  count <- getSomeResults svc session vars form params 1
+getResultValues :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO (VectorResultRow AbstractResultValue)
+getResultValues svc session vars form hdr params = do
+  count <- getSomeResults svc session vars form hdr params 1
   case count of
-      row : _ -> case mapM (\var -> lookup var row) vars of
-                  Just r -> return r
-                  Nothing -> do
-                    liftIO $ errorM "FFI" ("cannot find var " ++ show vars ++ " in map " ++ show row)
-                    throwError (eNULL, pack ("cannot find var " ++ show vars ++ " in map " ++ show row))
+      row : _ -> return row
       _ -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
 
-getAllResultValues :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
-getAllResultValues svc session vars form params = do
-  count <- getAllResultAbstract svc session vars form params
+getAllResultValues :: QueryArrowService b -> b -> [Var] -> Formula  -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [VectorResultRow AbstractResultValue]
+getAllResultValues svc session vars form hdr params = do
+  count <- getAllResult svc session vars form hdr params
   case count of
       [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
-      rows ->
-          case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
-              Just r -> return r
-              Nothing -> do
-                liftIO $ errorM "FFI" ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
-                throwError (eNULL, pack ("cannot find var " ++ show vars ++ " in maps " ++ show rows))
+      rows -> return rows
 
-getSomeResultValues :: QueryArrowService b -> b -> Int -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO [[AbstractResultValue]]
-getSomeResultValues svc session n vars form params = do
-  count <- getSomeResults svc session vars form params (n `div` length vars)
+getSomeResultValues :: QueryArrowService b -> b -> Int -> [Var] -> Formula  -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [VectorResultRow AbstractResultValue]
+getSomeResultValues svc session n vars form hdr params = do
+  count <- getSomeResults svc session vars form hdr params (n `div` length vars)
   case count of
       [] -> throwError (eCAT_NO_ROWS_FOUND, "error 2")
-      rows ->
-          case mapM (\row -> mapM (\var -> lookup var row) vars) rows of
-              Just r -> return r
-              Nothing -> do
-                liftIO $ errorM "FFI" ("cannot find var " ++ show vars ++ " in maps " ++ show rows)
-                throwError (eNULL, pack ("cannot find var " ++ show vars ++ " in maps " ++ show rows))
+      rows -> return rows
 
-getIntResult :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO Int64
-getIntResult svc session vars form params = do
-    r:_ <- getResultValues svc session vars form params
+getIntResult :: QueryArrowService b -> b ->[ Var ]-> Formula  -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO Int64
+getIntResult svc session vars form hdr params = do
+    row <- getResultValues svc session vars form hdr params
+    let r = V.head row
     return (resultValueToInt r)
 
-getStringResult :: QueryArrowService b -> b -> [Var] -> Formula  -> MapResultRow -> EitherT Error IO Text
-getStringResult svc session vars form params = do
-    r:_ <- getResultValues svc session vars form params
+getStringResult :: QueryArrowService b -> b -> [Var ]-> Formula  -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO Text
+getStringResult svc session vars form hdr params = do
+    row <- getResultValues svc session vars form hdr params
+    let r = V.head row
     return (resultValueToString r)
 
-getStringArrayResult :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [Text]
-getStringArrayResult svc session vars form params = do
-    r <- getResultValues svc session vars form params
-    return (map resultValueToString r)
+getStringArrayResult :: QueryArrowService b -> b -> [Var] -> Formula  -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO (V.Vector Text)
+getStringArrayResult svc session vars form hdr params = do
+    row <- getResultValues svc session vars form hdr params
+    return (V.map resultValueToString row)
 
-getSomeStringArrayResult :: QueryArrowService b -> b -> Int -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [[Text]]
-getSomeStringArrayResult svc session n vars form params = do
-    r <- getSomeResultValues svc session n vars form params
-    return (map (map resultValueToString) r)
+getSomeStringArrayResult :: QueryArrowService b -> b -> Int -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [V.Vector Text]
+getSomeStringArrayResult svc session n vars form hdr params = do
+    rows <- getSomeResultValues svc session n vars form hdr params
+    return (map (V.map resultValueToString) rows)
 
-getAllStringArrayResult :: QueryArrowService b -> b -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [[Text]]
-getAllStringArrayResult svc session vars form params = do
-    r <- getAllResultValues svc session vars form params
-    return (map (map resultValueToString) r)
+getAllStringArrayResult :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [V.Vector Text]
+getAllStringArrayResult svc session vars form hdr params = do
+    rows <- getAllResultValues svc session vars form hdr params
+    return (map (V.map resultValueToString) rows)
 
 resultValueToInt :: AbstractResultValue -> Int64
 resultValueToInt rv = case rv of
-  AbstractResultValue arv -> case toConcreteResultValue arv of
+  Some arv -> case toConcreteResultValue arv of
     (Int64Value i) -> fromIntegral i
     (StringValue i) -> read (Text.unpack i)
     (ByteStringValue i) -> read (BSUTF8.toString i)
@@ -142,7 +131,7 @@ resultValueToInt rv = case rv of
 
 resultValueToString :: AbstractResultValue -> Text
 resultValueToString rv = case rv of
-  AbstractResultValue arv -> case toConcreteResultValue arv of
+  Some arv -> case toConcreteResultValue arv of
     (Int64Value i) -> Text.pack (show i)
     (StringValue i) -> i
     (ByteStringValue i) -> decodeUtf8 i

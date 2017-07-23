@@ -6,7 +6,7 @@ import Prelude hiding (lookup)
 import Data.Map.Strict hiding (map, elemAt)
 import Data.Text (pack)
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.NoConnection
 

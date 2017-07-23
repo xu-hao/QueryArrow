@@ -7,7 +7,7 @@ import Control.Applicative ((*>), (<*), (<$>), (<*>))
 import System.Environment
 import Language.Haskell.TH
 import QueryArrow.SQL.SQL hiding (schema)
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 
 import SchemaParser
 

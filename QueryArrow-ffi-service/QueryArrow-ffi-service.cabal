@@ -32,7 +32,8 @@ library
                    fast-logger,
                    constraints,
                    either,
-                   HDBC,
+                   data-some,
+                   vector,
                    QueryArrow-common,
                    QueryArrow-db-sql-hdbc-common,
                    template-haskell
