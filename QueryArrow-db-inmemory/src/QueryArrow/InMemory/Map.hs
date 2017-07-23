@@ -1,8 +1,13 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, PatternSynonyms, DeriveGeneric, RankNTypes, GADTs #-}
 module QueryArrow.InMemory.Map where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultRow
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultSet
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin
@@ -92,9 +97,12 @@ data ICATMapDBInfo = ICATMapDBInfo {
 instance ToJSON ICATMapDBInfo
 instance FromJSON ICATMapDBInfo
 
-data NoConnectionDatabasePlugin2 db a = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin2 (String -> String -> String -> a -> db)
+data NoConnectionDatabasePlugin2 db a = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin2 (String -> String -> String -> a -> db)
 
-instance Convertible Value (IO a) => Plugin (NoConnectionDatabasePlugin2 db a) MapResultRow where
+instance (Convertible Value (IO a),
+          ResultSetTransType (NoConnectionResultSetType db) ~ trans,
+          ResultSetRowType (NoConnectionResultSetType db) ~ VectorResultRow AbstractResultValue,
+          NoConnectionInputRowType db ~ VectorResultRow AbstractResultValue) => Plugin (NoConnectionDatabasePlugin2 db a) trans (VectorResultRow AbstractResultValue) where
   getDB (NoConnectionDatabasePlugin2 db) _ ps = do
       let fsconf = getDBSpecificConfig ps
       dbdata <- convert (db_map fsconf)

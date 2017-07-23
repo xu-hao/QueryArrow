@@ -2,9 +2,9 @@
 module QueryArrow.Translation where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
+import QueryArrow.Syntax.Utils
 import QueryArrow.QueryPlan
 import QueryArrow.Rewriting
 import QueryArrow.Config
@@ -184,7 +184,7 @@ instance FromJSON ICATTranslationConnInfo
 
 data TransPlugin = TransPlugin
 
-instance Plugin TransPlugin row where
+instance Plugin TransPlugin trans row where
   getDB _ getDB0 ps = do
     let fsconf = getDBSpecificConfig ps
     db0 <- getDB0 (trans_db_plugin fsconf)

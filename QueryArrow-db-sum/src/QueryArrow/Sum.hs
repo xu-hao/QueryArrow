@@ -3,15 +3,21 @@
 module QueryArrow.Sum where
 
 import QueryArrow.DB.DB
-import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultHeader
+import QueryArrow.Semantics.ResultRow
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Semantics.ResultSet.AbstractResultSet
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import QueryArrow.QueryPlan
 import QueryArrow.ListUtils
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.Plugin
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Config
+import QueryArrow.Data.Some
 
 import Prelude  hiding (lookup)
 import Control.Applicative ((<$>))
@@ -67,43 +73,44 @@ printQueryPlan qp = do
     infoM "QA" ("query plan:")
     infoM "QA" (drawTree (toTree  qp))
 
-instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, Num (ElemType row), Ord (ElemType row)) => IDBStatement (QueryPlan3 row) where
-    type RowType (QueryPlan3 row) = row
+instance (IResultRow row, HeaderType row ~ ResultHeader, Num (ElemType row), Ord (ElemType row), Coherent trans row) => IDBStatement (QueryPlan3 trans row) where
+    type ResultSetType (QueryPlan3 trans row) = AbstractResultSet trans row
+    type InputRowType (QueryPlan3 trans row) = row
     dbStmtClose qp = closeQueryPlan qp
-    dbStmtExec qp hdr rs hdr2 = execQueryPlan hdr rs qp hdr2
+    dbStmtExec qp rset = execQueryPlan rset qp
 
-data SumDB row l where
-   SumDB :: String -> HList l -> SumDB row l
+data SumDB trans row l where
+   SumDB :: String -> HList l -> SumDB trans row l
 
-instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need undecidable instance
-    type DBFormulaType (SumDB row l) = FormulaT
+instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB trans row l ) where -- need undecidable instance
+    type DBFormulaType (SumDB trans row l) = FormulaT
     getName (SumDB name _ ) = name
     getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
     supported _ _ _ _ = True
-instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula FormulaT) l) => IDatabase1 (SumDB row l) where
-    type DBQueryType (SumDB row l) = QueryPlanT l
+instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula FormulaT) l) => IDatabase1 (SumDB trans row l) where
+    type DBQueryType (SumDB trans row l) = QueryPlanT l
     translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include retvars) form vars
 
-instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                      IDBConnection (HMap ConnectionType l)) => IDatabase2 (SumDB row l) where
-    data ConnectionType (SumDB row l ) = SumDBConnection (HList' ConnectionType l)
-    dbOpen (SumDB _ dbs) = SumDBConnection <$> hMapACULL @(IDatabaseUniformRow row) @ConnectionType dbOpen dbs
+instance (IResultRow row, HeaderType row ~ ResultHeader, HMapConstraint (IDatabaseUniformRow trans row) l, HMapConstraint
+                      IDBConnection (HMap ConnectionType l), Coherent trans row) => IDatabase2 (SumDB trans row l) where
+    data ConnectionType (SumDB trans row l ) = SumDBConnection (HList' ConnectionType l)
+    dbOpen (SumDB _ dbs) = SumDBConnection <$> hMapACULL @(IDatabaseUniformRow trans row) @ConnectionType dbOpen dbs
 
-instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
+instance (IResultRow row, HeaderType row ~ ResultHeader, HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow trans row) l, HMapConstraint
                       (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint
-                      IDBConnection (HMap ConnectionType l)) => IDatabase (SumDB row l)
+                      IDBConnection (HMap ConnectionType l), Coherent trans row) => IDatabase (SumDB trans row l)
 
-instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) => IDBConnection0 (ConnectionType (SumDB row l )) where
+instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) => IDBConnection0 (ConnectionType (SumDB trans row l )) where
     dbClose (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbClose dbs
     dbBegin (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbBegin dbs
     dbCommit (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection)  dbCommit dbs
     dbPrepare (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbPrepare dbs
     dbRollback (SumDBConnection dbs  ) = hMapACUL'_ @IDBConnection dbRollback dbs
 
-instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                      IDBConnection (HMap ConnectionType l)) => IDBConnection (ConnectionType (SumDB row l )) where
-    type QueryType (ConnectionType (SumDB row l )) = QueryPlanT l
-    type StatementType (ConnectionType (SumDB row l )) = QueryPlan3 row
+instance (IResultRow row, HeaderType row ~ ResultHeader, HMapConstraint (IDatabaseUniformRow trans row) l, HMapConstraint
+                      IDBConnection (HMap ConnectionType l), Coherent trans row) => IDBConnection (ConnectionType (SumDB trans row l )) where
+    type QueryType (ConnectionType (SumDB trans row l )) = QueryPlanT l
+    type StatementType (ConnectionType (SumDB trans row l )) = QueryPlan3 trans row
     prepareQuery (SumDBConnection conns ) qu =
         prepareQueryPlan conns qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)
@@ -116,7 +123,7 @@ data SumPluginConfig = SumPluginConfig {
 instance FromJSON SumPluginConfig
 instance ToJSON SumPluginConfig
 
-instance (IResultRow row, ResultRowHeader row ~ ResultStreamHeader) => Plugin SumPlugin row where
+instance (IResultRow row, HeaderType row ~ ResultHeader, Coherent trans row) => Plugin SumPlugin trans row where
   getDB _  getDB0 ps0 = do
     let ps = case fromJSON (fromJust (db_config ps0)) of
                 Error err -> error err

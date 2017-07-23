@@ -2,11 +2,12 @@
 
 module QueryArrow.FFI.C.PluginGen where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Utils
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultValue
 import QueryArrow.FFI.C.Template
 import QueryArrow.Config
 import QueryArrow.Utils(constructDBPredMap)

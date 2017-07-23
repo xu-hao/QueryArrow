@@ -10,7 +10,7 @@ class (ResultSet (NoConnectionResultSetType db)) => INoConnectionDatabase2 db wh
     type NoConnectionQueryType db
     type NoConnectionResultSetType db
     type NoConnectionInputRowType db
-    noConnectionDBStmtExec :: (ResultSet a, NoConnectionInputRowType db ~ ResultSetRowType a) =>
+    noConnectionDBStmtExec :: (ResultSet a, NoConnectionInputRowType db ~ ResultSetRowType a, ResultSetTransType (NoConnectionResultSetType db) ~ ResultSetTransType a) =>
       db -> NoConnectionQueryType db -> a -> IO (NoConnectionResultSetType db)
 
 -- instance for IDatabase
@@ -52,7 +52,6 @@ instance (INoConnectionDatabase2 db) => IDBConnection (ConnectionType (NoConnect
 data NoConnectionDBStatement db = NoConnectionDBStatement db (NoConnectionQueryType db)
 
 instance (INoConnectionDatabase2 db) => IDBStatement (NoConnectionDBStatement db) where
-    type RowType (NoConnectionDBStatement db) = ResultSetRowType (NoConnectionResultSetType db)
     type InputRowType (NoConnectionDBStatement db) = NoConnectionInputRowType db
     type ResultSetType (NoConnectionDBStatement db) = NoConnectionResultSetType db
     dbStmtClose _ = return ()

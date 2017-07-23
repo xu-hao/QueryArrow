@@ -8,6 +8,9 @@ import QueryArrow.SQL.HDBC
 import QueryArrow.SQL.SQL
 import QueryArrow.SQL.ICAT
 import QueryArrow.Plugin
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.DB.AbstractDatabaseList
 
@@ -50,7 +53,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 
 data SQLite3Plugin = SQLite3Plugin
 
-instance Plugin SQLite3Plugin MapResultRow where
+instance Plugin SQLite3Plugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) where
   getDB _ _ ps = do
       let fsconf = getDBSpecificConfig ps
       let db = makeICATSQLDBAdapter (db_namespace fsconf) (db_predicates fsconf) (db_sql_mapping fsconf) Nothing (SQLiteDB fsconf)

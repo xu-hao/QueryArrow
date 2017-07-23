@@ -511,7 +511,7 @@ hDbOpen dbs =
         hMapACULL @IDatabase @ConnectionType dbo dbs
 
 
-type CDatabaseUniformRow trans row conn = (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row, InputRowType (StatementType (ConnectionType conn)) ~ row, ResultSetTransType (ResultSetType (StatementType (ConnectionType conn))) ~ trans)
+type CDatabaseUniformRow trans row conn = (IDatabase conn, ResultSetRowType (ResultSetType (StatementType (ConnectionType conn))) ~ row, InputRowType (StatementType (ConnectionType conn)) ~ row, ResultSetTransType (ResultSetType (StatementType (ConnectionType conn))) ~ trans)
 class CDatabaseUniformRow trans row conn => IDatabaseUniformRow trans row conn
 instance CDatabaseUniformRow trans row conn => IDatabaseUniformRow trans row conn
 
@@ -571,7 +571,7 @@ execQueryPlan r (QPSequencing2 _ qp1 qp2) = do
 
 execQueryPlan  rset (QPChoice2 qpd qp1 qp2)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultSetResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
         let rset2 = oneRowResultSet hdr row
         rset3 <- liftIO $ execQueryPlan rset2 qp1
@@ -585,7 +585,7 @@ execQueryPlan  rset (QPChoice2 qpd qp1 qp2)  =
 
 execQueryPlan  rset (QPPar2 qpd qp1 qp2)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultSetResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
         let rset2 = oneRowResultSet hdr row
         (rset3, rset4) <- liftIO $ concurrently (execQueryPlan rset2 qp1) (execQueryPlan rset2 qp2)
@@ -598,13 +598,13 @@ execQueryPlan  rset (QPPar2 qpd qp1 qp2)  =
 
 execQueryPlan  r (QPOne2 _)  = return (AbstractResultSet r)
 execQueryPlan  rset (QPZero2 qpd)  =
-  let hdrout = toHeader (combinedvs qpd) in
+  let hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= sinkNull))))
 execQueryPlan  rs (QPAggregate2 qpd (FReturn vars) qp)  =
     execQueryPlan  rs qp  -- if combinedvs is calculated correctly, this should not need further transformation
 execQueryPlan  rset (QPAggregate2 qpd Not qp)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp
@@ -613,7 +613,7 @@ execQueryPlan  rset (QPAggregate2 qpd Not qp)  =
           when b $ yield row)))))
 execQueryPlan  rset (QPAggregate2 qpd Exists qp)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp
@@ -622,7 +622,7 @@ execQueryPlan  rset (QPAggregate2 qpd Exists qp)  =
           when (not b) $ yield row)))))
 execQueryPlan  rset (QPAggregate2 qpd (Summarize funcs groupby) qp) =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp
@@ -659,7 +659,7 @@ execQueryPlan  rset (QPAggregate2 qpd (Summarize funcs groupby) qp) =
           sourceList  (map (\updates -> updateRow updates hdr row) updatess))))))
 execQueryPlan rset (QPAggregate2 qpd (Limit n) qp)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp
@@ -669,7 +669,7 @@ execQueryPlan rset (QPAggregate2 qpd (Limit n) qp)  =
             sinkNull)))))
 execQueryPlan  rset (QPAggregate2 qpd Distinct qp)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp
@@ -678,7 +678,7 @@ execQueryPlan  rset (QPAggregate2 qpd Distinct qp)  =
           sourceList (nub l))))))
 execQueryPlan  rset (QPAggregate2 qpd (OrderByAsc v1) qp)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp
@@ -688,7 +688,7 @@ execQueryPlan  rset (QPAggregate2 qpd (OrderByAsc v1) qp)  =
           sourceList rows')))))
 execQueryPlan  rset (QPAggregate2 qpd (OrderByDesc v1) qp)  =
   let hdr = getHeader rset
-      hdrout = toHeader (combinedvs qpd) in
+      hdrout = toHeader (toAscList (combinedvs qpd)) in
       return (AbstractResultSet (ResultStreamResultSet mempty hdrout (ResultStream (runResultStream (toResultStream rset) =$= awaitForever (\row -> do
           let rset2 = oneRowResultSet hdr row
           rset3 <- liftIO $ execQueryPlan rset2 qp

@@ -1,8 +1,11 @@
 {-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 module QueryArrow.FileSystem.Query where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Semantics.ResultHeader
 import QueryArrow.DB.DB
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FileSystem.Builtin
@@ -742,7 +745,7 @@ fsTranslateQuery  _ ret (FInsert2 _ (Lit Neg (Atom (DirObjectPredName _) [arg]))
 fsTranslateQuery _ _ query _ = error ("fsTranslateQuery: cannot translate query" ++ show query)
 
 instance IGenericDatabase01 FileSystemTrans where
-    type GDBQueryType FileSystemTrans = FSProgram ()
+    type GDBQueryType FileSystemTrans = (ResultHeader, FSProgram ())
     type GDBFormulaType FileSystemTrans = FormulaT
-    gTranslateQuery trans ret query env = return (fsTranslateQuery trans ret query env)
+    gTranslateQuery trans ret query env = return (toHeader (Set.toAscList ret), fsTranslateQuery trans ret query env)
     gSupported (FileSystemTrans _ _ ns) ret form env = fsSupported ns form env

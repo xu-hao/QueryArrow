@@ -6,6 +6,9 @@ import QueryArrow.Config
 import QueryArrow.Plugin
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Data.Heterogeneous.List
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
 import QueryArrow.FileSystem.Query
 import QueryArrow.FileSystem.ICAT
 import QueryArrow.FileSystem.Connection ()
@@ -28,7 +31,7 @@ data ICATFSConnInfo = ICATFSConnInfo {
 
 data FileSystemPlugin = FileSystemPlugin
 
-instance Plugin FileSystemPlugin MapResultRow where
+instance Plugin FileSystemPlugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) where
   getDB _ _ ps = do
       let conn = FileSystemConnInfo
       let fsconf = getDBSpecificConfig ps

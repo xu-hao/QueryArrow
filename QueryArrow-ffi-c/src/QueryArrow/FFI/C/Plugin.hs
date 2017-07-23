@@ -2,11 +2,17 @@
 
 module QueryArrow.FFI.C.Plugin where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Utils
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultHeader
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Data.Some
 import QueryArrow.FFI.C.Template
 import QueryArrow.Config
 import QueryArrow.Utils(constructDBPredMap)
@@ -37,6 +43,7 @@ import Control.Monad (foldM)
 import QueryArrow.Logging
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
+import qualified Data.Vector as V
 
 foreign export ccall hs_setup :: IO ()
 hs_setup :: IO ()
@@ -152,10 +159,9 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
     let updateform wherecol | wherecol /= "data_id" && wherecol /= "resc_id" = updateatom "u_" wherecol
                             | otherwise = error ("cannot update " ++ wherecol)
     let update = foldl (.*.) cond (map updateform updatecols)
-    let whereparam col val = (Var ("w_" ++ col), AbstractResultValue (StringValue (pack val)))
-    let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
-    let params = Map.fromList (zipWith whereparam wherecols wherevals) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execQuery svc session ( update) params) (const (return ()))
+    let hdr = V.fromList (map (\col -> Var ("w_" ++ col)) wherecols <> map (\col -> Var ("u_" ++ col)) updatecols)
+    let params = V.fromList (map (\val -> Some (StringValue (pack val))) wherevals <> map (\val -> Some (StringValue (pack val))) updatevals)
+    processRes (execQuery svc session ( update) hdr params) (const (return ()))
 
 foreign export ccall hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
 hs_modify_coll :: StablePtr (QueryArrowService a) -> StablePtr a -> Ptr CString -> Ptr CString -> Int -> CString -> IO Int
@@ -181,13 +187,13 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
               p @@+ [var "cid", wherecol]
     let updateform updatecol = updateatom updatecol
     let update = foldl (.*.) cond (map updateform updatecols)
-    let updateparam col val = (Var ("u_" ++ col), AbstractResultValue (StringValue (pack val)))
-    let params = Map.singleton (Var "w_coll_name") (AbstractResultValue (StringValue (pack cn))) <> Map.fromList (zipWith updateparam updatecols updatevals)
-    processRes (execQuery svc session ( update) params) (const (return ()))
+    let hdr =  V.fromList  (Var "w_coll_name" : map (\col -> Var ("u_" ++ col)) updatecols)
+    let params = V.fromList (Some (StringValue (pack cn)) : map (\val -> Some (StringValue (pack val))) updatevals)
+    processRes (execQuery svc session ( update) hdr params) (const (return ()))
 
-mapResultRowToList :: [Var] -> MapResultRow -> [AbstractResultValue]
-mapResultRowToList vars r =
-    map (\v -> fromMaybe (error ("mapResultRowToList: cannot find var " ++ show v ++ show r)) (lookup v r)) vars
+mapResultRowToList :: [Var] -> ResultHeader -> VectorResultRow AbstractResultValue -> [AbstractResultValue]
+mapResultRowToList vars hdr r =
+    map (\v -> fromMaybe (error ("mapResultRowToList: cannot find var " ++ show v ++ show r)) (ext v hdr r)) vars
 
 -- foreign export ccall hs_command :: StablePtr (Session) -> Ptr CString -> CInt -> CString -> Ptr CString -> Ptr CString -> CInt -> Ptr (Ptr (Ptr CString)) -> IO Int
 -- hs_command :: StablePtr (Session) -> Ptr CString -> CInt -> CString -> Ptr CString -> Ptr CString -> CInt -> Ptr (Ptr (Ptr CString)) -> IO Int

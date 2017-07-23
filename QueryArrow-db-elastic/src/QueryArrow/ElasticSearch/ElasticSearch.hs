@@ -6,6 +6,9 @@ import Data.Aeson
 import GHC.Generics
 
 import QueryArrow.DB.DB
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
 import QueryArrow.Config
 import QueryArrow.Plugin
 import QueryArrow.Data.Heterogeneous.List
@@ -32,7 +35,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 
 data ElasticSearchPlugin = ElasticSearchPlugin
 
-instance Plugin ElasticSearchPlugin MapResultRow where
+instance Plugin ElasticSearchPlugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) where
   getDB _ _ ps = do
     let fsconf = getDBSpecificConfig ps
     let conn = ESQ.ElasticSearchConnInfo (db_host fsconf) (db_port fsconf) (map toLower (db_name fsconf))

@@ -26,6 +26,7 @@ library
                    aeson,
                    vector,
                    hslogger,
+                   conduit,
                    namespace >= 0.1.2.2,
                    heterogeneous-list,
                    lattices,

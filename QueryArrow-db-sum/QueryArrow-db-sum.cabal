@@ -45,6 +45,7 @@ library
                    lrucache,
                    heterogeneous-list,
                    log-adapter,
+                   data-some,
                    QueryArrow-common
   ghc-options:     -Wall -fPIC
   other-modules:

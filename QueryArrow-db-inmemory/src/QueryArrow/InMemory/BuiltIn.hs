@@ -1,8 +1,12 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, PatternSynonyms, DeriveGeneric, RankNTypes, GADTs #-}
 module QueryArrow.InMemory.BuiltIn where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultRow.VectorResultRow
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin
@@ -209,9 +213,13 @@ data ICATDBInfo = ICATDBInfo {
 instance ToJSON ICATDBInfo
 instance FromJSON ICATDBInfo
 
-data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin (String -> String -> db)
+data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin (String -> String -> db)
 
-instance Plugin (NoConnectionDatabasePlugin db) MapResultRow where
+instance (ResultSetTransType (NoConnectionResultSetType db) ~ trans,
+          NoConnectionInputRowType db ~ VectorResultRow AbstractResultValue,
+          ResultSetRowType (NoConnectionResultSetType db) ~ VectorResultRow AbstractResultValue
+          ) =>
+  Plugin (NoConnectionDatabasePlugin db) trans (VectorResultRow AbstractResultValue) where
   getDB (NoConnectionDatabasePlugin db) _ ps = do
       let fsconf = getDBSpecificConfig ps
       return (AbstractDatabase (NoConnectionDatabase (db (qap_name ps) (db_namespace fsconf))))

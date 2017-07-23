@@ -19,10 +19,11 @@ data HandleSession = HandleSession Handle
 
 handleService :: (String -> EitherT Error IO Handle) -> QueryArrowService HandleSession
 handleService connect =
-  let   getAllResult0 = \(HandleSession  handle) vars form params -> do
+  let   getAllResult0 = \(HandleSession  handle) vars form hdr params -> do
             let name = QuerySet {
                           qsquery = Static [Execute form],
                           qsheaders = fromList vars,
+                          qsparamheaders = hdr,
                           qsparams = params
                           }
             liftIO $ sendMsgPack handle name
@@ -38,10 +39,11 @@ handleService connect =
                     throwError (-1, "cannot parse response")
   in
           QueryArrowService {
-            execQuery =  \(HandleSession  handle) form params -> do
+            execQuery =  \(HandleSession  handle) form hdr params -> do
               let name = QuerySet {
                             qsquery = Static [Execute (form )],
                             qsheaders = mempty,
+                            qsparamheaders = hdr,
                             qsparams = params
                             }
               liftIO $ sendMsgPack handle name

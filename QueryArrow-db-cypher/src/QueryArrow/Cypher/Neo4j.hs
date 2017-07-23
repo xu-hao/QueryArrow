@@ -5,6 +5,9 @@ import QueryArrow.Config
 import QueryArrow.DB.DB
 import QueryArrow.Cypher.ICAT
 import QueryArrow.Plugin
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultRow.VectorResultRow
 
 import Data.Aeson
 import GHC.Generics
@@ -27,7 +30,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 -- db
 data Neo4jPlugin = Neo4jPlugin
 
-instance Plugin Neo4jPlugin VectorResultRow where
+instance Plugin Neo4jPlugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) where
   getDB _ _ ps = do
       let fsconf = getDBSpecificConfig ps
       let conn = (db_host fsconf, db_port fsconf, db_username fsconf, db_password fsconf)

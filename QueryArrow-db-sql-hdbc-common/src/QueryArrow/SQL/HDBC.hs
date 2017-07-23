@@ -4,14 +4,24 @@ module QueryArrow.SQL.HDBC where
 import Prelude hiding (lookup)
 import QueryArrow.DB.ParametrizedStatement
 import QueryArrow.DB.DB
-import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultSet
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+import QueryArrow.Semantics.Sendable
+import QueryArrow.Syntax.Data
+import QueryArrow.Data.Monoid.Action
+import QueryArrow.Data.Some
 
 import Database.HDBC
-import Control.Monad.IO.Class (liftIO)
 import Control.Applicative ((<$>))
-import Data.Map.Strict (empty, insert, lookup)
 import System.Log.Logger
+import qualified Data.Vector as V
+import Data.Monoid
 import Data.Convertible
 
 data HDBCStatement = HDBCStatement Bool [Var] Statement [Var] -- return vars stmt param vars
@@ -22,9 +32,9 @@ convertResultValueToSQL (StringValue s) = toSql s
 convertResultValueToSQL (ByteStringValue s) = toSql s
 convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 
-convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
-convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
-                insert var0 (AbstractResultValue (case sqlvalue of
+
+convertSQLToResult :: SqlValue -> AbstractResultValue
+convertSQLToResult sqlvalue = Some (case sqlvalue of
                         SqlInt32 _ -> Int64Value (fromSql sqlvalue)
                         SqlInt64 _ -> Int64Value (fromSql sqlvalue)
                         SqlInteger _ -> Int64Value (fromSql sqlvalue)
@@ -33,31 +43,58 @@ convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
                         -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
                         -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
                         SqlNull -> Null
-                        _ -> error ("unsupported sql value: " ++ show sqlvalue))) row) empty (zip vars sqlvalues)
+                        _ -> error ("unsupported sql value: " ++ show sqlvalue))
+
+convertSQLToResultRow :: [SqlValue] -> VectorResultRow AbstractResultValue
+convertSQLToResultRow sqlvalues = V.map convertSQLToResult (V.fromList sqlvalues)
+
+convertSQLToResultHeader :: [Var] -> ResultHeader
+convertSQLToResultHeader vars = V.fromList vars
+
+data HDBCResultSet = HDBCResultSet (ResultSetTransformer AbstractResultValue) ResultHeader [VectorResultRow AbstractResultValue]
+
+instance Sendable HDBCResultSet where
+  send h a =
+    send h (ResultStreamResultSet (RSId :: ResultSetTransformer AbstractResultValue) (getHeader a) (toResultStream a))
+
+instance Sendable (Partial HDBCResultSet) where
+  send h (Partial a) =
+    send h (toResultStream a)
+
+instance Action (ResultSetTransformer AbstractResultValue) HDBCResultSet where
+  trans `act` HDBCResultSet trans2 hdr rows = HDBCResultSet (trans <> trans2) hdr rows
+
+instance ResultSet HDBCResultSet where
+  type ResultSetRowType HDBCResultSet = VectorResultRow AbstractResultValue
+  type ResultSetTransType HDBCResultSet = ResultSetTransformer AbstractResultValue
+  getHeader (HDBCResultSet trans hdr _) = (tconvert trans :: ResultHeaderTransformer) `act` hdr
+  toResultStream (HDBCResultSet trans _ rows) = listResultStream (map ((tconvert trans :: ResultRowTransformer AbstractResultValue) `act`) rows)
 
 instance IPSDBStatement HDBCStatement where
-        type ParameterType HDBCStatement = MapResultRow
-        type PSRowType HDBCStatement = MapResultRow
-        execWithParams (HDBCStatement ret vars stmt params) args = do
-                liftIO $ infoM "SQL" ("execute stmt")
+        type ParameterType HDBCStatement = (ResultHeader, VectorResultRow AbstractResultValue)
+        type PSResultSetType HDBCStatement = HDBCResultSet
+        execWithParams (HDBCStatement ret vars stmt params) (hdr, args) = do
+                infoM "SQL" ("execute stmt")
                 -- liftIO $ putStrLn ("execHDBCStatement: params = " ++ show args)
-                rcode <- liftIO $ execute stmt (map (\v -> convertResultValueToSQL (case case lookup v args of
+                rcode <- execute stmt (map (\v -> convertResultValueToSQL (case args V.! case V.findIndex (== v) hdr of
                     Just e -> e
-                    Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args) of
-                                        AbstractResultValue arv -> toConcreteResultValue arv)) params)
+                    Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show (hdr, args)) of
+                                        Some arv -> toConcreteResultValue arv)) params)
                 if rcode == -1
                     then do
-                        liftIO $ infoM "SQL" ("execute stmt: error ")
+                        infoM "SQL" ("execute stmt: error ")
                         error ("execWithParams: error")
                     else if ret
                         then do
-                            rows <- liftIO $ fetchAllRows stmt
-                            liftIO $ infoM "SQL" ("returns " ++ show (length rows) ++ " rows")
-                            listResultStream (map (convertSQLToResult vars) rows)
+                            rows <- fetchAllRows stmt
+                            infoM "SQL" ("returns " ++ show (length rows) ++ " rows")
+                            let hdrret = convertSQLToResultHeader vars
+                            return ((combineRow hdr args hdrret :: ResultSetTransformer AbstractResultValue) `act` HDBCResultSet RSId hdrret (map convertSQLToResultRow rows))
                         else do
-                            liftIO $ infoM "SQL" ("updates " ++ show rcode ++ " rows")
-                            return mempty
+                            infoM "SQL" ("updates " ++ show rcode ++ " rows")
+                            return (HDBCResultSet RSId hdr [args])
         psdbStmtClose (HDBCStatement ret vars stmt params) = finish stmt
+        psdbGetHeader (HDBCStatement _ vars _ _) = convertSQLToResultHeader vars
 
 
 prepareHDBCStatement :: (IConnection conn) => conn -> (Bool, [Var], [CastType], String, [Var]) -> IO HDBCStatement
@@ -76,6 +113,10 @@ instance IDBConnection0 HDBCDBConnection  where
             return ()
         dbRollback (HDBCDBConnection conn) = rollback conn
         dbClose (HDBCDBConnection conn) = disconnect conn
+
+instance Convertible (ResultHeader, VectorResultRow AbstractResultValue)
+                     (ResultHeader, VectorResultRow AbstractResultValue) where
+    safeConvert = return
 
 instance IDBConnection HDBCDBConnection where
         type StatementType HDBCDBConnection = PSDBStatement HDBCStatement

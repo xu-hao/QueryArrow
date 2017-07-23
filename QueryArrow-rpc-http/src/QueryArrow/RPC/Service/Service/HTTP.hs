@@ -5,14 +5,17 @@
 
 module QueryArrow.RPC.Service.Service.HTTP where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Types
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.DBMap
 import QueryArrow.RPC.Config
 import QueryArrow.Utils
 import QueryArrow.Parser
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
 
 import Text.Parsec (runParser)
 import Data.Set (fromList)
@@ -37,7 +40,7 @@ import QueryArrow.RPC.Service
 
 
 data App = App {
-    appParameters :: AbstractDatabase MapResultRow FormulaT
+    appParameters :: AbstractDatabase (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) FormulaT
 }
 
 mkYesod "App" [parseRoutes|
@@ -46,7 +49,7 @@ mkYesod "App" [parseRoutes|
 
 instance Yesod App
 
-runQuery :: (MonadIO m, MonadHandler m) => String -> AbstractDatabase MapResultRow FormulaT -> m Value
+runQuery :: (MonadIO m, MonadHandler m) => String -> AbstractDatabase (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) FormulaT -> m Value
 runQuery method db = do
     liftIO $ infoM "QA" ("REST client connected")
     case db of
@@ -59,19 +62,20 @@ runQuery method db = do
                     (Just qu) <- lookupGetParam "qsquery"
                     (Just hdr) <- lookupGetParam "qsheaders"
                     liftIO $ infoM "QA" ("received REST query " ++ T.unpack qu)
-                    liftIO $ runEitherT $ run (fromList (map Var (words (T.unpack hdr)))) (T.unpack qu) mempty tdb conn
+                    liftIO $ runEitherT $ run (fromList (map Var (words (T.unpack hdr)))) (T.unpack qu) mempty mempty tdb conn
                 "post" -> do
                     liftIO $ infoM "QA" ("parsing post request")
                     req <- requireJsonBody
                     let qu = qsquery req
                     let hdr = qsheaders req
+                    let hdr0 = qsparamheaders req
                     let par = qsparams req
                     liftIO $ infoM "QA" ("received REST query " ++ show qu)
                     liftIO $ case qu of
                         Dynamic qu ->
-                          runEitherT $ run hdr qu par tdb conn
+                          runEitherT $ run hdr qu hdr0 par tdb conn
                         Static qu ->
-                          runEitherT $ run3 hdr qu par tdb conn
+                          runEitherT $ run3 hdr qu hdr0 par tdb conn
                 _ -> error ("unsupported method " ++ method)
             ret1 <- case ret of
                 Left e ->

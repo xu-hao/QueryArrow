@@ -20,6 +20,7 @@ import QueryArrow.Semantics.Sendable
 class (Binary a, Sendable a, Show a, Eq a) => ResultValue a where
    castTypeOf :: a -> CastType
    toConcreteResultValue :: a -> ConcreteResultValue
+   fromConcreteResultValue :: ConcreteResultValue -> a
 
 data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | RefValue String Location String | Null deriving (Eq , Ord, Show, Read, Generic)
 

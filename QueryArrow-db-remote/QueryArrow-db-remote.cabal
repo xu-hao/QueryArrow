@@ -33,6 +33,7 @@ library
                    data-msgpack,
                    binary,
                    bytestring,
+                   conduit,
                    heterogeneous-list,
                    QueryArrow-common,
                    QueryArrow-rpc-common,

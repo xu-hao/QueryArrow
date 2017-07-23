@@ -7,6 +7,9 @@ import QueryArrow.Config
 import QueryArrow.Remote.NoTranslation.Client
 import QueryArrow.Remote.Channel
 import QueryArrow.Remote.NoTranslation.Serialization ()
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultRow.VectorResultRow
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Plugin
@@ -26,7 +29,7 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
 
 data RemoteTCPPlugin = RemoteTCPPlugin
 
-instance Plugin RemoteTCPPlugin MapResultRow where
+instance Plugin RemoteTCPPlugin (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) where
   getDB _ _ ps = do
       let fsconf = getDBSpecificConfig ps
       h <- connectTo (db_host fsconf) (PortNumber (fromIntegral (db_port fsconf)))

@@ -1,7 +1,8 @@
 {-# LANGUAGE GADTs, StandaloneDeriving, MultiParamTypeClasses, DeriveGeneric, FlexibleInstances #-}
 module QueryArrow.FileSystem.LocalCommands where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
+import QueryArrow.Semantics.ResultValue
 import Data.ByteString (ByteString)
 
 import System.FilePath ((</>), equalFilePath, takeDirectory, takeFileName, pathSeparator)

@@ -48,10 +48,16 @@ import QueryArrow.Serialization
 import Network.Socket
 import Network
 import QueryArrow.RPC.Message
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
+import QueryArrow.Semantics.ResultValue
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
+import QueryArrow.Semantics.ResultHeader.VectorResultHeader
 import Data.Set (fromList)
 import Control.Arrow ((***))
 import Data.Monoid ((<>))
+import QueryArrow.Data.Some
+import qualified Data.Vector as V
 
 import QueryArrow.Utils
 
@@ -89,7 +95,8 @@ mainArgs input = do
     let hdr = words (headers input)
     let qu = query input
     let showhdr = showHeaders input
-    let pars = Map.fromList (map (Var *** AbstractResultValue) (params input))
+    let hdr0 = V.fromList (map (Var. fst) (params input))
+    let pars = V.fromList (map (Some . snd) (params input))
     if isJust (tcpAddr input) && isJust (tcpPort input)
       then
         runTCP (fromJust (tcpAddr input)) (fromJust (tcpPort input)) showhdr hdr qu pars
@@ -97,9 +104,9 @@ mainArgs input = do
         then
           runUDS (fromJust (udsAddr input)) showhdr hdr qu pars
         else
-          run2 showhdr hdr qu pars ps
+          run2 showhdr hdr qu hdr0 pars ps
 
-runTCP :: String -> Int -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runTCP :: String -> Int -> Bool -> [String] -> String -> VectorResultRow AbstractResultValue -> IO ()
 runTCP  addr port showhdr hdr qu params = do
   handle <- connectTo addr (PortNumber (fromIntegral port))
   let name = QuerySet {
@@ -125,7 +132,7 @@ runTCP  addr port showhdr hdr qu params = do
                 }
   sendMsgPack handle name2
 
-runUDS :: String -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runUDS :: String -> Bool -> [String] -> String -> VectorResultRow AbstractResultValue -> IO ()
 runUDS addr showhdr hdr qu params = do
   sock <- socket AF_UNIX Stream defaultProtocol
   connect sock (SockAddrUnix addr)
@@ -153,12 +160,12 @@ runUDS addr showhdr hdr qu params = do
                 }
   sendMsgPack handle name2
 
-run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
-run2 showhdr hdr query params ps = do
+run2 ::  Bool -> [String] -> String -> ResultHeader -> VectorResultRow AbstractResultValue -> TranslationInfo -> IO ()
+run2 showhdr hdr query hdr0 params ps = do
     let vars = map Var hdr
     AbstractDatabase tdb <- transDB ps
     conn <- dbOpen tdb
-    ret <- runEitherT $ run (fromList vars) query params tdb conn
+    ret <- runEitherT $ run (fromList vars) query hdr0 params tdb conn
     case ret of
       Left e -> putStrLn ("error: " ++ e)
       Right pp -> putStr (pprint showhdr vars pp)

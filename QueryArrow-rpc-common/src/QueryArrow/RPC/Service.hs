@@ -2,11 +2,14 @@
 
 module QueryArrow.RPC.Service where
 
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Types
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
 import QueryArrow.DB.DB
 import Data.Aeson
 
 class RPCService a where
-  startService :: a -> AbstractDatabase MapResultRow FormulaT -> Value -> IO ()
+  startService :: a -> AbstractDatabase (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) FormulaT -> Value -> IO ()
 
 data AbstractRPCService = forall a . RPCService a => AbstractRPCService a

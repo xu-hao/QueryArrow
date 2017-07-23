@@ -2,10 +2,12 @@
 
 module QueryArrow.FFI.Service.Local where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
-import QueryArrow.DB.ResultStream
+import QueryArrow.Semantics.ResultStream
+import QueryArrow.Semantics.ResultRow.VectorResultRow
+import QueryArrow.Semantics.ResultValue.AbstractResultValue
 
 import Prelude hiding (lookup)
 import Data.Set (fromList, empty)
@@ -16,19 +18,25 @@ import System.Log.Logger (infoM)
 import QueryArrow.FFI.Service
 import QueryArrow.Config
 import QueryArrow.DBMap
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Types
+import qualified Data.Vector as V
+import QueryArrow.Semantics.ResultSet.ResultStreamResultSet
+import QueryArrow.Semantics.ResultSet.VectorResultSetTransformer
+import Data.Conduit
 
-data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow FormulaT db) => Session db (ConnectionType db)
+data Session = forall db. (IDatabaseUniformRowAndDBFormula (ResultSetTransformer AbstractResultValue) (VectorResultRow AbstractResultValue) FormulaT db) => Session db (ConnectionType db)
 
 localService :: QueryArrowService Session
 localService = QueryArrowService {
-  execQuery =  \(Session db conn ) form params -> do
+  execQuery =  \(Session db conn ) form hdr params -> do
     -- liftIO $ putStrLn ("execQuery: " ++ serialize form ++ show params)
-    let (varstinp, varstout) = setToMap (fromList (Map.keys params)) empty
-    liftIO $ runResourceT (depleteResultStream (doQueryWithConn db conn varstout form varstinp (listResultStream [params]))),
-  getAllResult = \(Session db conn ) vars form params -> do
-    let (varstinp, varstout) = setToMap (fromList (Map.keys params)) (fromList vars)
-    liftIO $ runResourceT (getAllResultsInStream (doQueryWithConn db conn varstout form varstinp (listResultStream [params]))),
+    let (varstinp, varstout) = setToMap (fromList (V.toList hdr)) empty
+    (_, rset) <- liftIO $ doQueryWithConn db conn varstout form varstinp (ResultStreamResultSet RSId hdr (ResultStream (yield params)))
+    liftIO $ runResourceT (depleteResultStream rset),
+  getAllResult = \(Session db conn ) vars form hdr params -> do
+    let (varstinp, varstout) = setToMap (fromList (V.toList hdr)) (fromList vars)
+    (_, rset) <- liftIO $ doQueryWithConn db conn varstout form varstinp (ResultStreamResultSet RSId hdr (ResultStream (yield params)))
+    liftIO $ runResourceT (getAllResultsInStream rset),
   qasConnect = \ path -> liftIO $ do
     infoM "Plugin" ("loading configuration from " ++ path)
     ps <- getConfig path

@@ -2,8 +2,9 @@
 
 module QueryArrow.FFI.C.Template where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Data
+import QueryArrow.Syntax.Utils
+import QueryArrow.Semantics.ResultValue
 import QueryArrow.Rewriting
 import QueryArrow.Translation
 import QueryArrow.Config
@@ -12,6 +13,7 @@ import QueryArrow.SQL.ICAT
 import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.SQL.HDBC.PostgreSQL
+import QueryArrow.Data.Some
 
 import Data.Namespace.Namespace
 import Data.Namespace.Path
@@ -38,6 +40,7 @@ import qualified Data.Map.Strict as Map
 import Data.Aeson
 import Data.Aeson.TH
 import Data.List (find)
+import qualified Data.Vector as V
 
 functype :: Int -> TypeQ -> TypeQ
 functype 0 t = t
@@ -59,27 +62,27 @@ intToBuffer :: Ptr CLong -> Int64 -> IO ()
 intToBuffer buf i =
     poke buf (fromIntegral i)
 
-arrayToBuffer :: Ptr CString -> Int -> [Text] -> IO ()
+arrayToBuffer :: Ptr CString -> Int -> V.Vector Text -> IO ()
 arrayToBuffer buf n txt = do
-    strs <- mapM (newCString . Text.unpack) (take n txt)
+    strs <- mapM (newCString . Text.unpack) (take n (V.toList txt))
     pokeArray buf strs
 
-arrayToAllocatedBuffer :: CString -> Int -> Int -> [[Text]] -> IO ()
+arrayToAllocatedBuffer :: CString -> Int -> Int -> [V.Vector Text] -> IO ()
 arrayToAllocatedBuffer buf n1 n2 txt0 = do
     infoM "Plugin" ("arrayToAllocatedBuffer: converting " ++ show txt0)
-    zipWithM_ (\i txt -> textToBuffer (plusPtr  buf (n1*i)) n1 txt) [0..n2-1] (take n2 (concat txt0))
+    zipWithM_ (\i txt -> textToBuffer (plusPtr  buf (n1*i)) n1 txt) [0..n2-1] (take n2 (concat (map V.toList txt0)))
 
-arrayToAllocatedBuffer2 :: Ptr CString -> Ptr CInt -> Int -> [[Text]] -> IO ()
+arrayToAllocatedBuffer2 :: Ptr CString -> Ptr CInt -> Int -> [V.Vector Text] -> IO ()
 arrayToAllocatedBuffer2 buf buflens n txt0 = do
     lens <- peekArray n buflens
     bufs <- peekArray n buf
     mapM_ (\(txt, ptr, len) -> do
-          textToBuffer ptr (fromIntegral len) txt) (zip3 (take n (concat txt0)) bufs lens)
+          textToBuffer ptr (fromIntegral len) txt) (zip3 (take n (concat (map V.toList txt0))) bufs lens)
 
-arrayToAllocateBuffer :: Ptr (Ptr CString) -> Ptr CInt -> [[Text]] -> IO ()
+arrayToAllocateBuffer :: Ptr (Ptr CString) -> Ptr CInt -> [V.Vector Text] -> IO ()
 arrayToAllocateBuffer buf lenbuf txt = do
     infoM "Plugin" ("return all " ++ show txt)
-    let totaltxt = concat txt
+    let totaltxt = concat (map V.toList txt)
     let totallen = length totaltxt
     poke lenbuf (fromIntegral totallen)
     arrelems <- mapM (newCString . Text.unpack) totaltxt
@@ -97,7 +100,8 @@ queryFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -107,7 +111,7 @@ queryFunction name inputtypes outputtypes = do
                     [IntType] -> [|getIntResult|]
                     _ -> [|getStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryLongFunction :: String -> [Type2] -> [Type2] -> DecsQ
@@ -121,7 +125,8 @@ queryLongFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
@@ -129,7 +134,7 @@ queryLongFunction name inputtypes outputtypes = do
     case outputtypes of
                   [StringType] -> do
                       runIO $ putStrLn ("generating function " ++ show fn)
-                      b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+                      b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
                   _ -> do
                       runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
@@ -148,14 +153,15 @@ querySomeFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : np : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = [|getSomeStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) svcptr session $(varE n) $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session $(varE n) $(retList) ( ($(pn) @@ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 queryAllFunction :: String -> [Type2] -> [Type2] -> DecsQ
@@ -169,14 +175,15 @@ queryAllFunction name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = s : p : map VarP argnames
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     -- this is the list of ret vars
     let retList = listE (map (\i -> [| Var $(stringE i) |]) rets)
     let func = [|getAllStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
-    b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 {-|
@@ -194,7 +201,8 @@ queryAll2Function name inputtypes outputtypes = do
     let rets = map (\i -> "ret" ++ show i) [1..length outputtypes]
     let ps = [VarP s, VarP p, VarP listarg]
     -- this is the input map
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     -- this is the args to the predicate in QAL
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) (args ++ rets))
     let argListPat = listP (map (\i -> (varP (mkName i))) args)
@@ -203,7 +211,7 @@ queryAll2Function name inputtypes outputtypes = do
     let func = [|getAllStringArrayResult|]
     runIO $ putStrLn ("generating function " ++ show fn)
     b <- [|let $(argListPat) = $(varE listarg) in
-                      $(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+                      $(func) svcptr session $(retList) ( ($(pn) @@ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
     sequence [funD fn [return (Clause ps (NormalB b) [])]]
 
 hsQueryForeign :: String -> [Type2] -> [Type2] -> DecsQ
@@ -409,10 +417,11 @@ createFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeign :: String -> Int -> DecQ
@@ -455,7 +464,7 @@ createFunctionArray n a = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (Map.fromList (zip $(argList) (map (AbstractResultValue . StringValue) argarray)))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (V.fromList $(argList)) (V.fromList (map (Some . StringValue) argarray))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ
@@ -489,10 +498,11 @@ deleteFunction n a = do
     let args = map (\i -> "arg" ++ show i) [1..a]
     let argnames = map mkName args
     let ps = s : p : map VarP argnames
-    let argList = listE (map (\i -> [| (Var $(stringE i), AbstractResultValue (StringValue $(varE (mkName i)))) |]) args)
+    let hdrList = listE (map (\i -> [| Var $(stringE i) |]) args)
+    let argList = listE (map (\i -> [| Some (StringValue $(varE (mkName i))) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execQuery|]
-    b <- [|$(func) svcptr session ( ($(pn) @@- $(argList2))) (Map.fromList $(argList))|]
+    b <- [|$(func) svcptr session ( ($(pn) @@- $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsDeleteForeign :: String -> Int -> DecQ

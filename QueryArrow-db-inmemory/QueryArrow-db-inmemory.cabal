@@ -19,10 +19,13 @@ library
                    hslogger,
                    regex-tdfa,
                    regex-compat-tdfa,
+                   vector,
+                   conduit,
                    namespace >= 0.1.2.2,
                    lattices,
                    semibounded-lattices,
                    heterogeneous-list,
-                   QueryArrow-common
+                   QueryArrow-common,
+                   data-some
   ghc-options:     -Wall -fPIC
   other-modules:
