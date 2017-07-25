@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, ForeignFunctionInterface #-}
+{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, ForeignFunctionInterface, ConstraintKinds #-}
 
 module QueryArrow.FFI.C.Plugin where
 
@@ -143,22 +143,22 @@ hs_modify_data svcptr sessionptr cupdatecols cupdatevals cwherecolsandops cwhere
                     _ -> error ("unsupported column " ++ wherecol0)
     let colval wherecol0 val = do
             case wherecol0 of
-                    "data_repl_num" -> AbstractResultValue (Int64Value (read val))
-                    "data_type_name" -> AbstractResultValue (StringValue (pack val))
-                    "data_size" -> AbstractResultValue (Int64Value (read val))
-                    "data_id" -> AbstractResultValue (Int64Value (read val))
-                    "resc_id" -> AbstractResultValue (Int64Value (read val))
-                    "data_path" -> AbstractResultValue (StringValue (pack val))
-                    "data_owner_name" -> AbstractResultValue (StringValue (pack val))
-                    "data_owner_zone" -> AbstractResultValue (StringValue (pack val))
-                    "data_is_dirty" -> AbstractResultValue (Int64Value (read val))
-                    "data_checksum" -> AbstractResultValue (StringValue (pack val))
-                    "data_expiry_ts" -> AbstractResultValue (StringValue (pack val))
-                    "r_comment" -> AbstractResultValue (StringValue (pack val))
-                    "create_ts" -> AbstractResultValue (StringValue (pack val))
-                    "modify_ts" -> AbstractResultValue (StringValue (pack val))
-                    "data_mode" -> AbstractResultValue (StringValue (pack val))
-                    "resc_hier" -> AbstractResultValue (StringValue (pack val))
+                    "data_repl_num" -> Some (Int64Value (read val))
+                    "data_type_name" -> Some (StringValue (pack val))
+                    "data_size" -> Some (Int64Value (read val))
+                    "data_id" -> Some (Int64Value (read val))
+                    "resc_id" -> Some (Int64Value (read val))
+                    "data_path" -> Some (StringValue (pack val))
+                    "data_owner_name" -> Some (StringValue (pack val))
+                    "data_owner_zone" -> Some (StringValue (pack val))
+                    "data_is_dirty" -> Some (Int64Value (read val))
+                    "data_checksum" -> Some (StringValue (pack val))
+                    "data_expiry_ts" -> Some (StringValue (pack val))
+                    "r_comment" -> Some (StringValue (pack val))
+                    "create_ts" -> Some (StringValue (pack val))
+                    "modify_ts" -> Some (StringValue (pack val))
+                    "data_mode" -> Some (StringValue (pack val))
+                    "resc_hier" -> Some (StringValue (pack val))
                     _ -> error ("unsupported column " ++ wherecol0)
     let whereatom pre wherecol0 =
           let wherecol = var (pre ++ wherecol0)
@@ -205,11 +205,11 @@ hs_modify_coll svcptr sessionptr cupdatecols cupdatevals cupcols ccn = do
                     "modify_ts" -> "COLL_MODIFY_TS"
     let colval wherecol0 val =
             case wherecol0 of
-                    "coll_id" -> AbstractResultValue (Int64Value (read val))
-                    "coll_type" -> AbstractResultValue (StringValue (pack val))
-                    "coll_info1" -> AbstractResultValue (StringValue (pack val))
-                    "coll_info2" -> AbstractResultValue (StringValue (pack val))
-                    "modify_ts" -> AbstractResultValue (StringValue (pack val))
+                    "coll_id" -> Some (Int64Value (read val))
+                    "coll_type" -> Some (StringValue (pack val))
+                    "coll_info1" -> Some (StringValue (pack val))
+                    "coll_info2" -> Some (StringValue (pack val))
+                    "modify_ts" -> Some (StringValue (pack val))
     let updateatom wherecol0 =
           let wherecol = var ("u_" ++ wherecol0)
               p = wherepredicate wherecol0 in
@@ -249,7 +249,7 @@ hs_modify_rule_exec svcptr sessionptr cupdatecols cupdatevals cupcols crexeid= d
                 "modify_ts" -> "RULE_EXEC_MODIFY_TS"
     let colval wherecol0 val =
             case wherecol0 of
-                    _ -> AbstractResultValue (StringValue (pack val))
+                    _ -> Some (StringValue (pack val))
     let updateatom wherecol0 =
           let wherecol = var ("u_" ++ wherecol0)
               p = wherepredicate wherecol0 in
@@ -258,7 +258,7 @@ hs_modify_rule_exec svcptr sessionptr cupdatecols cupdatevals cupcols crexeid= d
     let update = foldl (.*.) cond (map updateform updatecols)
     let hdr =  V.fromList (Var "cid" : map (\col -> Var ("u_" ++ col)) updatecols)
     let params = V.fromList (Some (Int64Value ruleexecid) : map (\val -> Some (StringValue (pack val))) updatevals)
-    processRes (execAbstract svc session ( update) params) hdr (const (return ()))
+    processRes (execAbstract svc session ( update) hdr params)  (const (return ()))
 mapResultRowToList :: [Var] -> ResultHeader -> VectorResultRow AbstractResultValue -> [AbstractResultValue]
 mapResultRowToList vars hdr r =
     map (\v -> fromMaybe (error ("mapResultRowToList: cannot find var " ++ show v ++ show r)) (ext v hdr r)) vars

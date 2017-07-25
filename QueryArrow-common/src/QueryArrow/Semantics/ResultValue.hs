@@ -22,54 +22,103 @@ class (Binary a, Sendable a, Show a, Eq a) => ResultValue a where
    toConcreteResultValue :: a -> ConcreteResultValue
    fromConcreteResultValue :: ConcreteResultValue -> a
 
-data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | RefValue String Location String | Null deriving (Eq , Ord, Show, Read, Generic)
+data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | ConsValue String | AppValue ConcreteResultValue ConcreteResultValue | Null deriving (Eq , Ord, Show, Read, Generic)
+
+pattern ListNilValue :: ConcreteResultValue
+pattern ListNilValue = ConsValue "[]"
+
+pattern ListConsValue :: ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue
+pattern ListConsValue a b = ConsValue "(:)" `AppValue` a `AppValue` b
+
+listValue :: [ConcreteResultValue] -> ConcreteResultValue
+listValue = foldr ListConsValue ListNilValue
+
+valueListFromValue :: ConcreteResultValue -> [ConcreteResultValue]
+valueListFromValue (ListConsValue a b) = let tl = valueListFromValue b in
+                                      a:tl
+valueListFromValue ListNilValue = []
+valueListFromValue a = error ("valueListFromValue: malformatted list " ++ show a)
+
+pattern NullValueBinary :: Word8
+pattern NullValueBinary = 0x0
+
+pattern StringValueBinary :: Word8
+pattern StringValueBinary = 0x1
+
+pattern ByteStringValueBinary :: Word8
+pattern ByteStringValueBinary = 0x2
+
+pattern Int32ValueBinary :: Word8
+pattern Int32ValueBinary = 0x3
+
+pattern Int64ValueBinary :: Word8
+pattern Int64ValueBinary = 0x4
+
+pattern ListValueBinary :: Word8
+pattern ListValueBinary = 0x5
+
+splitByteString :: ByteString -> [ByteString]
+splitByteString bs = runGet splitByteString' (BSL.fromStrict bs) where
+  splitByteString' = do
+    b <- isEmpty
+    if b
+      then return []
+      else do
+        len <- getWord64be
+        bs <- getByteString (fromIntegral len)
+        bss <- splitByteString'
+        return (bs : bss)
+
+listValueToByteString :: ConcreteResultValue -> ByteString
+listValueToByteString crv =
+  let vlist = valueListFromValue crv in
+      BSL.toStrict (runPut $ mapM_ (\rv -> do
+        let bs = runPut (put rv)
+        putWord64be (fromIntegral (BSL.length bs))
+        putByteString (BSL.toStrict bs)) vlist)
 
 instance Binary ConcreteResultValue where
   put (StringValue t) = do
-    putWord8 StringTypeBinary
+    putWord8 StringValueBinary
     let bs = encodeUtf8 t
     putPosVarInt (fromIntegral (BS.length bs))
     putByteString bs
   put (ByteStringValue bs) = do
-    putWord8 ByteStringTypeBinary
+    putWord8 ByteStringValueBinary
     putPosVarInt (fromIntegral (BS.length bs))
     putByteString bs
-  put (RefValue a b c) = do
-    putWord8 RefTypeBinary
-    let bs = runPut (do
-              put a
-              put b
-              put c)
-    putPosVarInt (fromIntegral (BSL.length bs))
-    putLazyByteString bs
-  put (Int32Value i) = do
-    putWord8 Int32TypeBinary
-    putInt32be i
-  put (Int64Value i) = do
-    putWord8 Int64TypeBinary
-    putInt64be i
+  put (Int32Value t) = do
+    putWord8 Int32ValueBinary
+    putInt32be t
+  put (Int64Value t) = do
+    putWord8 Int64ValueBinary
+    putInt64be t
+  put v@ListNilValue = do
+    putWord8 StringValueBinary
+    putByteString (listValueToByteString v)
+  put v@(ListConsValue _ _) = do
+    putWord8 StringValueBinary
+    putByteString (listValueToByteString v)
   put Null =
-    putWord8 NullBinary
+    putWord8 NullValueBinary
 
   get = do
     tyby <- getWord8
     case tyby of
-      StringTypeBinary -> do
+      StringValueBinary -> do
         len <- getPosVarInt
         bs <- getByteString (fromInteger len)
         return (StringValue (decodeUtf8 bs))
-      ByteStringTypeBinary -> do
+      ByteStringValueBinary -> do
         len <- getPosVarInt
         bs <- getByteString (fromInteger len)
         return (ByteStringValue bs)
-      RefTypeBinary -> do
-        _ <- getPosVarInt
-        ty <- get
-        loc <- get
-        path <- get
-        return (RefValue ty loc path)
-      Int32TypeBinary -> Int32Value <$> getInt32be
-      Int64TypeBinary -> Int64Value <$> getInt64be
+      ListValueBinary -> do
+        len <- getPosVarInt
+        bs <- getByteString (fromInteger len)
+        return (listValue (map (runGet get . BSL.fromStrict) (splitByteString bs)))
+      Int32ValueBinary -> Int32Value <$> getInt32be
+      Int64ValueBinary -> Int64Value <$> getInt64be
       NullBinary -> return Null
       _ -> error ("get of ConcreteResultValue: unsupported type byte " ++ show tyby)
 
@@ -78,12 +127,15 @@ instance Sendable ConcreteResultValue where
 
 instance ResultValue ConcreteResultValue where
   toConcreteResultValue = id
+  fromConcreteResultValue = id
   castTypeOf (Int64Value _) = Int64Type
-  castTypeOf (Int32Value _) = Int32Type
+  castTypeOf (Int32Value _) = TextType
   castTypeOf (StringValue _) = TextType
   castTypeOf (ByteStringValue _) = ByteStringType
-  castTypeOf (RefValue reftype _ _) = RefType reftype
-  castTypeOf Null = error "typeOf: null value"
+  castTypeOf ListNilValue = ListType (TypeVar "<list elem>")
+  castTypeOf (ListConsValue _ _) = ListType (TypeVar "<list elem>")
+  castTypeOf (ConsValue _) = error "typeOf: cons value"
+  castTypeOf Null = NullType
 
 instance Num ConcreteResultValue where
     Int64Value a + Int64Value b = Int64Value (a + b)

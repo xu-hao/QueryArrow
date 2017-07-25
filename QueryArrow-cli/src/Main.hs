@@ -36,7 +36,7 @@ import QueryArrow.Config
 import Prelude hiding (lookup)
 import qualified Data.Map.Strict as Map
 import System.Log.Logger
-import QueryArrow.Logging
+import QueryArrow.Logging (setup)
 import Options.Applicative
 import Data.Maybe (fromMaybe, isJust, fromJust)
 import System.IO

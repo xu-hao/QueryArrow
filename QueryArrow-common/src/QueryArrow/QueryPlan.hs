@@ -30,6 +30,7 @@ import QueryArrow.Data.Monoid.Action
 import Debug.Trace
 import Data.Foldable
 import Data.Conduit.List (sourceList, sinkNull, isolate)
+import Data.Monoid ((<>))
 
 type MSet a = Complemented (Set a)
 
@@ -688,7 +689,7 @@ execQueryPlan  rset (QPAggregate2 qpd (Summarize funcs groupby) qp) =
                                   CountDistinct v2 ->
                                       fromIntegral (length (List.nub (concatMap (\row -> case ext v2 hdr row of
                                                                                       Nothing -> []
-                                                                                      Just a -> [a]) rows))) in
+                                                                                      Just a -> [a]) rows)))
                                   Random v2 ->
                                       if List.null rows
                                           then error "random of empty list"

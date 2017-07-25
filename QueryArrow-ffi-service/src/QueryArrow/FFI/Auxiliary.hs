@@ -23,6 +23,9 @@ import QueryArrow.FFI.Service
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.ByteString.UTF8 as BSUTF8
 import qualified Data.Vector as V
+import Control.Exception (SomeException, catch, fromException)
+import Database.HDBC
+import System.Log.Logger (debugM, errorM)
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -808000
@@ -59,7 +62,7 @@ execAbstract svc session form hdr params = do
       throwError err
     Right a -> return a
 
-getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [MapResultRow]
+getAllResultAbstract :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> EitherT Error IO [VectorResultRow AbstractResultValue]
 getAllResultAbstract svc session vars form hdr params = do
   liftIO $ debugM "FFI" ("getAllResultValues: form " ++ serialize form)
   r <- liftIO $ catchErrors (runEitherT (getAllResult svc session vars form hdr params))
@@ -69,7 +72,7 @@ getAllResultAbstract svc session vars form hdr params = do
       throwError err
     Right a -> return a
 
-getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> Int -> EitherT Error IO [MapResultRow]
+getSomeResults :: QueryArrowService b -> b -> [Var] -> Formula -> ResultHeader -> VectorResultRow AbstractResultValue -> Int -> EitherT Error IO [VectorResultRow AbstractResultValue]
 getSomeResults svc session vars form hdr params n =
   getAllResultAbstract svc session vars (Aggregate (Limit n) form) hdr params
 
@@ -135,7 +138,7 @@ resultValueToString rv = case rv of
     (Int64Value i) -> Text.pack (show i)
     (StringValue i) -> i
     (ByteStringValue i) -> decodeUtf8 i
-    (AppValue a b) ->  "(" `Text.append` resultValueToString (AbstractResultValue a) `Text.append` " " `Text.append` resultValueToString (AbstractResultValue b) `Text.append` ")"
+    (AppValue a b) ->  "(" `Text.append` resultValueToString (Some a) `Text.append` " " `Text.append` resultValueToString (Some b) `Text.append` ")"
     Null -> Text.pack ""
 
 

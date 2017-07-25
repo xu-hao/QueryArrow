@@ -41,7 +41,7 @@ quote a = "\"" ++ a ++ "\""
 convertResultValueToSQLText :: ConcreteResultValue -> String
 convertResultValueToSQLText (Int64Value i) = show i
 convertResultValueToSQLText (StringValue s) = quote (escapeSQLTextArrayString (unpack s))
-convertResultValueToSQLText crv@NilValue = listToSQLText crv
+convertResultValueToSQLText crv@ListNilValue = listToSQLText crv
 convertResultValueToSQLText crv@(ListConsValue _ _) = listToSQLText crv
 convertResultValueToSQLText e = error ("unsupported sql value type: " ++ show e)
 
@@ -55,7 +55,7 @@ convertResultValueToSQL :: ConcreteResultValue -> SqlValue
 convertResultValueToSQL (Int64Value i) = toSql i
 convertResultValueToSQL (StringValue s) = toSql s
 convertResultValueToSQL (ByteStringValue s) = toSql s
-convertResultValueToSQL crv@NilValue = listToSql crv
+convertResultValueToSQL crv@ListNilValue = listToSql crv
 convertResultValueToSQL crv@(ListConsValue _ _) = listToSql crv
 convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 

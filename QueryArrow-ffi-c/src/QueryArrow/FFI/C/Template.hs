@@ -41,6 +41,8 @@ import Data.Aeson
 import Data.Aeson.TH
 import Data.List (find)
 import qualified Data.Vector as V
+import Debug.Trace
+
 functype :: [Type2] -> TypeQ -> TypeQ
 functype [] t = t
 functype (hd : tl) t = [t|$(case hd of
@@ -156,7 +158,7 @@ queryLongFunction name inputtypes outputtypes = do
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
                   [IntType] -> do
                       runIO $ putStrLn ("generating function " ++ show fn)
-                      b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (Map.fromList $(argList))|]
+                      b <- [|getIntResult svcptr session $(retList) ( ($(pn) @@ $(argList2))) (V.fromList $(hdrList)) (V.fromList $(argList))|]
                       sequence [funD fn [return (Clause ps (NormalB b) [])]]
                   _ -> do
                       runIO $ appendFile "/tmp/log" ("cannot generate function " ++ show fn ++ show outputtypes ++ "\n")
@@ -486,9 +488,9 @@ hsCreateFunction n pts = do
     funD fn2 [return (Clause ps (NormalB b) [])]
 
 typeToConverter :: Type2 -> ExpQ
-typeToConverter StringType = [| \ x -> AbstractResultValue (StringValue (Text.pack x)) |]
-typeToConverter IntType = [| \ x -> AbstractResultValue (Int64Value (read x)) |]
-typeToConverter StringListType = [| \ x -> AbstractResultValue (listValue (map (StringValue . Text.pack) (parseList x))) |]
+typeToConverter StringType = [| \ x -> Some (StringValue (Text.pack x)) |]
+typeToConverter IntType = [| \ x -> Some (Int64Value (read x)) |]
+typeToConverter StringListType = [| \ x -> Some (listValue (map (StringValue . Text.pack) (parseList x))) |]
 
 parseList :: String -> [String]
 parseList = words -- currently each item cannot contain space, need a proper parser before queryall2 is fully supported for string list input parameters
@@ -506,7 +508,7 @@ createFunctionArray n pts = do
     let argList = listE (map (\i -> [| Var $(stringE i) |]) args)
     let argList2 = listE (map (\i -> [| var $(stringE i)|]) args)
     let func = [|execAbstract|]
-    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (V.fromList $(argList)) (zipWith ($) $(listE (map typeToConverter pts)) argarray)|]
+    b <- [|$(func) svcptr session ( ($(pn) @@+ $(argList2))) (V.fromList $(argList)) (V.fromList (zipWith ($) $(listE (map typeToConverter pts)) argarray))|]
     funD fn [return (Clause ps (NormalB b) [])]
 
 hsCreateForeignArray :: String -> DecQ

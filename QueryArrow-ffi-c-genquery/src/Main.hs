@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, ForeignFunctionInterface #-}
 
-import QueryArrow.FO.Utils
+import QueryArrow.DB.Utils
 
 import Prelude hiding (lookup)
 import qualified Data.Text as Text
@@ -21,7 +21,7 @@ import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
 import QueryArrow.FFI.GenQuery.Data
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Data
 import System.Environment
 
 main :: IO ()
@@ -32,7 +32,7 @@ main = do
   let (vars, form) = case runParser genQueryP () "" qu of
                 Left err -> error (show err)
                 Right gq -> translateGenQueryToQAL (dist /= 0) (case acc of
-                                                                    1 -> if null ticket then UserAccessControl uz un else TicketAccessControl ticket 
+                                                                    1 -> if null ticket then UserAccessControl uz un else TicketAccessControl ticket
                                                                     -1 -> NoAccessControl
                                                                     0 -> AccessControlTicket) gq
-  putStrLn (show vars ++ " " ++ serialize form) 
+  putStrLn (show vars ++ " " ++ serialize form)

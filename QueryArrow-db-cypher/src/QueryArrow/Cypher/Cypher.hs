@@ -7,7 +7,7 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     create, set, delete, cwhere, creturn) where
 
 import QueryArrow.Syntax.Data hiding (Subst(..), var)
-import QueryArrow.Syntax.Types
+import QueryArrow.Syntax.Types (FormulaT)
 import QueryArrow.Syntax.Utils
 import QueryArrow.Semantics.ResultValue
 import QueryArrow.DB.GenericDatabase
