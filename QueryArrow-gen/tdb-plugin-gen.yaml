@@ -27,7 +27,6 @@ db_plugin:
                 db_namespace: ICAT
                 db_sql_mapping: "../QueryArrow-gen/gen/SQL/ICATGen"
 servers:
-- server_protocol: service/tcp
+- server_protocol: service/unix domain socket
   server_config:
-    tcp_server_addr: "*"
-    tcp_server_port: 12345
+    uds_server_addr: "/tmp/QueryArrow"
