@@ -96,5 +96,5 @@ Defines two predicates
 ### Generating from sql schema
 
 ```
-stack exec schema_parser_main <sql schema> <preds> <sqlmappings>
+stack exec schema_parser_main <sql schema> <preds> <sql mappings>
 ```
