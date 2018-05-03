@@ -236,10 +236,9 @@ generateICATSchema (Stmt tablename coldefs) = do
 generateICATSchemas :: [Stmt2] -> Q Exp
 generateICATSchemas = foldr (\stmt q2 -> [| $(generateICATSchema stmt) : $q2 |] ) [|[]|] -}
 
-schema :: ([Pred], [SQLMapping])
-schema =
-    let path = "gen/schema.sql"
-        file = unsafePerformIO $ readFile path in
+schema :: String -> ([Pred], [SQLMapping])
+schema path =
+    let file = unsafePerformIO $ readFile path in
         case runParser prog () path file of
             Left err -> error (show err)
             Right ast -> (generateICATDefs ast, generateICATMappings ast)

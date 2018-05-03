@@ -39,7 +39,7 @@ getConfig :: FromJSON a => String -> IO a
 getConfig filepath = do
     d <- decodeFileEither filepath
     case d of
-            Left err -> error ("getConfig: " ++ filepath ++ " " ++ err)
+            Left err -> error ("getConfig: " ++ filepath ++ " " ++ show err)
             Right ps -> return ps
 
 getDBSpecificConfig :: FromJSON a => ICATDBConnInfo -> a

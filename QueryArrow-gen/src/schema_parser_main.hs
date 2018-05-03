@@ -1,9 +1,8 @@
 module Main where
 
-import QueryArrow.SQL.SQL
 import QueryArrow.Serialization ()
 import Data.Yaml
-import GHC.Generics
+import System.Environment
 
 import SchemaParser
 
@@ -11,7 +10,9 @@ import SchemaParser
 
 main :: IO ()
 main = do
-      let s = fst schema
-      let t = snd schema
-      encodeFile "gen/ICATGen.yaml" s
-      encodeFile "gen/SQL/ICATGen.yaml" t
+      [filename, preds, sql_mappings] <- getArgs
+      let schm = schema filename
+      let s = fst schm
+      let t = snd schm
+      encodeFile preds s
+      encodeFile sql_mappings t
