@@ -37,10 +37,7 @@ $(deriveJSON defaultOptions{omitNothingFields = True} ''ICATDBConnInfo)
 
 getConfig :: FromJSON a => String -> IO a
 getConfig filepath = do
-    let ext = takeExtension filepath
-    d <- case ext of
-      "json" -> eitherDecode <$> BL.readFile filepath
-      _ -> decodeEither <$> B.readFile filepath
+    d <- decodeFileEither filepath
     case d of
             Left err -> error ("getConfig: " ++ filepath ++ " " ++ err)
             Right ps -> return ps
