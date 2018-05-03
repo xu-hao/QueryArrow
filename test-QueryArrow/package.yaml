@@ -1,0 +1,62 @@
+name: test-QueryArrow
+version: '0.2'
+author: Hao Xu
+license: BSD3
+dependencies:
+- base >=4
+- containers
+- mtl
+- transformers
+- semigroups
+- semigroupoids
+- bytestring
+- unordered-containers
+- text >=1.2.1.1
+- parsec
+- QueryArrow-rpc-common
+- base >=4
+- containers
+- mtl
+- transformers
+- semigroups
+- semigroupoids
+- bytestring
+- unordered-containers
+- text >=1.2.1.1
+- cryptonite
+- directory
+- filepath
+- unix
+- QueryArrow-rpc-common
+- QueryArrow-cli
+- base >=4
+- containers
+- mtl
+- transformers
+- semigroups
+- semigroupoids
+- bytestring
+- unordered-containers
+- text >=1.2.1.1
+- directory
+- network
+- hspec
+- hspec-expectations
+- process
+- time
+- QueryArrow-common
+- QueryArrow-rpc-common
+- QueryArrow-cli
+executables:
+  test_parser_main:
+    main: TestChopper.hs
+    source-dirs: src
+    ghc-options: -Wall
+  test_dedupper_main:
+    main: TestDedupper.hs
+    source-dirs: src
+    ghc-options: -Wall
+  test_runner_main:
+    main: TestRunner.hs
+    source-dirs: src
+    ghc-options: -Wall

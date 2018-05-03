@@ -1,0 +1,49 @@
+name: QueryArrow-db-filesystem
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- aeson
+- containers
+- mtl
+- transformers
+- HDBC
+- convertible
+- text >=1.2.1.1
+- hslogger
+- free
+- bytestring
+- directory
+- filemanip
+- filepath
+- unix-compat
+- time
+- heterogeneous-list
+- namespace >=0.1.2.2
+- lattices
+- semibounded-lattices
+- QueryArrow-common
+- QueryArrow-rpc-common
+- data-msgpack
+- resource-pool
+- async-pool
+- vector
+- network
+- unix
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.FileSystem.FileSystem
+  - QueryArrow.FileSystem.Query
+  - QueryArrow.FileSystem.Connection
+  - QueryArrow.FileSystem.ICAT
+  - QueryArrow.FileSystem.Builtin
+  - QueryArrow.FileSystem.Commands
+  - QueryArrow.FileSystem.Utils
+  - QueryArrow.FileSystem.Interpreter
+  - QueryArrow.FileSystem.LocalCommands
+  - QueryArrow.FileSystem.Serialization

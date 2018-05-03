@@ -12,6 +12,7 @@ import QueryArrow.ICAT
 import QueryArrow.BuiltIn
 import QueryArrow.SQL.ICAT hiding (lookupPred, lookupPredByName)
 import QueryArrow.SQL.SQL
+import QueryArrow.Serialization
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)
@@ -29,10 +30,10 @@ lookupPredByName n@(PredName [ns] _) =
       case lookupObject n cypherStandardBuiltInPredsMap of
             Nothing -> error ("cypherBuiltIn: cannot find predicate " ++ show n)
             Just pred1 -> pred1
-cypherMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherPredTableMap
+cypherMapping :: String -> [Pred] -> [SQLMapping] -> CypherPredTableMap
 cypherMapping ns preds mappings = (sqlToCypher (constructPredTypeMap (map (setPredNamespace ns) preds)) (sqlMapping ns preds mappings))
 
-cypherTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> CypherTrans
+cypherTrans :: String -> [Pred] -> [SQLMapping] -> CypherTrans
 cypherTrans ns preds mappings =
   let builtins@(CypherBuiltIn cypherbuiltinmap) = (cypherBuiltIn (lookupPred ns))
       total = map (setPredNamespace ns) preds ++ map lookupPredByName (keys cypherbuiltinmap) in

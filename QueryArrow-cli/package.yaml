@@ -1,0 +1,29 @@
+name: QueryArrow-cli
+version: '0.2'
+author: Hao Xu
+license: BSD3
+dependencies:
+- base >=4
+- containers
+- mtl
+- parsec
+- text
+- resourcet
+- hslogger
+- optparse-applicative
+- network
+- either
+- QueryArrow-rpc-common
+- QueryArrow-common
+- QueryArrow-rpc-common
+- QueryArrow
+library:
+  source-dirs: src
+  ghc-options: -Wall
+  exposed-modules:
+  - QueryArrow.Client
+executables:
+  QueryArrow:
+    main: Main.hs
+    source-dirs: src
+    ghc-options: -Wall

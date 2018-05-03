@@ -1,0 +1,14 @@
+name: heterogeneous-list
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- constraints
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.Data.Heterogeneous.List

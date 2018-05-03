@@ -22,6 +22,7 @@ import Database.HDBC
 import System.Log.Logger (debugM, errorM)
 import Debug.Trace
 import QueryArrow.Utils
+import QueryArrow.Serialization
 
 eCAT_NO_ROWS_FOUND :: Int
 eCAT_NO_ROWS_FOUND = -808000
@@ -50,7 +51,7 @@ convertException e =
 
 execAbstract :: QueryArrowService b -> b -> Formula -> MapResultRow -> EitherT Error IO ()
 execAbstract svc session form params = do
-  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form) 
+  liftIO $ debugM "FFI" ("execAbstract: form " ++ serialize form)
   r <- liftIO $ catchErrors (runEitherT (execQuery svc session form params))
   case r of
     Left err -> do

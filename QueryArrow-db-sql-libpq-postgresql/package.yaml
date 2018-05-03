@@ -1,0 +1,30 @@
+name: QueryArrow-db-sql-libpq-postgresql
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- aeson
+- binary
+- bytestring
+- containers
+- mtl
+- transformers
+- convertible
+- text >=1.2.1.1
+- hslogger
+- namespace >=0.1.2.2
+- data-msgpack
+- lattices
+- semibounded-lattices
+- QueryArrow-db-sql-common
+- postgresql-libpq
+- QueryArrow-common
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.SQL.LibPQ.PostgreSQL
+  - QueryArrow.SQL.LibPQ

@@ -1,0 +1,19 @@
+name: data-some
+version: '0.1.0.0'
+category: Data
+author: Hao Xu
+maintainer: xuh@cs.unc.edu
+copyright: 2017 Hao Xu
+license: BSD3
+homepage: https://github.com/githubuser/staticptr#readme
+ghc-options:
+- -threaded
+- -rtsopts
+- -with-rtsopts=-N
+dependencies:
+- base
+- constraints
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.Data.Some

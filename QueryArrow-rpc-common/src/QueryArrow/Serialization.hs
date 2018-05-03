@@ -6,17 +6,18 @@ import GHC.Generics
 import Data.Namespace.Path
 import Data.Set (Set, fromList, toAscList)
 import Data.ByteString (ByteString)
-import Data.Text.Encoding
 import Data.Aeson
 import Data.Int
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as B8
+import Data.Yaml
+import Data.Text (Text)
 
 import QueryArrow.FO.Data
 import QueryArrow.FO.Types
 import QueryArrow.DB.DB
-import QueryArrow.Utils
-import QueryArrow.FFI.Service
+
+type Error = (Int, Text)
 
 data ResultSet = ResultSetError Error | ResultSetNormal [MapResultRow] deriving (Generic, Show, Read, Eq)
 
@@ -165,3 +166,10 @@ resultSet rows =
 errorSet :: Error -> ResultSet
 errorSet vars =
     ResultSetError vars
+
+loadPreds :: FilePath -> IO [Pred]
+loadPreds path = do
+    content <- decodeFileEither path
+    case content of
+        Right preds -> return preds
+        Left exception -> error ("error cannot parse " ++ path ++ ", exception: " ++ show exception)

@@ -35,8 +35,8 @@ import Algebra.Lattice
 import qualified Data.Set as Set
 
 
-standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen") <*> pure BuiltIn.standardBuiltInPreds
-standardMappings =  (SQL.ICAT.loadMappings "../QueryArrow-gen/gen/SQL/ICATGen")
+standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen.yaml") <*> pure BuiltIn.standardBuiltInPreds
+standardMappings =  (SQL.ICAT.loadMappings "../QueryArrow-gen/gen/SQL/ICATGen.yaml")
 
 sqlStandardTrans ns = SQL.ICAT.sqlStandardTrans ns <$> standardPreds <*> standardMappings <*> pure (Just "nextid")
 

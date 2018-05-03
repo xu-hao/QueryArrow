@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, DeriveGeneric, GeneralizedNewtypeDeriving #-}
 module QueryArrow.SQL.SQL where
 
 import QueryArrow.FO.Data hiding (Subst, subst)
@@ -26,11 +26,17 @@ import Algebra.Lattice
 import Algebra.Lattice.Dropped
 import Algebra.Lattice.Ordered
 import System.Log.Logger
+import GHC.Generics
+import Data.Yaml
 
 type Col = String
 type TableName = String
-data Table = OneTable TableName SQLVar deriving (Eq, Ord, Show, Read)
+data Table = OneTable {tableName::TableName, sqlVar:: SQLVar} deriving (Eq, Ord, Show, Generic)
 data FromTable = SimpleTable TableName SQLVar | QueryTable SQL SQLVar deriving (Eq, Ord, Show)
+data SQLMapping = SQLMapping {
+  sqlMappingPredName :: String,
+  sqlMappingTable :: Table,
+  sqlMappingCols :: [SQLQualifiedCol]} deriving (Eq, Ord, Show, Generic)
 
 type SQLTableList = [FromTable]
 
@@ -39,9 +45,19 @@ type SQLTableList = [FromTable]
 mergeTables :: SQLTableList -> SQLTableList -> SQLTableList
 mergeTables = union
 
-newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord, Show, Read)
+newtype SQLVar = SQLVar {unSQLVar :: String} deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
-type SQLQualifiedCol = (SQLVar, Col)
+instance FromJSON Table
+instance ToJSON Table
+
+instance FromJSON SQLQualifiedCol
+instance ToJSON SQLQualifiedCol
+instance FromJSON SQLMapping
+instance ToJSON SQLMapping
+
+data SQLQualifiedCol = SQLQualifiedCol {
+  tableVar :: SQLVar,
+  colName :: Col} deriving (Eq, Ord, Show, Generic)
 
 type SQLOper = String
 
@@ -129,7 +145,7 @@ instance Show2 SQLCond where
     show2 (SQLNotCond sql) sqlvar = "(NOT (" ++ show2 sql sqlvar ++ "))"
 instance Show2 SQLExpr where
     show2 (SQLColExpr2 col) sqlvar = col
-    show2 (SQLColExpr (var, col)) sqlvar = if var `elem` sqlvar
+    show2 (SQLColExpr (SQLQualifiedCol var col)) sqlvar = if var `elem` sqlvar
         then col
         else serialize var ++ "." ++ col
     show2 (SQLIntConstExpr i) _ = show i
@@ -233,7 +249,7 @@ instance Subst SQLExpr where
     subst _ a = a
 
 instance Subst SQLQualifiedCol where
-    subst varmap (var, col) = (subst varmap var, col)
+    subst varmap (SQLQualifiedCol var col) = SQLQualifiedCol (subst varmap var) col
 
 instance Subst a => Subst [a] where
     subst varmap = map (subst varmap)
@@ -844,7 +860,7 @@ qcolArgToDelete (qcol, arg) = do
         Right var -> error ("unbounded var " ++ show var)
 
 qcolArgToValue :: (SQLQualifiedCol, Expr) -> TransMonad (Col, SQLExpr)
-qcolArgToValue (qcol@(var, col), arg) = do
+qcolArgToValue (qcol@(SQLQualifiedCol var col), arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (col, sqlexpr)
@@ -871,7 +887,7 @@ qcolArgToCond (qcol, arg) = do
             return SQLTrueCond -- unbounded var
 
 qcolArgToSet :: (SQLQualifiedCol, Expr) -> TransMonad (Col, SQLExpr)
-qcolArgToSet ((var, col), arg) = do
+qcolArgToSet (SQLQualifiedCol var col, arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (col, sqlexpr)
@@ -880,7 +896,7 @@ qcolArgToSet ((var, col), arg) = do
             error ("qcolArgToSet: set value to unbounded var" ++ show (var, col) ++ " " ++ serialize arg ++ " " ++ show (repmap ts))
 
 qcolArgToSetNull :: (SQLQualifiedCol, Expr) -> TransMonad ((Col, SQLExpr), SQLCond)
-qcolArgToSetNull (qcol@(var, col), arg) = do
+qcolArgToSetNull (qcol@(SQLQualifiedCol var col), arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return ((col, SQLNullExpr), SQLColExpr qcol .=. sqlexpr)

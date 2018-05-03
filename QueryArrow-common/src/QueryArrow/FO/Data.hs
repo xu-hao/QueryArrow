@@ -36,7 +36,7 @@ import Debug.Trace
 data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
 
 -- predicate types
-data PredType = PredType PredKind [ParamType] deriving (Eq, Ord, Show, Read)
+data PredType = PredType {predKind :: PredKind, paramsType :: [ParamType]} deriving (Eq, Ord, Show, Read)
 
 data ParamType = ParamType {isKey :: Bool,  isInput :: Bool,  isOutput :: Bool, paramType:: CastType} deriving (Eq, Ord, Show, Read)
 
@@ -902,7 +902,7 @@ valueListFromValue (ListConsValue a b) = let tl = valueListFromValue b in
                                       a:tl
 valueListFromValue NilValue = []
 valueListFromValue a = error ("valueListFromValue: malformatted list " ++ show a)
- 
+
 data NetworkResultValue = NetworkResultValue (Maybe CastType) ByteString deriving (Eq , Ord, Show, Read)
 
 deriving instance Generic NetworkResultValue
@@ -930,7 +930,7 @@ splitByteString bs = runGet splitByteString' (fromStrict bs) where
         return (bs : bss)
 
 listValueToByteString :: ConcreteResultValue -> ByteString
-listValueToByteString crv = 
+listValueToByteString crv =
   let vlist = valueListFromValue crv in
       toStrict (runPut $ mapM_ (\rv -> do
         let nrv = toNetworkResultValue rv

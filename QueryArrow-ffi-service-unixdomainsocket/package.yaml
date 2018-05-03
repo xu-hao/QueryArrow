@@ -1,0 +1,21 @@
+name: QueryArrow-ffi-service-unixdomainsocket
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- mtl
+- text >=1.2.1.1
+- hslogger
+- either
+- network
+- QueryArrow-rpc-common
+- QueryArrow-ffi-service
+- QueryArrow-ffi-service-handle-common
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.FFI.Service.UnixDomainSocket

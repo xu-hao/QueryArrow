@@ -5,10 +5,9 @@ module SchemaParser where
 import qualified Text.Parsec.Token as T
 import Text.ParserCombinators.Parsec
 import Control.Applicative ((*>), (<*), (<$>), (<*>))
-import Language.Haskell.TH
 import QueryArrow.FO.Data
+import QueryArrow.FO.Utils
 import QueryArrow.SQL.SQL
-import QueryArrow.Utils
 import System.IO.Unsafe
 import Data.List (partition)
 import Data.Char
@@ -130,8 +129,6 @@ constraint = (reserved "not" <|> reserved "NOT") *> (reserved "null" <|> reserve
          <|> try(reserved "DEFAULT" *> (DI <$> integer))
          <|> reserved "DEFAULT" *> (DS <$> stringp)
 
-stringQ = return . LitE . StringL
-
 findAllKeys :: String -> [ColDef] -> ([ColDef], [ColDef])
 findAllKeys prefix coldefs =
     case prefix of
@@ -182,50 +179,50 @@ colNameToPredName prefix colname =
       predname = if startswith "R_" predname0 then drop 2 predname0 else predname0 in
       (if startswith prefix predname then "" else prefix ++ "_") ++ predname
 
-colTypeToQExp :: ColType -> Q Exp
+colTypeToQExp :: ColType -> CastType
 colTypeToQExp keytype = case keytype of
-                                    Number -> conE 'Int64Type
-                                    Text -> conE 'TextType
-generateICATDef :: Stmt2 -> Q Exp
+                                    Number -> Int64Type
+                                    Text -> TextType
+generateICATDef :: Stmt2 -> [Pred]
 generateICATDef (Stmt tablename coldefs) = do
     let prefix = extractPrefix tablename
     if prefix `elem` []
         then
-            [| [] |]
+            []
         else do
             let predname = prefixToPredName prefix
             -- find all keys
             let (keys, props) = findAllKeys prefix coldefs
-            let keysq = foldr (\(ColDef _ keytype _) q -> [| ParamType True True True $(colTypeToQExp keytype) : $q |]) [| [] |] keys
-            let q1 = [| Pred (PredName [] $(stringQ predname)) (PredType ObjectPred $keysq) |]
-            let propPred (ColDef key2 keytype2 _) = [| Pred  (PredName [] $(stringQ (colNameToPredName prefix key2))) (PredType PropertyPred ($keysq ++  [ParamType False True True $(colTypeToQExp keytype2)])) |]
-            let propPreds = foldr (\coldef q2 -> [| $(propPred coldef) : $q2 |]) [| [] |] props
-            [| $q1 : $propPreds |]
+            let keysq = map (\(ColDef _ keytype _) -> PTKeyIO (colTypeToQExp keytype)) keys
+            let q1 = Pred (UQPredName predname) (PredType ObjectPred keysq)
+            let propPred (ColDef key2 keytype2 _) = Pred (UQPredName (colNameToPredName prefix key2)) (PredType PropertyPred (keysq ++  [PTPropIO (colTypeToQExp keytype2)]))
+            let propPreds = map propPred props
+            q1 : propPreds
 
-generateICATDefs :: [Stmt2] -> Q Exp
-generateICATDefs = foldr (\stmt q2 -> [| $(generateICATDef stmt) ++ $q2 |]) [| [] |]
+generateICATDefs :: [Stmt2] -> [Pred]
+generateICATDefs = concatMap generateICATDef
 
-generateICATMapping :: Stmt2 -> Q Exp
+generateICATMapping :: Stmt2 -> [SQLMapping]
 generateICATMapping (Stmt tablename coldefs) = do
     let prefix = extractPrefix tablename
     if prefix `elem` []
         then
-            [| [] |]
+            []
         else do
             let predname = prefixToPredName prefix
             -- find all keys
             let (keys, props) = findAllKeys prefix coldefs
             let tn = map toLower tablename
-            let v = [|SQLVar "1"|]
-            let t = [|OneTable $(stringQ tn) $v|]
-            let keysq = foldr (\(ColDef key _ _) q -> [| ($v, $(stringQ key)) : $q |]) [| [] |] keys
-            let q1 = [| ($(stringQ predname), ($t, $keysq)) |]
-            let propPred (ColDef key2 _ _) = [| ($(stringQ (colNameToPredName prefix key2)), ($t, $keysq ++ [($v, $(stringQ key2))])) |]
-            let propPreds = foldr (\coldef q2 -> [| $(propPred coldef) : $q2 |]) [| [] |] props
-            [| $q1 : $propPreds |] where
+            let v = SQLVar "1"
+            let t = OneTable tn v
+            let keysq = map (\(ColDef key _ _) -> SQLQualifiedCol v key) keys
+            let q1 = SQLMapping predname t keysq
+            let propPred (ColDef key2 _ _) = SQLMapping (colNameToPredName prefix key2) t (keysq ++ [SQLQualifiedCol v key2])
+            let propPreds = map propPred props
+            q1 : propPreds
 
-generateICATMappings :: [Stmt2] -> Q Exp
-generateICATMappings = foldr (\stmt q2 -> [| $(generateICATMapping stmt ) ++ $q2 |]) [|[]|]
+generateICATMappings :: [Stmt2] -> [SQLMapping]
+generateICATMappings = concatMap generateICATMapping
 
 {- generateICATSchema :: Stmt2 -> Q Exp
 generateICATSchema (Stmt tablename coldefs) = do
@@ -239,7 +236,7 @@ generateICATSchema (Stmt tablename coldefs) = do
 generateICATSchemas :: [Stmt2] -> Q Exp
 generateICATSchemas = foldr (\stmt q2 -> [| $(generateICATSchema stmt) : $q2 |] ) [|[]|] -}
 
-schema :: (Q Exp, Q Exp)
+schema :: ([Pred], [SQLMapping])
 schema =
     let path = "gen/schema.sql"
         file = unsafePerformIO $ readFile path in

@@ -1,0 +1,57 @@
+name: QueryArrow-db-sql-common
+version: '0.2'
+author: Hao Xu
+license: BSD3
+dependencies:
+- base >=4
+- aeson
+- containers
+- mtl
+- transformers
+- convertible
+- text >=1.2.1.1
+- lattices
+- QueryArrow-rpc-common
+library:
+  source-dirs: src
+  ghc-options:
+  - -Wall
+  - -fPIC
+  exposed-modules:
+  - QueryArrow.SQL.ICAT
+  - QueryArrow.SQL.SQL
+  - QueryArrow.SQL.BuiltIn
+  dependencies:
+  - hslogger
+  - yaml
+  - namespace >=0.1.2.2
+  - semibounded-lattices
+  - QueryArrow-common
+tests:
+  Test:
+    main: Test.hs
+    source-dirs:
+    - src
+    - test
+    dependencies:
+    - semigroups
+    - parsec
+    - semigroupoids
+    - QuickCheck
+    - HDBC
+    - bytestring
+    - hspec
+    - unordered-containers
+    - scientific
+    - array
+    - process
+    - conduit-combinators
+    - conduit
+    - http-conduit
+    - resourcet
+    - async
+    - time
+    - exceptions
+    - utf8-string
+    - directory
+    - template-haskell

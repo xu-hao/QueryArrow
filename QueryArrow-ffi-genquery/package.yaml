@@ -1,0 +1,29 @@
+name: QueryArrow-ffi-genquery
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- containers
+- mtl
+- transformers
+- semigroups
+- parsec
+- semigroupoids
+- unordered-containers
+- text >=1.2.1.1
+- hslogger
+- namespace >=0.1.2.2
+- either
+- QueryArrow-common
+- QueryArrow-db-sql-hdbc-common
+- QueryArrow-ffi-service
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.FFI.GenQuery.Translate
+  - QueryArrow.FFI.GenQuery.Parser
+  - QueryArrow.FFI.GenQuery.Data

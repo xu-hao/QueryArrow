@@ -1,0 +1,19 @@
+name: QueryArrow-db-sql-hdbc-postgresql
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- aeson
+- HDBC-postgresql
+- heterogeneous-list
+- QueryArrow-common
+- QueryArrow-db-sql-common
+- QueryArrow-db-sql-hdbc-common
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.SQL.HDBC.PostgreSQL

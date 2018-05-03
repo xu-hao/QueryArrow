@@ -1,0 +1,31 @@
+name: QueryArrow-rpc-socket
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+- -threaded
+dependencies:
+- base >=4
+- mtl
+- containers
+- aeson
+- resourcet
+- time
+- hslogger
+- network
+- either
+- directory
+- optparse-applicative
+- QueryArrow
+- QueryArrow-rpc-common
+- QueryArrow-common
+- QueryArrow-rpc-http
+- QueryArrow-db-filesystem
+- QueryArrow-ffi-service
+- log-adapter
+executables:
+  QueryArrowServer:
+    main: Main.hs
+    source-dirs: src

@@ -23,9 +23,9 @@ db_plugin:
                 db_password: testpassword
                 db_host: localhost
                 db_username: irods
-                db_predicates: "../QueryArrow-gen/gen/ICATGen"
+                db_predicates: "../QueryArrow-gen/gen/ICATGen.yaml"
                 db_namespace: ICAT
-                db_sql_mapping: "../QueryArrow-gen/gen/SQL/ICATGen"
+                db_sql_mapping: "../QueryArrow-gen/gen/SQL/ICATGen.yaml"
 servers:
 - server_protocol: service/unix domain socket
   server_config:

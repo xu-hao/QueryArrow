@@ -1,0 +1,38 @@
+name: QueryArrow-ffi-service-local
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- containers
+- mtl
+- transformers
+- semigroups
+- semigroupoids
+- bytestring
+- unordered-containers
+- convertible
+- text >=1.2.1.1
+- scientific
+- array
+- process
+- resourcet
+- time
+- hslogger
+- exceptions
+- utf8-string
+- monad-control
+- monad-logger
+- fast-logger
+- constraints
+- either
+- QueryArrow-common
+- QueryArrow
+- QueryArrow-ffi-service
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.FFI.Service.Local

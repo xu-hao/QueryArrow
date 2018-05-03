@@ -1,0 +1,60 @@
+name: QueryArrow-db-cypher
+version: '0.2'
+author: Hao Xu
+license: BSD3
+dependencies:
+- base >=4
+- containers
+- transformers
+- bytestring
+- haskell-neo4j-client
+- unordered-containers
+- convertible
+- text >=1.2.1.1
+- scientific
+- aeson
+- lattices
+- QueryArrow-rpc-common
+library:
+  source-dirs: src
+  ghc-options:
+  - -Wall
+  - -fPIC
+  exposed-modules:
+  - QueryArrow.Cypher.Neo4j
+  - QueryArrow.Cypher.Neo4jConnection
+  - QueryArrow.Cypher.BuiltIn
+  - QueryArrow.Cypher.Cypher
+  - QueryArrow.Cypher.ICAT
+  - QueryArrow.Cypher.SQLToCypher
+  dependencies:
+  - hslogger
+  - namespace >=0.1.2.2
+  - heterogeneous-list
+  - semibounded-lattices
+  - QueryArrow-common
+  - QueryArrow-db-sql-common
+tests:
+  Test:
+    main: Test.hs
+    source-dirs:
+    - src
+    - test
+    dependencies:
+    - mtl
+    - semigroups
+    - parsec
+    - semigroupoids
+    - QuickCheck
+    - hspec
+    - array
+    - process
+    - conduit-combinators
+    - conduit
+    - resourcet
+    - async
+    - time
+    - exceptions
+    - utf8-string
+    - directory
+    - template-haskell

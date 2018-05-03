@@ -7,10 +7,11 @@ import QueryArrow.SQL.SQL
 import QueryArrow.SQL.BuiltIn
 import QueryArrow.ICAT
 import QueryArrow.BuiltIn
+import QueryArrow.Serialization
 import Data.Namespace.Namespace
+import Data.Yaml
 
 import Data.Map.Strict (fromList, keys)
-import Text.Read
 
 nextidPred :: [String] -> String -> Pred
 nextidPred nss nextid = Pred (PredName nss nextid) (PredType ObjectPred [ParamType True False True TextType])
@@ -27,20 +28,20 @@ makeICATSQLDBAdapter ns predsPath mappingsPath nextid conninfo = do
     let builtinpreds = keys builtin
     return (GenericDatabase (sqlStandardTrans ns preds mappings nextid) conninfo ns (qStandardPreds ns preds ++ map lookupPredByName builtinpreds))
 
-loadMappings :: FilePath -> IO [(String, (Table, [SQLQualifiedCol]))]
+loadMappings :: FilePath -> IO [SQLMapping]
 loadMappings path = do
-    content <- readFile path
-    case readMaybe content of
-        Just mappings -> return mappings
-        Nothing -> error ("loadMappings: cannot parse file " ++ path)
+    content <- decodeFileEither path
+    case content of
+        Right mappings -> return mappings
+        Left exception -> error ("loadMappings: cannot parse file " ++ path ++ ", exception: " ++ show exception)
 
-sqlMapping :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> PredTableMap
+sqlMapping :: String -> [Pred] -> [SQLMapping] -> PredTableMap
 sqlMapping ns preds mappings =
     let sqlStandardPredsMap = qStandardPredsMap ns preds
         lookupPred n = case lookupObject (QPredName ns [] n) sqlStandardPredsMap of
                 Nothing -> error ("sqlMapping: cannot find predicate " ++ n)
                 Just pred1 -> predName pred1 in
-        fromList (map (\(n, m) -> (lookupPred n, m)) mappings)
+        fromList (map (\(SQLMapping n m l) -> (lookupPred n, (m, l))) mappings)
 
 lookupPred :: String -> String -> PredName
 lookupPred ns n = predName (lookupPredByName (PredName [ns] n))
@@ -51,7 +52,7 @@ lookupPredByName n@(PredName [ns] _) =
                   case lookupObject n sqlStandardBuiltInPredsMap of
                     Nothing -> error ("sqlStandardTrans: cannot find predicate " ++ show n)
                     Just pred1 -> pred1
-sqlStandardTrans :: String -> [Pred] -> [(String, (Table, [SQLQualifiedCol]))] -> Maybe String -> SQLTrans
+sqlStandardTrans :: String -> [Pred] -> [SQLMapping] -> Maybe String -> SQLTrans
 sqlStandardTrans ns preds mappings nextid =
   let builtins@(BuiltIn builtinsmap) = (sqlBuiltIn (lookupPred ns))
       ptablemap = (sqlMapping ns preds mappings)

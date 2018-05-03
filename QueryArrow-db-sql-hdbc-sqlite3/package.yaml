@@ -1,0 +1,19 @@
+name: QueryArrow-db-sql-hdbc-sqlite3
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- aeson
+- HDBC-sqlite3
+- heterogeneous-list
+- QueryArrow-common
+- QueryArrow-db-sql-common
+- QueryArrow-db-sql-hdbc-common
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.SQL.HDBC.Sqlite3

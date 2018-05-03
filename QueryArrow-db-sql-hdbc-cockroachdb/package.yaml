@@ -1,0 +1,16 @@
+name: QueryArrow-db-sql-hdbc-cockroachdb
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- HDBC-postgresql
+- QueryArrow-common
+- QueryArrow-db-sql-hdbc-postgresql
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.SQL.HDBC.CockroachDB

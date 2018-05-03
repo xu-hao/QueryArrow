@@ -13,6 +13,7 @@ import System.IO (Handle, IOMode(..))
 import Network.Socket
 import Control.Monad.Trans.Either
 import QueryArrow.FFI.Service.Handle
+import QueryArrow.Serialization
 
 unixDomainSocketConnect :: String -> EitherT Error IO Handle
 unixDomainSocketConnect path = do

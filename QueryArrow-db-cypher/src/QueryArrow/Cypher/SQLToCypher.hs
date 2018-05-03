@@ -32,13 +32,13 @@ lookup2 tablename0 table =
         fromMaybe tablename0 (lookup tablename0 table)
 
 endsWith :: String -> String -> Bool
-endsWith a b = 
+endsWith a b =
       length a >= length b && drop (length a - length b) a == b
 
 sqlToCypher :: PredTypeMap -> PredTableMap -> CypherPredTableMap
 sqlToCypher ptm mappings =
         foldrWithKey (\predname (OneTable tablename _, qcols) mappings' ->
-            let cols = map ((\key0 -> lookup2 key0 colprop) . snd) qcols
+            let cols = map (\(SQLQualifiedCol _ key0) -> lookup2 key0 colprop) qcols
                 colsi = zip cols [1..length cols]
                 predtype = fromMaybe (error ("sqlToCypher: cannot find predicate " ++ show predname)) (lookup predname ptm)
                 keycols = keyComponents predtype colsi

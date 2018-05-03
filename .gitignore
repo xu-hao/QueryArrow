@@ -1,3 +1,5 @@
 /*/gen/
 /*/etc/
 /**/.stack-work/
+/*/*.cabal
+/*/a.out

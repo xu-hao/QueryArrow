@@ -1,0 +1,88 @@
+name: QueryArrow-common
+version: '0.2'
+author: Hao Xu
+license: BSD3
+dependencies:
+- base >=4
+- containers
+- mtl
+- transformers
+- semigroups
+- parsec
+- semigroupoids
+- aeson
+- bytestring
+- unordered-containers
+- convertible
+- text >=1.2.1.1
+- scientific
+- array
+- conduit-combinators
+- conduit
+- resourcet
+- async
+- time
+- exceptions
+- utf8-string
+- lattices
+library:
+  source-dirs: src
+  ghc-options:
+  - -Wall
+  - -fPIC
+  exposed-modules:
+  - QueryArrow.FO.Data
+  - QueryArrow.FO.Types
+  - QueryArrow.FO.Domain
+  - QueryArrow.FO.Utils
+  - QueryArrow.DB.DB
+  - QueryArrow.DB.NoTranslation
+  - QueryArrow.DB.GenericDatabase
+  - QueryArrow.DB.NoConnection
+  - QueryArrow.DB.ParametrizedStatement
+  - QueryArrow.DB.ResultStream
+  - QueryArrow.DB.AbstractDatabaseList
+  - QueryArrow.ICAT
+  - QueryArrow.BuiltIn
+  - QueryArrow.QueryPlan
+  - QueryArrow.Logging
+  - QueryArrow.Parser
+  - QueryArrow.Config
+  - QueryArrow.ListUtils
+  - QueryArrow.Utils
+  - QueryArrow.Plugin
+  dependencies:
+  - hslogger
+  - regex-tdfa
+  - lifted-async
+  - namespace >=0.1.2.2
+  - semibounded-lattices
+  - conduit-extra
+  - cpphs
+  - monad-logger
+  - fast-logger
+  - constraints
+  - either
+  - lrucache
+  - yaml
+  - filepath
+  - data-msgpack
+  - binary
+  - base64-bytestring
+  - heterogeneous-list
+  - log-adapter
+tests:
+  Test:
+    main: Test.hs
+    source-dirs:
+    - src
+    - test
+    dependencies:
+    - QuickCheck
+    - hspec
+    - temporary
+    - process
+    - http-conduit
+    - cereal
+    - directory
+    - template-haskell

@@ -4,11 +4,12 @@ module QueryArrow.FFI.Service where
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
+import QueryArrow.Serialization
 
-import Data.Text (Text)
+
 import Control.Monad.Trans.Either (EitherT)
 
-type Error = (Int, Text)
+
 
 data QueryArrowService a = QueryArrowService {
   execQuery :: a -> Formula -> MapResultRow -> EitherT Error IO (),

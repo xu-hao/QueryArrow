@@ -17,6 +17,7 @@ import Data.Text.Encoding
 import Control.Monad.Trans.Either (EitherT)
 import Network
 import QueryArrow.FFI.Service.Handle
+import QueryArrow.Serialization
 import Data.ByteString.Lazy (fromStrict)
 
 data TcpClientConfig = TcpClientConfig {

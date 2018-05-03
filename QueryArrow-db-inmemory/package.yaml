@@ -1,0 +1,29 @@
+name: QueryArrow-db-inmemory
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- aeson
+- containers
+- mtl
+- transformers
+- convertible
+- text >=1.2.1.1
+- hslogger
+- regex-tdfa
+- regex-compat-tdfa
+- namespace >=0.1.2.2
+- lattices
+- semibounded-lattices
+- heterogeneous-list
+- QueryArrow-common
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.InMemory.BuiltIn
+  - QueryArrow.InMemory.Map
+  - QueryArrow.Binding.Binding

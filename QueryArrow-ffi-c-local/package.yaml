@@ -1,0 +1,18 @@
+name: QueryArrow-ffi-c-local
+version: '0.2'
+author: Hao Xu
+license: BSD3
+ghc-options:
+- -Wall
+- -fPIC
+- -shared
+- -dynamic
+dependencies:
+- base >=4
+- hslogger
+- QueryArrow-ffi-service
+- QueryArrow-ffi-service-local
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.FFI.C.Local

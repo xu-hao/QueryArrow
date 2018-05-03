@@ -1,0 +1,19 @@
+name: QueryArrow-db-include
+version: '0.2'
+author: Hao Xu
+license: UnspecifiedLicense
+ghc-options:
+- -Wall
+- -fPIC
+dependencies:
+- base >=4
+- aeson
+- hslogger
+- mtl
+- containers
+- namespace >=0.1.2.2
+- QueryArrow-common
+library:
+  source-dirs: src
+  exposed-modules:
+  - QueryArrow.Include
