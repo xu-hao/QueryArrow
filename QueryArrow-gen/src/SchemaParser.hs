@@ -44,7 +44,8 @@ data ColType = Text
              | Number deriving Show
 data Constraint = NotNull
                 | DI Integer
-                | DS String deriving Show
+                | DS String
+                | PrimaryKey deriving (Eq, Show)
 
 
 prog :: Parser [Stmt2]
@@ -119,6 +120,7 @@ typep = reserved "integer" *> return Number
     <|> reserved "bigint" *> return Number
     <|> reserved "int" *> return Number
     <|> reserved "varchar" *> parens integer *> return Text
+    <|> reserved "text" *> return Text
     <|> reserved "character" *> reserved "varying" *> parens integer *> return Text
 
 constraints :: Parser [Constraint]
@@ -128,6 +130,7 @@ constraint :: Parser Constraint
 constraint = (reserved "not" <|> reserved "NOT") *> (reserved "null" <|> reserved "NULL") *> return NotNull
          <|> try(reserved "DEFAULT" *> (DI <$> integer))
          <|> reserved "DEFAULT" *> (DS <$> stringp)
+         <|> reserved "primary" *> reserved "key" *> return PrimaryKey
 
 findAllKeys :: String -> [ColDef] -> ([ColDef], [ColDef])
 findAllKeys prefix coldefs =
@@ -157,7 +160,7 @@ findAllKeys prefix coldefs =
                                           "TICKET_ID" == key1 || "USER_NAME" == key1)  coldefs  -- specical case for user auth
         "GRID_CONFIGURATION" -> (coldefs, [])  -- specical case for user auth
         _ ->
-            let par@(key, _) = partition (\(ColDef key0 _ _) -> map toUpper key0 == prefix ++ "_ID")  coldefs in
+            let par@(key, _) = partition (\(ColDef key0 _ constraints) -> map toUpper key0 == prefix ++ "_ID" || PrimaryKey `elem` constraints)  coldefs in
                 if null key
                     then partition (\(ColDef key0 _ _) -> let key1 = (map toUpper key0) in
                                                                               (endswith "_ID" key1)) coldefs
@@ -167,7 +170,10 @@ findAllNotNulls :: [ColDef] -> [ColDef]
 findAllNotNulls = filter (\(ColDef _ _ cs) -> any (\c -> case c of NotNull -> True ; _ -> False) cs)
 
 extractPrefix tablename =
-    let predname0 = drop 2 (map toUpper tablename) in
+    let upperTableName = map toUpper tablename
+        predname0 = if take 2 upperTableName == "R_"
+          then drop 2 upperTableName
+          else upperTableName in
         replace  "_MAIN" "" predname0
 
 prefixToPredName prefix =
