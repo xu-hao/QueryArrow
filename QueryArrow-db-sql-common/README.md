@@ -95,7 +95,7 @@ Defines two predicates
 ```
 ### Generating from sql schema
 ```sql
-create table T (A int primary key, B text)
+create table T (A int primary key, B text);
 ```
 
 ```
