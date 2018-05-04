@@ -94,6 +94,9 @@ Defines two predicates
     tableVar: '1'
 ```
 ### Generating from sql schema
+```sql
+create table T (A int primary key, B text)
+```
 
 ```
 stack exec schema_parser_main <sql schema> <preds> <sql mappings>
