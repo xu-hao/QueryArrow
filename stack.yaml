@@ -119,3 +119,7 @@ ghc-options:
 rebuild-ghc-options: true
 
 apply-ghc-options: everything
+
+nix:
+  enable: true
+  packages: [postgresql, sqlite, zlib]
