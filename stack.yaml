@@ -123,3 +123,12 @@ apply-ghc-options: everything
 nix:
   enable: true
   packages: [postgresql, sqlite, zlib]
+
+image:
+  containers:
+  - name: QueryArrow
+    base: fpco/stack-run
+    add:
+      QueryArrow-gen/etc/QueryArrow: /etc/QueryArrow
+    entrypoints:
+    - QueryArrow
