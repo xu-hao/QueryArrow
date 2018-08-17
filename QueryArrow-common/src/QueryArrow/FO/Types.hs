@@ -10,7 +10,7 @@ import Data.Set (Set, (\\), toAscList, member, null, filter)
 import qualified Data.Set as Set
 import QueryArrow.FO.Data
 import QueryArrow.FO.Domain
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Reader
 import Control.Monad.Except

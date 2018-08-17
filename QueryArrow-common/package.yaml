@@ -35,6 +35,9 @@ library:
   - QueryArrow.FO.Types
   - QueryArrow.FO.Domain
   - QueryArrow.FO.Utils
+  - QueryArrow.FO.Serialize
+  - QueryArrow.Syntax.Type
+  - QueryArrow.Semantics.Value
   - QueryArrow.DB.DB
   - QueryArrow.DB.NoTranslation
   - QueryArrow.DB.GenericDatabase
@@ -66,9 +69,11 @@ library:
   - lrucache
   - yaml
   - filepath
-  - data-msgpack
   - binary
   - base64-bytestring
+  - comonad
+  - free
+  - deriving-compat
   - heterogeneous-list
   - log-adapter
 tests:

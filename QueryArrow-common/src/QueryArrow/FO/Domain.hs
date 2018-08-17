@@ -8,6 +8,7 @@ import Data.Map.Strict (lookup)
 import Prelude hiding (lookup)
 import Data.Set (Set, fromList)
 import Control.Monad.Except (throwError)
+import Control.Comonad.Cofree
 import Algebra.Lattice
 
 -- -- Int must be nonnegative
@@ -77,33 +78,33 @@ class DeterminedVars a f where
 instance DeterminedVars (Atom1 f) f where
     determinedVars dsp vars a = dsp vars a \/ vars
 
-instance Unannotate f (Formula0 a) => DeterminedVars (Formula1 a f) a where
-    determinedVars dsp vars f1 = case unannotate f1 of
-      (FAtomic0 atom0) -> determinedVars dsp vars atom0
-      (Aggregate0 (FReturn vars2) form) ->
+instance DeterminedVars (Formula2 a f) a where
+    determinedVars dsp vars f1 = case unwrap f1 of
+      (FAtomicF atom0) -> determinedVars dsp vars atom0
+      (AggregateF (FReturn vars2) form) ->
         let vars1 = determinedVars dsp vars form in
         fromList vars2 /\ vars1
-      (FInsert0 _) -> vars
-      (FSequencing0 form1 form2) ->
+      (FInsertF _) -> vars
+      (FSequencingF form1 form2) ->
         let map1 = determinedVars dsp vars form1 in
             determinedVars dsp map1 form2
-      (FChoice0 form1 form2) ->
+      (FChoiceF form1 form2) ->
         let map1 = determinedVars dsp vars form1
             map2 = determinedVars dsp vars form2 in
             (map1 /\ map2)
-      (FPar0 form1 form2) ->
+      (FParF form1 form2) ->
         let map1 = determinedVars dsp vars form1
             map2 = determinedVars dsp vars form2 in
             (map1 /\ map2)
-      (Aggregate0 Not _) -> vars
-      (Aggregate0 Distinct form) -> determinedVars dsp vars form
-      (Aggregate0 Exists _) -> vars
-      (Aggregate0 (Summarize funcs groupby) _) -> (fromList (fst (unzip funcs))) \/ vars
-      (Aggregate0 (Limit _) form) -> determinedVars dsp vars form
-      (Aggregate0 (OrderByAsc _) form) -> determinedVars dsp vars form
-      (Aggregate0 (OrderByDesc _) form) -> determinedVars dsp vars form
-      FOne0 -> vars
-      FZero0 -> vars
+      (AggregateF Not _) -> vars
+      (AggregateF Distinct form) -> determinedVars dsp vars form
+      (AggregateF Exists _) -> vars
+      (AggregateF (Summarize funcs groupby) _) -> (fromList (fst (unzip funcs))) \/ vars
+      (AggregateF (Limit _) form) -> determinedVars dsp vars form
+      (AggregateF (OrderByAsc _) form) -> determinedVars dsp vars form
+      (AggregateF (OrderByDesc _) form) -> determinedVars dsp vars form
+      FOneF -> vars
+      FZeroF -> vars
 
 
 toOutputVarsFunction :: PredTypeMap -> OutputVarsFunction Atom

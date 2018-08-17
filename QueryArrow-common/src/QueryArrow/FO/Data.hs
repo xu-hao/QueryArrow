@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, StandaloneDeriving, DeriveFunctor, UndecidableInstances, DeriveGeneric,
-   RankNTypes, FlexibleContexts, GADTs, PatternSynonyms, ScopedTypeVariables #-}
+   RankNTypes, FlexibleContexts, GADTs, PatternSynonyms, ScopedTypeVariables, TemplateHaskell #-}
 
 module QueryArrow.FO.Data where
 
@@ -16,21 +16,13 @@ import Data.Namespace.Path
 import Data.Namespace.Namespace
 import Algebra.Lattice
 import Control.Monad (foldM)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import Data.Monoid ((<>))
-import Data.Text.Encoding
-import Data.MessagePack
-import GHC.Generics
-import Data.Int (Int64, Int32)
-import Data.Binary.Get
-import Data.Binary.Put
-import Data.ByteString.Lazy (fromStrict, toStrict)
-import qualified Data.ByteString.Lazy as BSL
-import Data.Typeable (Typeable)
-import Text.Read (Read(..), ReadPrec)
+import Control.Comonad
+import Control.Comonad.Cofree
+import Text.Show.Deriving (deriveShow1)    
+import Data.Functor.Classes (Show1)
+import QueryArrow.Syntax.Type
 import Debug.Trace
-
 
 -- predicate kinds
 data PredKind = ObjectPred | PropertyPred deriving (Eq, Ord, Show, Read)
@@ -43,6 +35,8 @@ data ParamType = ParamType {isKey :: Bool,  isInput :: Bool,  isOutput :: Bool, 
 -- predicate
 type PredName = ObjectPath String
 
+instance Key String where
+
 deriving instance (Key a, Read a) => Read (ObjectPath a)
 deriving instance (Key a, Read a) => Read (NamespacePath a)
 
@@ -51,77 +45,45 @@ data Pred = Pred {  predName :: PredName, predType :: PredType} deriving (Eq, Or
 -- variables
 newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 
--- types
-data CastType = TypeCons String | TypeApp CastType CastType | TypeVar String | TypeUniv String CastType deriving (Eq, Ord, Show, Read)
-pattern TextType = TypeCons "text"
-pattern Int64Type = TypeCons "int64"
-pattern Int32Type = TypeCons "int32"
-pattern ByteStringType = TypeCons "bytestring"
-pattern ListType a = TypeApp (TypeCons "[]") a
-pattern FuncType a b = TypeApp (TypeApp (TypeCons "->") a) b
 
 -- http://stackoverflow.com/questions/27157717/boilerplate-free-annotation-of-asts-in-haskell
-newtype Tie f = Tie (f (Tie f))
-
-data Annotated a f = Annotated a (f (Annotated a f))
-
-class Unannotate (f :: (* -> *) -> *) (g :: * -> *) where
-  type AnnotationType f
-  unannotate :: f g -> g (f g)
-  mapA :: (AnnotationType f -> AnnotationType f) -> (forall a . g a -> g a) -> f g -> f g
-
-instance Functor f => Unannotate Tie f where
-  type AnnotationType Tie = ()
-  unannotate (Tie a) = a
-  mapA g f (Tie a) = Tie (f (fmap (mapA g f) a))
-
-instance Functor f => Unannotate (Annotated a) f where
-  type AnnotationType (Annotated a) = a
-  unannotate (Annotated _ a) = a
-  mapA g f (Annotated a b) = Annotated (g a) (f (fmap (mapA g f) b))
 
 -- expression
-data Expr0 a = VarExpr0 Var | ConsExpr0 String | IntExpr0 Integer | StringExpr0 T.Text | AppExpr0 a a | NullExpr0 | CastExpr0 CastType a deriving (Eq, Ord, Show, Read, Functor)
+data ExprF a = VarExprF Var | ConsExprF String | IntExprF Integer | StringExprF T.Text | AppExprF a a | NullExprF | CastExprF CastType a deriving (Eq, Ord, Read, Functor)
 
-type Expr1 a = a Expr0
+$(deriveShow1 ''ExprF)
 
-type Expr = Expr1 Tie
+type Expr1 = Cofree ExprF
 
-deriving instance Eq Expr
-deriving instance Ord Expr
-deriving instance Show Expr
-deriving instance Read Expr
+type Expr = Expr1 () 
 
-pattern VarExpr a = Tie (VarExpr0 a)
-pattern ConsExpr a = Tie (ConsExpr0 a)
-pattern IntExpr a = Tie (IntExpr0 a)
-pattern StringExpr a = Tie (StringExpr0 a)
-pattern AppExpr a b = Tie (AppExpr0 a b)
-pattern NullExpr = Tie NullExpr0
-pattern CastExpr a b = Tie (CastExpr0 a b)
+
+pattern VarExpr a = () :< VarExprF a
+pattern ConsExpr a = () :< ConsExprF a
+pattern IntExpr a = () :< IntExprF a
+pattern StringExpr a = () :< StringExprF a
+pattern AppExpr a b = () :< AppExprF a b
+pattern NullExpr = () :< NullExprF
+pattern CastExpr a b = () :< CastExprF a b
 pattern ListConsExpr a b = AppExpr (AppExpr (ConsExpr "(:)") a) b
-pattern NilExpr = ConsExpr "[]"
+pattern ListNilExpr = ConsExpr "[]"
 
 listExpr :: [Expr] -> Expr
-listExpr = foldr ListConsExpr NilExpr
+listExpr = foldr ListConsExpr ListNilExpr
 
 exprListFromExpr :: Expr -> [Expr]
 exprListFromExpr (ListConsExpr a b) = let tl = exprListFromExpr b in
                                       a:tl
-exprListFromExpr NilExpr = []
-exprListFromExpr a = error ("exprListFromExpr: malformatted list " ++ serialize a)
+exprListFromExpr ListNilExpr = []
+exprListFromExpr a = error ("exprListFromExpr: malformatted list " ++ show a)
 
 -- atoms
 data Atom1 a = Atom1 { atomPred :: PredName, atomArgs :: [Expr1 a] }
 
-type Atom = Atom1 Tie
+type Atom = Atom1 ()
 
 pattern Atom a b = Atom1 a b
 
-deriving instance Eq (Expr1 a) => Eq (Atom1 a)
-deriving instance Ord (Expr1 a) => Ord (Atom1 a)
-deriving instance Show (Expr1 a) => Show (Atom1 a)
-deriving instance Read (Expr1 a) => Read (Atom1 a)
 
 -- sign of literal
 data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
@@ -129,58 +91,37 @@ data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
 -- literals
 data Lit1 a = Lit1 { sign :: Sign,  atom :: Atom1 a }
 
-type Lit = Lit1 Tie
+type Lit = Lit1 ()
 
 pattern Lit a b = Lit1 a b
 
-deriving instance Eq (Expr1 a) => Eq (Lit1 a)
-deriving instance Ord (Expr1 a) => Ord (Lit1 a)
-deriving instance Show (Expr1 a) => Show (Lit1 a)
-deriving instance Read (Expr1 a) => Read (Lit1 a)
 
 data Summary = Random Var | Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
 data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists | FReturn [Var] deriving (Eq, Ord, Show, Read)
 
-data Formula0 a f = FAtomic0 (Atom1 a)
-             | FInsert0 (Lit1 a)
-             | FChoice0 f f
-             | FSequencing0 f f
-             | FPar0 f f
-             | FOne0
-             | FZero0
-             | Aggregate0 Aggregator f deriving Functor
+data FormulaF a f = FAtomicF (Atom1 a)
+             | FInsertF (Lit1 a)
+             | FChoiceF f f
+             | FSequencingF f f
+             | FParF f f
+             | FOneF
+             | FZeroF
+             | AggregateF Aggregator f deriving Functor
 
-deriving instance (Eq f, Eq (Expr1 a)) => Eq (Formula0 a f)
-deriving instance (Ord f, Ord (Expr1 a)) => Ord (Formula0 a f)
-deriving instance (Show f, Show (Expr1 a)) => Show (Formula0 a f)
-deriving instance (Read f, Read (Expr1 a)) => Read (Formula0 a f)
 
-deriving instance Eq (Formula)
-deriving instance Ord (Formula)
-deriving instance Show (Formula)
-deriving instance Read (Formula)
+type Formula2 a = Cofree (FormulaF a)
 
-type Formula1 a b = b (Formula0 a)
+type Formula = Formula2 () ()
 
-type Formula = Formula1 Tie Tie
 
-pattern FAtomic a = Tie (FAtomic0 a)
-pattern FInsert a = Tie (FInsert0 a)
-pattern FChoice a b = Tie (FChoice0 a b)
-pattern FSequencing a b = Tie (FSequencing0 a b)
-pattern FPar a b = Tie (FPar0 a b)
-pattern FZero = Tie FZero0
-pattern FOne = Tie FOne0
-pattern Aggregate a b = Tie (Aggregate0 a b)
-
-pattern FAtomic2 d a = Annotated d (FAtomic0 a)
-pattern FInsert2 d a = Annotated d (FInsert0 a)
-pattern FChoice2 d a b = Annotated d (FChoice0 a b)
-pattern FSequencing2 d a b = Annotated d (FSequencing0 a b)
-pattern FPar2 d a b = Annotated d (FPar0 a b)
-pattern FZero2 d = Annotated d FZero0
-pattern FOne2 d = Annotated d FOne0
-pattern Aggregate2 d a b = Annotated d (Aggregate0 a b)
+pattern FAtomic a = () :< FAtomicF a
+pattern FInsert a = () :< FInsertF a
+pattern FChoice a b = () :< FChoiceF a b
+pattern FSequencing a b = () :< FSequencingF a b
+pattern FPar a b = () :< FParF a b
+pattern FZero = () :< FZeroF
+pattern FOne = () :< FOneF
+pattern Aggregate a b = () :< AggregateF a b
 
 {-
 isConst :: Expr -> Bool
@@ -194,38 +135,38 @@ isConst _ = False
 class FreeVars a where
     freeVars :: a -> Set Var
 
-instance Unannotate a Expr0 => FreeVars (Expr1 a) where
-    freeVars e1 = case unannotate e1 of
-      CastExpr0 _ e -> freeVars e
-      VarExpr0 var0 -> Set.singleton var0
-      ConsExpr0 var0 -> bottom
-      IntExpr0 _ -> bottom
-      StringExpr0 _ -> bottom
-      AppExpr0 a b -> freeVars a \/ freeVars b
-      NullExpr0 -> bottom
+instance FreeVars (Expr1 a) where
+    freeVars e1 = case unwrap e1 of
+      CastExprF _ e -> freeVars e
+      VarExprF var0 -> Set.singleton var0
+      ConsExprF var0 -> bottom
+      IntExprF _ -> bottom
+      StringExprF _ -> bottom
+      AppExprF a b -> freeVars a \/ freeVars b
+      NullExprF -> bottom
 
-instance Unannotate a Expr0 => FreeVars (Atom1 a) where
+instance FreeVars (Atom1 a) where
     freeVars (Atom _ theargs) = freeVars theargs
 
-instance Unannotate a Expr0 => FreeVars (Lit1 a) where
+instance FreeVars (Lit1 a) where
     freeVars (Lit _ theatom) = freeVars theatom
 
-instance (Unannotate a Expr0, Unannotate b (Formula0 a)) => FreeVars (Formula1 a b) where
-    freeVars f1 = case unannotate f1 of
-      FAtomic0 atom1 ->
+instance FreeVars (Formula2 a b) where
+    freeVars f1 = case unwrap f1 of
+      FAtomicF atom1 ->
         freeVars atom1
-      FInsert0 lits ->
+      FInsertF lits ->
         freeVars lits
-      FSequencing0 form1 form2 ->
+      FSequencingF form1 form2 ->
         freeVars form1 \/ freeVars form2
-      FChoice0 form1 form2 ->
+      FChoiceF form1 form2 ->
         freeVars form1 \/ freeVars form2
-      FPar0 form1 form2 ->
+      FParF form1 form2 ->
         freeVars form1 \/ freeVars form2
-      Aggregate0 agg form ->
+      AggregateF agg form ->
         freeVars agg \/ freeVars form
-      FZero0 -> bottom
-      FOne0 -> bottom
+      FZeroF -> bottom
+      FOneF -> bottom
 
 instance FreeVars Aggregator where
     freeVars agg = case agg of
@@ -393,12 +334,6 @@ pattern PredName ks n = ObjectPath (NamespacePath ks) n
 pattern QPredName k ks n = ObjectPath (NamespacePath (k : ks)) n
 pattern UQPredName n = ObjectPath (NamespacePath []) n
 
-instance Serialize PredName where
-  serialize = predNameToString
-
-instance Serialize ParamType where
-  serialize (ParamType key input output t) = (if key then "key " else ""  ) ++ (if input then "input " else "") ++ (if output then "output " else "") ++ serialize t
-
 predNameToString :: PredName -> String
 predNameToString (PredName mns n)= intercalate "." (mns ++ [n])
 
@@ -415,7 +350,6 @@ constructPredTypeMap :: [Pred] -> PredTypeMap
 constructPredTypeMap =
   fromList . map (\(Pred pn pt) -> (pn, pt))
 
-instance Key String where
 
 setNamespace :: String -> PredName -> PredName
 setNamespace ns (UQPredName n) = QPredName ns [] n
@@ -454,74 +388,6 @@ setPureFormulaNamespace ns CFalse = CFalse -}
 --     show (Key type1) = "KEY " ++ type1
 --     show (Property type1) = "PROP " ++ type1
 
-class Serialize a where
-    serialize :: a -> String
-
-class SerializeAnnotation (f :: (* -> *) -> *) where
-    serializeAnnotation :: f g -> String
-
-instance SerializeAnnotation Tie where
-    serializeAnnotation _ = ""
-
-instance Serialize a => SerializeAnnotation (Annotated a) where
-    serializeAnnotation (Annotated a _) = "[" ++ serialize a ++ "]"
-
-instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Atom1 a) where
-    serialize (Atom name args) = predNameToString name ++ "(" ++ intercalate "," (map serialize args) ++ ")"
-
-instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Expr1 a) where
-    serialize e1 = serializeAnnotation e1 ++ case unannotate e1 of
-      VarExpr0 var0 -> serialize var0
-      ConsExpr0 var0 -> var0
-      IntExpr0 i -> show i
-      StringExpr0 s -> show s
-      AppExpr0 a b -> "(" ++ serialize a ++ " " ++ serialize b ++ ")"
-      NullExpr0 -> "null"
-      CastExpr0 t v -> serialize v ++ " " ++ serialize t
-
-instance Serialize CastType where
-    serialize (TypeCons ty) = "(cons " ++ ty ++ ")"
-    serialize (TypeApp ty1 ty2) = "(" ++ serialize ty1 ++ " " ++ serialize ty2 ++ ")"
-    serialize (TypeUniv tv ty) = "(forall " ++ tv ++ "." ++ serialize ty ++ ")"
-    serialize (TypeVar v) = "(var " ++ v ++ ")"
-
-instance Serialize Var where
-    serialize (Var s) = s
-
-instance (SerializeAnnotation a, Unannotate a Expr0) => Serialize (Lit1 a) where
-    serialize (Lit thesign theatom) = case thesign of
-        Pos -> serialize theatom
-        Neg -> "¬" ++ serialize theatom
-
-instance Serialize Summary where
-    serialize (Max v) = "max " ++ serialize v
-    serialize (Min v) = "min " ++ serialize v
-    serialize Count = "count"
-    serialize (Sum v) = "sum " ++ serialize v
-    serialize (Average v) = "average " ++ serialize v
-    serialize (CountDistinct v) = "count distinct(" ++ serialize v ++ ")"
-    serialize (Random v) = "randomw " ++ serialize v
-
-instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a)) => Serialize (Formula1 a b) where
-    serialize f1 = "[" ++ serializeAnnotation f1 ++ "]" ++ case unannotate f1 of
-      FAtomic0 a -> serialize a
-      FInsert0 lits -> "(insert " ++ serialize lits ++ ")"
-      FSequencing0 _ _ -> "(" ++ intercalate " ⊗ " (map serialize (getFsequencings' f1)) ++ ")"
-      FChoice0 _ _ -> "(" ++ intercalate " ⊕ " (map serialize (getFchoices' f1)) ++ ")"
-      FPar0 _ _ -> "(" ++ intercalate " ‖ " (map serialize (getFpars' f1)) ++ ")"
-      FOne0 -> "𝟏"
-      FZero0 -> "𝟎"
-      Aggregate0 (FReturn vars) form -> "(" ++ serialize form ++ " return " ++ unwords (map serialize vars) ++ ")"
-      Aggregate0 Exists form -> "∃" ++ serialize form
-      Aggregate0 Not form -> "¬" ++ serialize form
-      Aggregate0 Distinct form -> "(distinct " ++ serialize form ++ ")"
-      Aggregate0 (Summarize funcs groupby) form -> "(let " ++ unwords (map (\(var1, func1) -> serialize var1 ++ " = " ++ serialize func1) funcs) ++ " " ++ (if null groupby then "" else "group by " ++ unwords (map serialize groupby) ++ " ") ++ serialize form ++ ")"
-      Aggregate0 (Limit n) form -> "(limit " ++ show n ++ " " ++ serialize form ++ ")"
-      Aggregate0 (OrderByAsc var1) form -> "(order by " ++ serialize var1 ++ " asc " ++ serialize form ++ ")"
-      Aggregate0 (OrderByDesc var1) form -> "(order by " ++ serialize var1 ++ " desc " ++ serialize form ++ ")"
-
-instance (Serialize a, Serialize b) => Serialize (Map a b) where
-  serialize m = foldrWithKey (\ a b s -> serialize a ++ "=" ++ serialize b ++ if null s then s else "," ++ s ) "" m
 -- rule
 
 type Rule = Set Lit
@@ -611,9 +477,9 @@ instance Subst Lit where
 instance Subst Atom where
     subst s (Atom pred' args) = Atom pred' (subst s args)
 
-extractVar :: (Show (Expr1 a), Unannotate a Expr0) => Expr1 a -> Var
-extractVar e1 = case unannotate e1 of
-                    VarExpr0 var0 -> var0
+extractVar :: (Show (Expr1 a)) => Expr1 a -> Var
+extractVar e1 = case unwrap e1 of
+                    VarExprF var0 -> var0
                     _ -> error ("extractVar: this is not a var expr " ++ show e1)
 
 instance Subst Var where
@@ -631,25 +497,23 @@ instance Subst Summary where
 instance Subst (Atom1 a) => Subst (Lit1 a) where
     subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
 
-instance (SerializeAnnotation a, SerializeAnnotation b, Unannotate a Expr0, Unannotate b (Formula0 a), Subst (Atom1 a), Subst (AnnotationType b)) => Subst (Formula1 a b) where
-    subst s a = let b = mapA (subst s) (\f -> case f of
-                        FAtomic0 a -> FAtomic0 (subst s a)
-                        FInsert0 lits -> FInsert0 (subst s lits)
-                        FSequencing0 form1 form2 -> FSequencing0 form1 form2
-                        FChoice0 form1 form2 -> FChoice0 form1 form2
-                        FPar0 form1 form2 -> FPar0 form1 form2
-                        Aggregate0 (FReturn vars) form -> Aggregate0 (FReturn (subst s vars)) form
-                        Aggregate0 Not a -> Aggregate0 Not a
-                        Aggregate0 Exists a -> Aggregate0 Exists a
-                        Aggregate0 (Summarize funcs groupby) a -> Aggregate0 (Summarize (subst s funcs) (map (subst s) groupby)) a
-                        Aggregate0 (Limit n) a -> Aggregate0 (Limit n) a
-                        Aggregate0 Distinct a -> Aggregate0 Distinct a
-                        Aggregate0 (OrderByAsc var1) a -> Aggregate0 (OrderByAsc (subst s var1)) a
-                        Aggregate0 (OrderByDesc var1) a -> Aggregate0 (OrderByDesc (subst s var1)) a
-                        FZero0 -> FZero0
-                        FOne0 -> FOne0) a in
-                    -- trace ("subst " ++ serialize s ++ " " ++ serialize a ++ " = " ++ serialize b) $
-                    b
+instance (Subst (Atom1 a), Subst b) => Subst (Formula2 a b) where
+    subst s a = (subst s (extract a)) :< case unwrap a of
+                        FAtomicF a -> FAtomicF (subst s a)
+                        FInsertF lits -> FInsertF (subst s lits)
+                        FSequencingF form1 form2 -> FSequencingF form1 form2
+                        FChoiceF form1 form2 -> FChoiceF form1 form2
+                        FParF form1 form2 -> FParF form1 form2
+                        AggregateF (FReturn vars) form -> AggregateF (FReturn (subst s vars)) form
+                        AggregateF Not a -> AggregateF Not a
+                        AggregateF Exists a -> AggregateF Exists a
+                        AggregateF (Summarize funcs groupby) a -> AggregateF (Summarize (subst s funcs) (map (subst s) groupby)) a
+                        AggregateF (Limit n) a -> AggregateF (Limit n) a
+                        AggregateF Distinct a -> AggregateF Distinct a
+                        AggregateF (OrderByAsc var1) a -> AggregateF (OrderByAsc (subst s var1)) a
+                        AggregateF (OrderByDesc var1) a -> AggregateF (OrderByDesc (subst s var1)) a
+                        FZeroF -> FZeroF
+                        FOneF -> FOneF
 
 instance Subst a => Subst [a] where
     subst s = map (subst s)
@@ -698,27 +562,27 @@ instance GatherConstants Formula where
     gatherConstants (FSeq as) = gatherConstants as
     gatherConstants (FInsert lits) = Set.unions (map gatherConstants lits)
 -}
-pureF :: Unannotate f (Formula0 a) => Formula1 a f -> Bool
-pureF f1 = case unannotate f1 of
-  FAtomic0 _ -> True
-  FSequencing0 form1 form2 -> pureF form1 &&  pureF form2
-  FChoice0 form1 form2 -> pureF form1 && pureF form2
-  FPar0 form1 form2 -> pureF form1 && pureF form2
-  FInsert0 _ -> False
-  Aggregate0 _ form -> pureF form
-  FOne0 -> True
-  FZero0 -> True
+pureF :: Formula2 a f -> Bool
+pureF f1 = case unwrap f1 of
+  FAtomicF _ -> True
+  FSequencingF form1 form2 -> pureF form1 &&  pureF form2
+  FChoiceF form1 form2 -> pureF form1 && pureF form2
+  FParF form1 form2 -> pureF form1 && pureF form2
+  FInsertF _ -> False
+  AggregateF _ form -> pureF form
+  FOneF -> True
+  FZeroF -> True
 
-layeredF :: Unannotate f (Formula0 a) => Formula1 a f -> Bool
-layeredF f1 = case unannotate f1 of
-  FAtomic0 _ -> True
-  FSequencing0 form1 form2 -> layeredF form1 &&  layeredF form2
-  FChoice0 form1 form2 -> layeredF form1 && layeredF form2
-  FPar0 form1 form2 -> layeredF form1 && layeredF form2
-  FInsert0 _ -> True
-  Aggregate0 _ form -> pureF form
-  FOne0 -> True
-  FZero0 -> True
+layeredF :: Formula2 a f -> Bool
+layeredF f1 = case unwrap f1 of
+  FAtomicF _ -> True
+  FSequencingF form1 form2 -> layeredF form1 &&  layeredF form2
+  FChoiceF form1 form2 -> layeredF form1 && layeredF form2
+  FParF form1 form2 -> layeredF form1 && layeredF form2
+  FInsertF _ -> True
+  AggregateF _ form -> pureF form
+  FOneF -> True
+  FZeroF -> True
 
 infixl 5 @@@
 infixl 5 @@
@@ -757,53 +621,53 @@ a .|.  FZero = a
 a .|. b =  (FPar a b)
 
 -- get the top level conjucts
-getFsequencings :: Unannotate f (Formula0 a) => Formula1 a f -> [Formula1 a f]
-getFsequencings f1 = case unannotate f1 of
-  (FSequencing0 form1 form2) ->  getFsequencings form1 ++ getFsequencings form2
+getFsequencings :: Formula2 a f -> [Formula2 a f]
+getFsequencings f1 = case unwrap f1 of
+  (FSequencingF form1 form2) ->  getFsequencings form1 ++ getFsequencings form2
   _ -> [f1]
 
-getFchoices :: Unannotate f (Formula0 a) => Formula1 a f -> [Formula1 a f]
-getFchoices f1 = case unannotate f1 of
-  (FChoice0 form1 form2) -> getFchoices form1 ++ getFchoices form2
+getFchoices :: Formula2 a f -> [Formula2 a f]
+getFchoices f1 = case unwrap f1 of
+  (FChoiceF form1 form2) -> getFchoices form1 ++ getFchoices form2
   _ -> [f1]
 
-getFpars :: Unannotate f (Formula0 a) => Formula1 a f -> [Formula1 a f]
-getFpars f1 = case unannotate f1 of
-  (FPar0 form1 form2) -> getFpars form1 ++ getFpars form2
+getFpars :: Formula2 a f -> [Formula2 a f]
+getFpars f1 = case unwrap f1 of
+  (FParF form1 form2) -> getFpars form1 ++ getFpars form2
   _ -> [f1]
 
-getFsequencings' :: Unannotate f (Formula0 a) => Formula1 a f -> [Formula1 a f]
-getFsequencings' f1 = case unannotate f1 of
-  (FSequencing0 form1 form2) -> getFsequencings' form1 ++ [form2]
+getFsequencings' :: Formula2 a f -> [Formula2 a f]
+getFsequencings' f1 = case unwrap f1 of
+  (FSequencingF form1 form2) -> getFsequencings' form1 ++ [form2]
   _ -> [f1]
 
-getFchoices' :: Unannotate f (Formula0 a) => Formula1 a f -> [Formula1 a f]
-getFchoices' f1 = case unannotate f1 of
-  (FChoice0 form1 form2) -> getFchoices' form1 ++  [form2]
+getFchoices' :: Formula2 a f -> [Formula2 a f]
+getFchoices' f1 = case unwrap f1 of
+  (FChoiceF form1 form2) -> getFchoices' form1 ++  [form2]
   _ -> [f1]
 
-getFpars' :: Unannotate f (Formula0 a) => Formula1 a f -> [Formula1 a f]
-getFpars' f1 = case unannotate f1 of
-  (FPar0 form1 form2) -> getFpars' form1 ++  [form2]
+getFpars' :: Formula2 a f -> [Formula2 a f]
+getFpars' f1 = case unwrap f1 of
+  (FParF form1 form2) -> getFpars' form1 ++  [form2]
   _ -> [f1]
 
 fsequencing :: [Formula] -> Formula
 fsequencing = foldl (.*.) ( FOne)
 
-fsequencing1 :: Monoid b => [Formula1 a (Annotated b)] -> Formula1 a (Annotated b)
-fsequencing1 = foldl1 (\ f1@(Annotated b1 _)  f2@(Annotated b2 _) -> Annotated (b1 <> b2) (FSequencing0 f1 f2))
+fsequencing1 :: Monoid b => [Formula2 a b] -> Formula2 a b
+fsequencing1 = foldl1 (\ f1@(b1 :< _)  f2@(b2 :< _) -> (b1 <> b2) :< (FSequencingF f1 f2))
 
 fchoice :: [Formula] -> Formula
 fchoice = foldl (.+.) ( FZero)
 
-fchoice1 :: Monoid b => [Formula1 a (Annotated b)] -> Formula1 a (Annotated b)
-fchoice1 = foldl1 (\ f1@(Annotated b1 _)  f2@(Annotated b2 _) -> Annotated (b1 <> b2) (FChoice0 f1 f2))
+fchoice1 :: Monoid b => [Formula2 a b] -> Formula2 a b
+fchoice1 = foldl1 (\ f1@(b1 :< _)  f2@(b2 :< _) -> (b1 <> b2) :< (FChoiceF f1 f2))
 
 fpar :: [Formula] -> Formula
 fpar = foldl (.|.) ( FZero)
 
-fpar1 :: Monoid b => [Formula1 a (Annotated b)] -> Formula1 a (Annotated b)
-fpar1 = foldl1 (\ f1@(Annotated b1 _)  f2@(Annotated b2 _) -> Annotated (b1 <> b2) (FPar0 f1 f2))
+fpar1 :: Monoid b => [Formula2 a b] -> Formula2 a b
+fpar1 = foldl1 (\ f1@(b1 :< _)  f2@(b2 :< _) -> (b1 <> b2) :< (FParF f1 f2))
 
 notE :: Formula -> Formula
 notE =
@@ -849,147 +713,3 @@ type PredMap = Namespace String Pred
 type Location = [String]
 
 
--- result value
-class (Typeable a, Show a) => ResultValue a where
-  toConcreteResultValue :: a -> ConcreteResultValue
-  toNetworkResultValue :: a -> NetworkResultValue
-  toNetworkResultValue = toNetworkResultValue . toConcreteResultValue
-  castTypeOf :: a -> CastType
-
-data AbstractResultValue = forall a . ResultValue a => AbstractResultValue a
-
-instance Show AbstractResultValue where
-  show (AbstractResultValue a) = show (toConcreteResultValue a)
-
-instance Read AbstractResultValue where
-  readPrec = AbstractResultValue <$> (readPrec :: ReadPrec ConcreteResultValue)
-
-  -- this doesn't always work read . show /= id
-
-
-instance Ord AbstractResultValue where
-  compare (AbstractResultValue a) (AbstractResultValue b) = compare (toConcreteResultValue a) (toConcreteResultValue b)
-
-instance Eq AbstractResultValue where
-  AbstractResultValue a == AbstractResultValue b = toConcreteResultValue a == toConcreteResultValue b
-
-instance Num AbstractResultValue where
-  AbstractResultValue a + AbstractResultValue b = AbstractResultValue (toConcreteResultValue a + toConcreteResultValue b)
-  AbstractResultValue a * AbstractResultValue b = AbstractResultValue (toConcreteResultValue a * toConcreteResultValue b)
-  abs (AbstractResultValue a) = AbstractResultValue (abs (toConcreteResultValue a))
-  signum (AbstractResultValue a) = AbstractResultValue (signum (toConcreteResultValue a))
-  fromInteger i = AbstractResultValue (fromInteger i :: ConcreteResultValue)
-  negate (AbstractResultValue a) = AbstractResultValue (negate (toConcreteResultValue a))
-
-instance Fractional AbstractResultValue where
-  fromRational i = AbstractResultValue (fromRational i :: ConcreteResultValue)
-  recip (AbstractResultValue a) = AbstractResultValue (recip (toConcreteResultValue a))
-
-data ConcreteResultValue = StringValue T.Text | Int64Value Int64 | Int32Value Int32 | ByteStringValue ByteString | ConsValue String | AppValue ConcreteResultValue ConcreteResultValue | Null deriving (Eq , Ord, Show, Read)
-
-pattern ListNilValue :: ConcreteResultValue
-pattern ListNilValue = ConsValue "[]"
-
-pattern ListConsValue :: ConcreteResultValue -> ConcreteResultValue -> ConcreteResultValue
-pattern ListConsValue a b = ConsValue "(:)" `AppValue` a `AppValue` b
-pattern NilValue = ConsValue "[]"
-
-listValue :: [ConcreteResultValue] -> ConcreteResultValue
-listValue = foldr ListConsValue ListNilValue
-
-valueListFromValue :: ConcreteResultValue -> [ConcreteResultValue]
-valueListFromValue (ListConsValue a b) = let tl = valueListFromValue b in
-                                      a:tl
-valueListFromValue NilValue = []
-valueListFromValue a = error ("valueListFromValue: malformatted list " ++ show a)
-
-data NetworkResultValue = NetworkResultValue (Maybe CastType) ByteString deriving (Eq , Ord, Show, Read)
-
-deriving instance Generic NetworkResultValue
-deriving instance Generic CastType
-
-instance MessagePack CastType
-instance MessagePack NetworkResultValue
-
-instance MessagePack AbstractResultValue where
-  fromObject a = do
-    b <- fromObject a
-    return (AbstractResultValue (b :: NetworkResultValue))
-  toObject (AbstractResultValue a) = toObject (toNetworkResultValue a)
-
-splitByteString :: ByteString -> [ByteString]
-splitByteString bs = runGet splitByteString' (fromStrict bs) where
-  splitByteString' = do
-    b <- isEmpty
-    if b
-      then return []
-      else do
-        len <- getWord64be
-        bs <- getByteString (fromIntegral len)
-        bss <- splitByteString'
-        return (bs : bss)
-
-listValueToByteString :: ConcreteResultValue -> ByteString
-listValueToByteString crv =
-  let vlist = valueListFromValue crv in
-      toStrict (runPut $ mapM_ (\rv -> do
-        let nrv = toNetworkResultValue rv
-        let bs = pack nrv
-        putWord64be (fromIntegral (BSL.length bs))
-        putByteString (toStrict bs)) vlist)
-
-instance ResultValue NetworkResultValue where
-  toConcreteResultValue (NetworkResultValue ty bs) =
-    case ty of
-      Just Int64Type -> Int64Value (fromIntegral (runGet getWord64be (fromStrict bs)))
-      Just Int32Type -> Int32Value (fromIntegral (runGet getWord32be (fromStrict bs)))
-      Just TextType -> StringValue (decodeUtf8 bs)
-      Just ByteStringType -> ByteStringValue bs
-      Just (ListType _) -> listValue (map ((toConcreteResultValue :: NetworkResultValue -> ConcreteResultValue) . fromMaybe (error "toConcreteResultValue: cannot unpack bytestring") . unpack . fromStrict) (splitByteString bs))
-      Nothing -> Null
-      _ -> error ("toConcreteResultValue: unsupported network value type: " ++ show ty)
-  toNetworkResultValue = id
-  castTypeOf (NetworkResultValue (Just ty) _) = ty
-  castTypeOf _ = error "typeOf: null value"
-
-instance ResultValue ConcreteResultValue where
-  toConcreteResultValue = id
-  toNetworkResultValue (Int64Value i) = NetworkResultValue (Just Int64Type) (toStrict (runPut (putWord64be (fromIntegral i))))
-  toNetworkResultValue (Int32Value i) = NetworkResultValue (Just Int32Type) (toStrict (runPut (putWord32be (fromIntegral i))))
-  toNetworkResultValue (StringValue s) = NetworkResultValue (Just TextType) (encodeUtf8 s)
-  toNetworkResultValue (ByteStringValue bs) = NetworkResultValue (Just ByteStringType) bs
-  toNetworkResultValue (Null) = NetworkResultValue Nothing BS.empty
-  toNetworkResultValue crv@NilValue = NetworkResultValue (Just (ListType (TypeVar "<list elem>"))) (listValueToByteString crv)
-  toNetworkResultValue crv@(ListConsValue _ _) = NetworkResultValue (Just (ListType (TypeVar "<list elem>"))) (listValueToByteString crv)
-  toNetworkResultValue (ConsValue _) = error ("cannot convert cons value to network result value")
-  castTypeOf (Int64Value _) = Int64Type
-  castTypeOf (Int32Value _) = TextType
-  castTypeOf (StringValue _) = TextType
-  castTypeOf (ByteStringValue _) = ByteStringType
-  castTypeOf NilValue = ListType (TypeVar "<list elem>")
-  castTypeOf (ListConsValue _ _) = ListType (TypeVar "<list elem>")
-  castTypeOf (ConsValue _) = error "typeOf: cons value"
-  castTypeOf Null = error "typeOf: null value"
-
-instance Num ConcreteResultValue where
-    Int64Value a + Int64Value b = Int64Value (a + b)
-    Int64Value a * Int64Value b = Int64Value (a * b)
-    abs (Int64Value a) = Int64Value (abs a)
-    signum (Int64Value a) = Int64Value (signum a)
-    negate (Int64Value a) = Int64Value (negate a)
-    fromInteger i = Int64Value (fromInteger i)
-
-instance Fractional ConcreteResultValue where
-    Int64Value a / Int64Value b = Int64Value (round (fromIntegral a / fromIntegral b))
-    fromRational a = Int64Value (round (fromRational a))
-
-instance Real ConcreteResultValue where
-  toRational (Int64Value a) = fromIntegral a
-
-instance Enum ConcreteResultValue where
-  toEnum = Int64Value . fromIntegral
-  fromEnum (Int64Value a) = fromIntegral a
-
-instance Integral ConcreteResultValue where
-  Int64Value a `quotRem` Int64Value b = let (q, r) = a `quotRem` b in (Int64Value q, Int64Value r)
-  toInteger (Int64Value a) = toInteger a

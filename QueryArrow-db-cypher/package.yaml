@@ -7,7 +7,7 @@ dependencies:
 - containers
 - transformers
 - bytestring
-- haskell-neo4j-client
+- hasbolt
 - unordered-containers
 - convertible
 - text >=1.2.1.1

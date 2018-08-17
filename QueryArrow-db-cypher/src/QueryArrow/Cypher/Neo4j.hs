@@ -12,10 +12,10 @@ import Data.Aeson
 import GHC.Generics
 import Data.Maybe
 
-instance FromJSON ICATDBConnInfo2
-instance ToJSON ICATDBConnInfo2
+instance FromJSON Neo4jDBConfig
+instance ToJSON Neo4jDBConfig
 
-data ICATDBConnInfo2 = ICATDBConnInfo2 {
+data Neo4jDBConfig = Neo4jDBConfig {
   -- db_name :: String,
   db_namespace :: String,
   db_host :: String,
@@ -25,7 +25,6 @@ data ICATDBConnInfo2 = ICATDBConnInfo2 {
   db_predicates :: String,
   db_sql_mapping :: String
 } deriving (Show, Generic)
-
 
 -- db
 data Neo4jPlugin = Neo4jPlugin

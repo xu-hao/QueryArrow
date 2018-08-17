@@ -19,7 +19,6 @@ dependencies:
 - HDBC
 - aeson
 - bytestring
-- haskell-neo4j-client
 - unordered-containers
 - convertible
 - text >=1.2.1.1

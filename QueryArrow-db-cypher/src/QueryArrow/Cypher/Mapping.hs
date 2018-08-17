@@ -38,27 +38,6 @@ cypherTrans ns preds mappings =
   let builtins@(CypherBuiltIn cypherbuiltinmap) = (cypherBuiltIn (lookupPred ns))
       total = map (setPredNamespace ns) preds ++ map lookupPredByName (keys cypherbuiltinmap) in
       CypherTrans builtins ((cypherMapping ns preds mappings)) (constructPredTypeMap total)
-{- fromList [
-        ("DATA_OBJ", mappingPattern0 "obj_id" "DataObject"),
-        ("COLL_OBJ", mappingPattern0 "obj_id" "Collection"),
-        ("META_OBJ", mappingPattern0 "obj_id" "AVU"),
-        ("DATA_NAME", mappingPattern1 "obj_id" "DataObject" "data_name"),
-        ("DATA_SIZE", mappingPattern1 "obj_id" "DataObject" "data_size"),
-        ("COLL_NAME", mappingPattern1 "obj_id" "Collection" "coll_name"),
-        ("DATA_REPL_NUM", mappingPattern1 "obj_id" "DataObject" "data_repl_num"),
-        ("DATA_COLL", mappingPattern2 "obj_id" "DataObject"  "obj_id" "Collection"  "coll"),
-        ("DATA_PATH", mappingPattern1 "obj_id" "DataObject" "data_path"),
-        ("DATA_CHECKSUM", mappingPattern1 "obj_id" "DataObject" "data_checksum"),
-        ("DATA_CREATE_TIME", mappingPattern1 "obj_id" "DataObject" "create_ts"),
-        ("DATA_MODIFY_TIME", mappingPattern1 "obj_id" "DataObject" "modify_ts"),
-        ("COLL_CREATE_TIME", mappingPattern1 "obj_id" "Collection" "create_ts"),
-        ("COLL_MODIFY_TIME", mappingPattern1 "obj_id" "Collection" "modify_ts"),
-        ("OBJT_METAMAP_OBJ", mappingPattern2m "obj_id" "obj_id" "meta"),
-        ("META_ATTR_NAME", mappingPattern1 "obj_id" "AVU" "meta_attr_name"),
-        ("META_ATTR_VALUE", mappingPattern1 "obj_id" "AVU" "meta_attr_value"),
-        ("META_ATTR_UNIT", mappingPattern1 "obj_id" "AVU" "meta_attr_unit")
-        ] -}
-
 
 makeICATCypherDBAdapter :: String -> String -> String -> Neo4jDatabase -> IO (NoConnectionDatabase (GenericDatabase CypherTrans Neo4jDatabase  ))
 makeICATCypherDBAdapter ns predsPath mappingsPath conn = do
