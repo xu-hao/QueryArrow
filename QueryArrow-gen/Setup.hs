@@ -22,7 +22,7 @@ main = defaultMainWithHooks simpleUserHooks {
                     hPutStrLn handle add
                 return emptyHookedBuildInfo,
             postBuild = \_ _ _ _ -> do
-                callCommand ".stack-work/dist/x86_64-linux-nix/Cabal-1.24.2.0/build/schema_parser_main/schema_parser_main gen/schema.sql gen/ICATGen.yaml gen/SQL/ICATGen.yaml"
+                callCommand "stack exec schema_parser_main gen/schema.sql gen/ICATGen.yaml gen/SQL/ICATGen.yaml"
                 createDirectoryIfMissing True "etc"
                 createDirectoryIfMissing True "etc/QueryArrow"
                 createDirectoryIfMissing True "etc/QueryArrow/gen"

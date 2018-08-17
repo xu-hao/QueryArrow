@@ -8,33 +8,6 @@ library:
   ghc-options: -Wall
   dependencies:
     - base >=4
-    - parsec
-    - QueryArrow-common
-    - QueryArrow-db-sql-common
+    - QueryArrow-gen-tool
   exposed-modules:
-  - QueryArrow.Gen
-executables:
-  schema_parser_main:
-    main: schema_parser_main.hs
-    source-dirs: src
-    ghc-options: -Wall
-    dependencies:
-    - base >=4
-    - containers
-    - mtl
-    - transformers
-    - semigroups
-    - semigroupoids
-    - bytestring
-    - unordered-containers
-    - text >=1.2.1.1
-    - parsec
-    - hslogger
-    - monad-logger
-    - fast-logger
-    - either
-    - aeson
-    - yaml
-    - QueryArrow-rpc-common
-    - QueryArrow-db-sql-common
-    - QueryArrow-common
+    - QueryArrow.Gen

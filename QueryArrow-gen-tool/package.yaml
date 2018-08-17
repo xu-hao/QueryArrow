@@ -1,0 +1,38 @@
+name: QueryArrow-gen-tool
+version: '0.2'
+author: Hao Xu
+license: BSD3
+build-type: Simple
+library:
+  source-dirs: src
+  ghc-options: -Wall
+  dependencies:
+    - base >=4
+    - parsec
+    - QueryArrow-common
+    - QueryArrow-db-sql-common
+executables:
+  schema_parser_main:
+    main: schema_parser_main.hs
+    source-dirs: src
+    ghc-options: -Wall
+    dependencies:
+    - base >=4
+    - containers
+    - mtl
+    - transformers
+    - semigroups
+    - semigroupoids
+    - bytestring
+    - unordered-containers
+    - text >=1.2.1.1
+    - parsec
+    - hslogger
+    - monad-logger
+    - fast-logger
+    - either
+    - aeson
+    - yaml
+    - QueryArrow-rpc-common
+    - QueryArrow-db-sql-common
+    - QueryArrow-common

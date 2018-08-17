@@ -18,7 +18,35 @@ QueryArrow provides a systematic solution to shared namespace and unshared names
 A QueryArrow instance includes a QueryArrow Service and QueryArrow plugins (QAPs). Each plugin provides interface with one data store.
 The queries are issued from the client in the QueryArrow Language (QAL). QAL is a unified query and update language for SQL and NoSQL databases.
 
-## How to build
+## Build docker image
+
+### build bases
+```
+cd docker/build
+docker build -t queryarrow-stack-build:0.1.0 .
+```
+
+```
+cd docker/run
+docker build -t queryarrow-stack-run:0.1.0 .
+```
+
+If you use customized bases from Internet, then
+```
+stack docker pull
+```
+
+### build
+```
+stack build
+```
+
+### create image
+```
+stack image container
+```
+
+## How to build (deprecated)
 
 ### Ubuntu 16.04 and CentOS 7
 

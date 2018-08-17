@@ -69,6 +69,7 @@ packages:
     - QueryArrow-common/
     - QueryArrow-cli
     - QueryArrow-gen
+    - QueryArrow-gen-tool
     - heterogeneous-list
     - log-adapter
     - data-some
@@ -120,15 +121,19 @@ rebuild-ghc-options: true
 
 apply-ghc-options: everything
 
-nix:
-  enable: true
-  packages: [postgresql, sqlite, zlib]
+# nix:
+#   enable: true
+#   packages: [postgresql, sqlite, zlib]
 
 image:
   containers:
-  - name: QueryArrow
-    base: fpco/stack-run
+  - name: queryarrow:0.1.0
+    base: queryarrow-stack-run:0.1.0
     add:
       QueryArrow-gen/etc/QueryArrow: /etc/QueryArrow
     entrypoints:
     - QueryArrow
+
+docker:
+  enable: true
+  image: queryarrow-stack-build:0.1.0
