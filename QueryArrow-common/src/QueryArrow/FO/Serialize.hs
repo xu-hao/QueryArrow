@@ -27,6 +27,9 @@ import Debug.Trace
 class Serialize a where
     serialize :: a -> String
     
+instance Serialize () where
+    serialize () = "()"
+    
 instance (Serialize a) => Serialize (Atom1 a) where
     serialize (Atom name args) = predNameToString name ++ "(" ++ intercalate "," (map serialize args) ++ ")"
 

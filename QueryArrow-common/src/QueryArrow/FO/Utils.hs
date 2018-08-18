@@ -4,7 +4,9 @@ module QueryArrow.FO.Utils where
 
 
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
+import Control.Comonad.Cofree
 import Data.Map.Strict (empty)
 
 pattern PTKeyIO a = ParamType True True True a
@@ -15,7 +17,7 @@ pattern PTPropI a = ParamType False True False a
 pattern PTPropO a = ParamType False False True a
 
 stripAnnotations :: FormulaT -> Formula
-stripAnnotations (Annotated _ a) = Tie (fmap stripAnnotations a)
+stripAnnotations (_ :< a) = () :< (fmap stripAnnotations a)
 
 -- addAnnotations :: Formula -> FormulaT
 -- addAnnotations (Tie a) = Annotated empty (fmap addAnnotations a)

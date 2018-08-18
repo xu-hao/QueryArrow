@@ -16,23 +16,23 @@ import Data.Set (Set)
 import System.Log.Logger (errorM, noticeM)
 import Control.Applicative ((<|>))
 import Control.Exception (catch, SomeException)
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.Value
 import Data.ByteString (ByteString)
 
 -- result row
-type MapResultRow = Map Var AbstractResultValue
+type MapResultRow = Map Var ResultValue
 
 instance Convertible MapResultRow MapResultRow where
   safeConvert = Right
 
-
 instance IResultRow MapResultRow where
-    type ElemType MapResultRow = AbstractResultValue
-    transform vars2 map1 = foldr (\var map2 -> case lookup var map1 of
-                                                        Nothing -> insert var (AbstractResultValue Null) map2
+    type ElemType MapResultRow = ResultValue
+    proj vars2 map1 = foldr (\var map2 -> case lookup var map1 of
+                                                        Nothing -> insert var Null map2
                                                         Just rv -> insert var rv map2) empty vars2
-    ext v map1 = fromMaybe (error ("cannot find key " ++ show v)) (lookup v map1)
-    ret = singleton
+    get v map1 = fromMaybe (error ("cannot find key " ++ show v)) (lookup v map1)
+    sing = singleton
 
 -- query
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances,
    RankNTypes, FlexibleContexts #-}
 module QueryArrow.DB.ResultStream (eos, ResultStream(..), listResultStream, depleteResultStream, getAllResultsInStream, takeResultStream, closeResultStream,
-    resultStreamTake, emptyResultStream, transformResultStream, isResultStreamEmpty, filterResultStream, mapResultStream, IResultRow(..), resultStream2, bracketPStream)
+    resultStreamTake, emptyResultStream, projResultStream, isResultStreamEmpty, filterResultStream, mapResultStream, IResultRow(..), resultStream2, bracketPStream)
     where
 
 import Prelude  hiding (lookup, take, map, null, mapM)
@@ -17,9 +17,9 @@ import Data.Set (Set)
 
 class (Monoid row, Show row, Num (ElemType row), Ord (ElemType row), Fractional (ElemType row), Eq row) => IResultRow row where
     type ElemType row
-    transform :: Set Var -> row -> row
-    ret :: Var -> ElemType row -> row
-    ext :: Var -> row -> ElemType row
+    proj :: Set Var -> row -> row
+    sing :: Var -> ElemType row -> row
+    get :: Var -> row -> ElemType row
 
 newtype ResultStream m row = ResultStream (Producer m row)
 
@@ -74,8 +74,8 @@ instance (Monad m) => Alternative (ResultStream m) where
         rs1
         rs2)
 
-transformResultStream :: (Monad m, IResultRow row) => Set Var -> ResultStream m row -> ResultStream m row
-transformResultStream vars1 (ResultStream rs) = ResultStream (rs =$= map (transform vars1))
+projResultStream :: (Monad m, IResultRow row) => Set Var -> ResultStream m row -> ResultStream m row
+projResultStream vars1 (ResultStream rs) = ResultStream (rs =$= map (proj vars1))
 
 filterResultStream :: (Monad m) => ResultStream m row -> (row -> m Bool) -> ResultStream m row
 filterResultStream (ResultStream rs) p = ResultStream (rs =$= filterM p)

@@ -32,7 +32,7 @@ library:
   - -fPIC
   exposed-modules:
   - QueryArrow.FO.Data
-  - QueryArrow.FO.Types
+  - QueryArrow.FO.TypeChecker
   - QueryArrow.FO.Domain
   - QueryArrow.FO.Utils
   - QueryArrow.FO.Serialize

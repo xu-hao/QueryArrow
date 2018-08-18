@@ -19,6 +19,9 @@ import Control.Monad (foldM)
 import Data.Monoid ((<>))
 import Control.Comonad
 import Control.Comonad.Cofree
+import Data.Eq.Deriving (deriveEq1)
+import Data.Ord.Deriving (deriveOrd1)
+import Text.Read.Deriving (deriveRead1)
 import Text.Show.Deriving (deriveShow1)    
 import Data.Functor.Classes (Show1)
 import QueryArrow.Syntax.Type
@@ -49,9 +52,12 @@ newtype Var = Var {unVar :: String} deriving (Eq, Ord, Show, Read)
 -- http://stackoverflow.com/questions/27157717/boilerplate-free-annotation-of-asts-in-haskell
 
 -- expression
-data ExprF a = VarExprF Var | ConsExprF String | IntExprF Integer | StringExprF T.Text | AppExprF a a | NullExprF | CastExprF CastType a deriving (Eq, Ord, Read, Functor)
+data ExprF a = VarExprF Var | ConsExprF String | IntExprF Integer | StringExprF T.Text | AppExprF a a | NullExprF | CastExprF CastType a deriving (Functor)
 
+$(deriveEq1 ''ExprF)
+$(deriveOrd1 ''ExprF)
 $(deriveShow1 ''ExprF)
+$(deriveRead1 ''ExprF)
 
 type Expr1 = Cofree ExprF
 
@@ -78,7 +84,7 @@ exprListFromExpr ListNilExpr = []
 exprListFromExpr a = error ("exprListFromExpr: malformatted list " ++ show a)
 
 -- atoms
-data Atom1 a = Atom1 { atomPred :: PredName, atomArgs :: [Expr1 a] }
+data Atom1 a = Atom1 { atomPred :: PredName, atomArgs :: [Expr1 a] } deriving (Eq, Ord, Show, Read)
 
 type Atom = Atom1 ()
 
@@ -89,7 +95,7 @@ pattern Atom a b = Atom1 a b
 data Sign = Pos | Neg deriving (Eq, Ord, Show, Read)
 
 -- literals
-data Lit1 a = Lit1 { sign :: Sign,  atom :: Atom1 a }
+data Lit1 a = Lit1 { sign :: Sign,  atom :: Atom1 a } deriving (Eq, Ord, Show, Read)
 
 type Lit = Lit1 ()
 
@@ -108,6 +114,10 @@ data FormulaF a f = FAtomicF (Atom1 a)
              | FZeroF
              | AggregateF Aggregator f deriving Functor
 
+$(deriveEq1 ''FormulaF)
+$(deriveOrd1 ''FormulaF)
+$(deriveShow1 ''FormulaF)
+$(deriveRead1 ''FormulaF)
 
 type Formula2 a = Cofree (FormulaF a)
 
