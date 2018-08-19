@@ -9,20 +9,20 @@ ghc-options:
 dependencies:
 - base >=4
 - mtl
+- transformers
 - containers
 - aeson
 - resourcet
 - time
 - hslogger
 - network
-- either
 - directory
 - optparse-applicative
 - QueryArrow
 - QueryArrow-rpc-common
 - QueryArrow-common
 - QueryArrow-rpc-http
-- QueryArrow-db-filesystem
+# - QueryArrow-db-filesystem
 - QueryArrow-ffi-service
 - log-adapter
 executables:

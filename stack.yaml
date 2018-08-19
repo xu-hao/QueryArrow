@@ -38,14 +38,14 @@ resolver: lts-12.6
 packages:
     - QueryArrow/
     - QueryArrow-rpc-common
-    # - QueryArrow-rpc-http/
-    # - QueryArrow-rpc-socket
+    - QueryArrow-rpc-http/
+    - QueryArrow-rpc-socket
     # - QueryArrow-ffi-c/
     # - QueryArrow-ffi-c-local
     # - QueryArrow-ffi-c-tcp
     # - QueryArrow-ffi-c-unixdomainsocket
     # - QueryArrow-ffi-c-genquery
-    # - QueryArrow-ffi-service
+    - QueryArrow-ffi-service
     # - QueryArrow-ffi-service-local
     # - QueryArrow-ffi-service-handle-common
     # - QueryArrow-ffi-service-tcp

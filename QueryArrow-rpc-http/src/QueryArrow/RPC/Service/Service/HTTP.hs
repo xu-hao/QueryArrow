@@ -6,7 +6,8 @@
 module QueryArrow.RPC.Service.Service.HTTP where
 
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.DBMap
 import QueryArrow.RPC.Config
@@ -32,7 +33,7 @@ import System.Log.Logger
 import QueryArrow.Logging
 import           Yesod
 import QueryArrow.RPC.DB
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import QueryArrow.RPC.Service
 
 
@@ -59,7 +60,7 @@ runQuery method db = do
                     (Just qu) <- lookupGetParam "qsquery"
                     (Just hdr) <- lookupGetParam "qsheaders"
                     liftIO $ infoM "QA" ("received REST query " ++ T.unpack qu)
-                    liftIO $ runEitherT $ run (fromList (map Var (words (T.unpack hdr)))) (T.unpack qu) mempty tdb conn
+                    liftIO $ runExceptT $ run (fromList (map Var (words (T.unpack hdr)))) (T.unpack qu) mempty tdb conn
                 "post" -> do
                     liftIO $ infoM "QA" ("parsing post request")
                     req <- requireJsonBody
@@ -69,9 +70,9 @@ runQuery method db = do
                     liftIO $ infoM "QA" ("received REST query " ++ show qu)
                     liftIO $ case qu of
                         Dynamic qu ->
-                          runEitherT $ run hdr qu par tdb conn
+                          runExceptT $ run hdr qu par tdb conn
                         Static qu ->
-                          runEitherT $ run3 hdr qu par tdb conn
+                          runExceptT $ run3 hdr qu par tdb conn
                 _ -> error ("unsupported method " ++ method)
             ret1 <- case ret of
                 Left e ->

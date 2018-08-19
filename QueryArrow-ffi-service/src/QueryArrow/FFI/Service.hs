@@ -7,17 +7,17 @@ import QueryArrow.DB.DB
 import QueryArrow.Serialization
 
 
-import Control.Monad.Trans.Either (EitherT)
+import Control.Monad.Trans.Except (ExceptT)
 
 
 
 data QueryArrowService a = QueryArrowService {
-  execQuery :: a -> Formula -> MapResultRow -> EitherT Error IO (),
-  getAllResult :: a -> [Var] -> Formula -> MapResultRow -> EitherT Error IO [MapResultRow],
-  qasConnect :: String -> EitherT Error IO a,
-  qasDisconnect :: a -> EitherT Error IO (),
-  qasPrepare :: a -> EitherT Error IO (),
-  qasBegin :: a -> EitherT Error IO (),
-  qasCommit :: a -> EitherT Error IO (),
-  qasRollback :: a -> EitherT Error IO ()
+  execQuery :: a -> Formula -> MapResultRow -> ExceptT Error IO (),
+  getAllResult :: a -> [Var] -> Formula -> MapResultRow -> ExceptT Error IO [MapResultRow],
+  qasConnect :: String -> ExceptT Error IO a,
+  qasDisconnect :: a -> ExceptT Error IO (),
+  qasPrepare :: a -> ExceptT Error IO (),
+  qasBegin :: a -> ExceptT Error IO (),
+  qasCommit :: a -> ExceptT Error IO (),
+  qasRollback :: a -> ExceptT Error IO ()
 }

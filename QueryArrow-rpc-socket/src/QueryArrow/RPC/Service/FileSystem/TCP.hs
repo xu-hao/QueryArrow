@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, TypeFamilies #-}
 module QueryArrow.RPC.Service.FileSystem.TCP where
 
-import Control.Monad.Trans.Resource
+{-import Control.Monad.Trans.Resource
 import Data.Time
 import Control.Monad.Except
 import System.Log.Logger
@@ -51,3 +51,4 @@ instance RPCService FileSystemRPCService where
                         lift $ worker3 handle i
             sock <- listenOn (PortNumber (fromIntegral port))
             sockHandler sock
+-}

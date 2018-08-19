@@ -8,10 +8,11 @@ import QueryArrow.Serialization
 import System.Log.Logger
 import QueryArrow.Control.Monad.Logger.HSLogger ()
 import QueryArrow.RPC.Message
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import QueryArrow.RPC.DB
 import System.IO (Handle)
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 import QueryArrow.FFI.Auxiliary
 
 worker :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
@@ -36,7 +37,7 @@ worker handle tdb conn = do
                                 return (t2, t3, True)
                             Static qu -> do
                                 t2 <- getCurrentTime
-                                ret <- runEitherT (run3 hdr qu par tdb conn)
+                                ret <- runExceptT (run3 hdr qu par tdb conn)
                                 t3 <- getCurrentTime
                                 case ret of
                                     Left e ->
@@ -47,7 +48,7 @@ worker handle tdb conn = do
                             Dynamic qu -> do
                                 t2 <- getCurrentTime
                                 infoM "RPC_TCP_SERVER" "**************"
-                                ret <- runEitherT (run hdr qu par tdb conn)
+                                ret <- runExceptT (run hdr qu par tdb conn)
                                 infoM "RPC_TCP_SERVER" "**************"
                                 t3 <- getCurrentTime
                                 case ret of

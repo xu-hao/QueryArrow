@@ -9,7 +9,7 @@ import Prelude hiding (lookup)
 import System.Log.Logger
 import QueryArrow.Logging
 import QueryArrow.Control.Monad.Logger.HSLogger ()
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
 import Options.Applicative hiding (Success)
 import Data.Maybe
 import Data.Map.Strict
@@ -40,8 +40,8 @@ serviceMap :: Map String AbstractRPCService
 serviceMap = fromList [
     ("service/tcp", AbstractRPCService ServiceTCPRPCService),
     ("service/unix domain socket", AbstractRPCService ServiceUDSRPCService),
-    ("service/http", AbstractRPCService ServiceHTTPRPCService),
-    ("file system/tcp", AbstractRPCService FileSystemRPCService)
+    ("service/http", AbstractRPCService ServiceHTTPRPCService)
+    -- ("file system/tcp", AbstractRPCService FileSystemRPCService)
     ]
 
 runtcpmulti :: AbstractDatabase MapResultRow FormulaT -> [DBServer] -> IO ()
