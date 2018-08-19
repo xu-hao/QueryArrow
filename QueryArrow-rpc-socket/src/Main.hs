@@ -17,7 +17,7 @@ import QueryArrow.RPC.Service
 import QueryArrow.RPC.Service.Service.TCP
 import QueryArrow.RPC.Service.Service.UDS
 import QueryArrow.RPC.Service.Service.HTTP
-import QueryArrow.RPC.Service.FileSystem.TCP
+-- import QueryArrow.RPC.Service.FileSystem.TCP
 import Data.Monoid ((<>))
 
 main::IO()
