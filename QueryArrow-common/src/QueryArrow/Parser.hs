@@ -4,6 +4,7 @@ module QueryArrow.Parser where
 import QueryArrow.FO.Data
 import QueryArrow.FO.Utils
 import QueryArrow.DB.DB
+import QueryArrow.Syntax.Type
 
 import Prelude hiding (lookup)
 import Text.ParserCombinators.Parsec hiding (State)
@@ -63,7 +64,7 @@ argp =
     <|> (CastExpr <$> casttypep <*> argp)
     <|> (VarExpr <$> Var <$> identifier)
     <|> (IntExpr . fromIntegral <$> integer)
-    <|> (brackets (foldr ListConsExpr NilExpr <$> sepBy argp comma))
+    <|> (brackets (foldr ListConsExpr ListNilExpr <$> sepBy argp comma))
     <|> (StringExpr . TE.pack <$> stringp)
 
 arglistp :: FOParser [Expr]

@@ -3,7 +3,7 @@ module QueryArrow.Cypher.Neo4j where
 
 import QueryArrow.Config
 import QueryArrow.DB.DB
-import QueryArrow.Cypher.ICAT
+import QueryArrow.Cypher.Mapping
 import QueryArrow.Plugin
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Data.Heterogeneous.List

@@ -3,7 +3,7 @@
 module QueryArrow.DB.AbstractDatabaseList where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
 import QueryArrow.QueryPlan
 import QueryArrow.Data.Heterogeneous.List
 

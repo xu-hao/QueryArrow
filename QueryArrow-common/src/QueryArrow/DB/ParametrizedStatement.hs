@@ -4,6 +4,8 @@ module QueryArrow.DB.ParametrizedStatement where
 import QueryArrow.DB.DB
 
 import Data.Convertible
+import Data.Conduit
+import qualified Data.Conduit.Combinators as C
 
 -- interface
 class (Convertible (PSRowType stmt) (ParameterType stmt)) => IPSDBStatement stmt where
@@ -19,9 +21,9 @@ newtype PSDBStatement stmt = PSDBStatement stmt
 instance IPSDBStatement stmt => IDBStatement (PSDBStatement stmt) where
     type RowType (PSDBStatement stmt) = PSRowType stmt
     dbStmtClose (PSDBStatement stmt) = psdbStmtClose stmt
-    dbStmtExec (PSDBStatement stmt) stream = do
-        row <- stream
-        execWithParams stmt (convert row)
+    dbStmtExec (PSDBStatement stmt) stream =
+        stream .| awaitForever (\row ->
+            C.map (const ()) .| execWithParams stmt (convert row))
 
 
 {- instance DBStatementExec DBAdapterMonad MapResultRow (PreparedSequenceStatement conn trans)  where

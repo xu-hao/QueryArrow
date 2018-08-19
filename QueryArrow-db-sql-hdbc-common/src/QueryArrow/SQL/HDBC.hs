@@ -6,6 +6,8 @@ import QueryArrow.DB.ParametrizedStatement
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.Syntax.Type
+import QueryArrow.Semantics.Value
 
 import Database.HDBC
 import Control.Monad.IO.Class (liftIO)
@@ -28,30 +30,30 @@ escapeSQLTextArrayString (hd : tl) = hd : escapeSQLTextArrayString tl
 quote :: String -> String
 quote a = "\"" ++ a ++ "\""
 
-convertResultValueToSQLText :: ConcreteResultValue -> String
+convertResultValueToSQLText :: ResultValue -> String
 convertResultValueToSQLText (Int64Value i) = show i
 convertResultValueToSQLText (StringValue s) = quote (escapeSQLTextArrayString (unpack s))
-convertResultValueToSQLText crv@NilValue = listToSQLText crv
+convertResultValueToSQLText crv@ListNilValue = listToSQLText crv
 convertResultValueToSQLText crv@(ListConsValue _ _) = listToSQLText crv
 convertResultValueToSQLText e = error ("unsupported sql value type: " ++ show e)
 
-listToSQLText :: ConcreteResultValue -> String
+listToSQLText :: ResultValue -> String
 listToSQLText crv = "{" ++ (intercalate "," (map convertResultValueToSQLText (valueListFromValue crv))) ++ "}"
 
-listToSql :: ConcreteResultValue -> SqlValue
+listToSql :: ResultValue -> SqlValue
 listToSql crv = toSql (listToSQLText crv)
 
-convertResultValueToSQL :: ConcreteResultValue -> SqlValue
+convertResultValueToSQL :: ResultValue -> SqlValue
 convertResultValueToSQL (Int64Value i) = toSql i
 convertResultValueToSQL (StringValue s) = toSql s
 convertResultValueToSQL (ByteStringValue s) = toSql s
-convertResultValueToSQL crv@NilValue = listToSql crv
+convertResultValueToSQL crv@ListNilValue = listToSql crv
 convertResultValueToSQL crv@(ListConsValue _ _) = listToSql crv
 convertResultValueToSQL e = error ("unsupported sql expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [SqlValue] -> MapResultRow
 convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
-                insert var0 (AbstractResultValue (case sqlvalue of
+                insert var0 (case sqlvalue of
                         SqlInt32 _ -> Int64Value (fromSql sqlvalue)
                         SqlInt64 _ -> Int64Value (fromSql sqlvalue)
                         SqlInteger _ -> Int64Value (fromSql sqlvalue)
@@ -61,7 +63,7 @@ convertSQLToResult vars sqlvalues = foldl (\row (var0, sqlvalue) ->
                         -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
                         SqlRational r -> Int64Value (fromIntegral (numerator r `div` denominator r))
                         SqlNull -> Null
-                        _ -> error ("unsupported sql value: " ++ show sqlvalue))) row) empty (zip vars sqlvalues)
+                        _ -> error ("unsupported sql value: " ++ show sqlvalue)) row) empty (zip vars sqlvalues)
 
 instance IPSDBStatement HDBCStatement where
         type ParameterType HDBCStatement = MapResultRow
@@ -69,10 +71,9 @@ instance IPSDBStatement HDBCStatement where
         execWithParams (HDBCStatement ret vars stmt params) args = do
                 liftIO $ infoM "SQL" ("execute stmt")
                 liftIO $ infoM "SQL" ("execHDBCStatement: params = " ++ show args)
-                let sargs = (map (\v -> convertResultValueToSQL (case case lookup v args of
+                let sargs = (map (\v -> convertResultValueToSQL (case lookup v args of
                         Just e -> e
-                        Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args) of
-                                        AbstractResultValue arv -> toConcreteResultValue arv)) params)
+                        Nothing -> error ("execWithParams: (all vars " ++ show params ++ ") " ++ show v ++ " is not found in " ++ show args))) params)
                 liftIO $ infoM "SQL" ("execHDBCStatement: params = " ++ show sargs)
                 rcode <- liftIO $ execute stmt sargs
                 if rcode == -1

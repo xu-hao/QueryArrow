@@ -6,6 +6,7 @@ dependencies:
 - base >=4
 - containers
 - mtl
+- transformers
 - parsec
 - text
 - resourcet

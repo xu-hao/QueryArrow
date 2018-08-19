@@ -10,7 +10,8 @@ import Data.Text (Text)
 import Data.Set (toAscList)
 
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Syntax.Type
 import QueryArrow.DB.GenericDatabase
 
 import Debug.Trace
@@ -96,15 +97,15 @@ translateDeleteToElasticSearch (ESTrans ptm map1) pred0 args env =
 instance IGenericDatabase01 ESTrans where
     type GDBQueryType ESTrans = (ElasticSearchQuery, [Var])
     type GDBFormulaType ESTrans = FormulaT
-    gTranslateQuery trans vars (FAtomic2 _ (Atom pred1 args)) env =
+    gTranslateQuery trans vars (FAtomicA _ (Atom pred1 args)) env =
         return (translateQueryToElasticSearch trans (toAscList vars) pred1 args (toAscList env))
-    gTranslateQuery trans vars (FInsert2 _ (Lit Pos (Atom pred1 args))) env =
+    gTranslateQuery trans vars (FInsertA _ (Lit Pos (Atom pred1 args))) env =
         return (translateInsertToElasticSearch trans pred1 args (toAscList env))
-    gTranslateQuery trans vars (FInsert2 _ (Lit Neg (Atom pred1 args))) env =
+    gTranslateQuery trans vars (FInsertA _ (Lit Neg (Atom pred1 args))) env =
         return (translateDeleteToElasticSearch trans pred1 args (toAscList env))
     gTranslateQuery _ _ _ _ =
         error "unsupported"
 
-    gSupported _ _ (FAtomic2 _ _) _ = True
-    gSupported _ _ (FInsert2 _ _) _ = True
+    gSupported _ _ (FAtomicA _ _) _ = True
+    gSupported _ _ (FInsertA _ _) _ = True
     gSupported _ _ _ _ = False

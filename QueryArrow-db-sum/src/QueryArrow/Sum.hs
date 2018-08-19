@@ -5,7 +5,8 @@ module QueryArrow.Sum where
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 import QueryArrow.QueryPlan
 import QueryArrow.ListUtils
 import QueryArrow.Data.Heterogeneous.List
@@ -31,9 +32,9 @@ import Debug.Trace
 --     let (_, stream) = execQueryPlan ([], pure mempty) qp
 --     getAllResultsInStream stream
 
-queryPlan :: (HMapConstraint IDatabase l ) => HList l -> FormulaT ->  QueryPlan
-queryPlan dbs formula =
-    let qp = formulaToQueryPlan dbs formula
+queryPlan :: FormulaT ->  QueryPlan
+queryPlan formula =
+    let qp = formulaToQueryPlan formula
         qp1 = simplifyQueryPlan qp in
         qp1
 
@@ -54,7 +55,7 @@ queryPlan dbs formula =
 translate' :: (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> FormulaT -> Set Var -> IO (QueryPlanT l)
 translate' dbs rvars qu0 vars = do
   -- trace ("translate': " ++ show qu0) $ 
-    let insp = queryPlan dbs qu0
+    let insp = queryPlan qu0
         qp2 = calculateVars vars rvars insp
         qp25 = findDBQueryPlan dbs qp2
         t = toTree qp25
@@ -73,8 +74,8 @@ printQueryPlan qp = do
     infoM "QA" ("query plan:")
     infoM "QA" (drawTree (toTree  qp))
 
-instance (IResultRow row, Num (ElemType row), Ord (ElemType row)) => IDBStatement (QueryPlan3 row) where
-    type RowType (QueryPlan3 row) = row
+instance (IResultRow row, Num (ElemType row), Ord (ElemType row)) => IDBStatement (QueryPlanS row) where
+    type RowType (QueryPlanS row) = row
     dbStmtClose qp = closeQueryPlan qp
     dbStmtExec qp rs = execQueryPlan rs qp
 
@@ -109,7 +110,7 @@ instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) 
 instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
                       IDBConnection (HMap ConnectionType l)) => IDBConnection (ConnectionType (SumDB row l )) where
     type QueryType (ConnectionType (SumDB row l )) = QueryPlanT l
-    type StatementType (ConnectionType (SumDB row l )) = QueryPlan3 row
+    type StatementType (ConnectionType (SumDB row l )) = QueryPlanS row
     prepareQuery (SumDBConnection conns ) qu =
         prepareQueryPlan conns qu
     -- exec (TransDB _ dbs _ _  _ _ _) qp vars stream = snd (execQueryPlan dbs (vars, stream ) qp)

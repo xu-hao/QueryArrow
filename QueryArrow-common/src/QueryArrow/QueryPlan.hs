@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables, TypeApplications, DataKinds, DeriveFunctor, PatternSynonyms #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables, TypeApplications, DataKinds, DeriveFunctor, PatternSynonyms, RankNTypes #-}
 module QueryArrow.QueryPlan where
 
 import QueryArrow.DB.ResultStream
@@ -25,6 +25,8 @@ import Data.Set (Set, fromList, toAscList)
 import Data.Ord (comparing, Down(..))
 import Control.Comonad.Cofree
 import QueryArrow.FO.Serialize
+import Data.Conduit
+import qualified Data.Conduit.Combinators as C
 import Debug.Trace
 
 type MSet a = Complemented (Set a)
@@ -589,114 +591,106 @@ prepareQueryPlan dbs  (QPAggregateA qpd agg qp1) = do
     qp1' <- prepareQueryPlan dbs  qp1
     return (QPAggregateA qpd agg qp1')
 
-addCleanupRS :: Monad m => (Bool -> m ()) -> ResultStream m row -> ResultStream m row
-addCleanupRS a (ResultStream rs) = ResultStream (addCleanup a rs)
-
 execQueryPlan :: (IResultRow row) =>  DBResultStream row -> QueryPlanS row -> DBResultStream row
-execQueryPlan  rs (ExecA qpd (stmt, stmtshow)) =
+execQueryPlan rs qp = rs .| execQueryPlan2 qp
+
+execQueryPlan2 :: (IResultRow row) =>  QueryPlanS row -> DBResultStreamTrans row
+execQueryPlan2 (ExecA qpd (stmt, stmtshow)) =
     case stmt of
-        AbstractDBStatement stmt0 -> {- bracketPStream (return ()) (\_ -> dbStmtClose stmt0) (\_ -> -} do
-                        row <- rs
-                        liftIO $ infoM "QA" ("current row " ++ show row)
-                        liftIO $ infoM "QA" ("execute " ++ stmtshow)
-                        -- liftIO $ putStrLn ("execute " ++ stmtshow)
-                        row2 <- dbStmtExec stmt0 (pure row)
-                        liftIO $ infoM "QA" ("returns row")
-                        return (proj (combinedvs qpd) (row <> row2)){- ) -}
+        AbstractDBStatement stmt0 -> awaitForever (\row -> do
+                                    liftIO $ infoM "QA" ("current row " ++ show row)
+                                    liftIO $ infoM "QA" ("execute " ++ stmtshow)
+                                    -- liftIO $ putStrLn ("execute " ++ stmtshow)
+                                    C.map (const ()) .| dbStmtExec stmt0 (yield row) .| C.mapM (\row2 -> do
+                                        liftIO $ infoM "QA" ("returns row")
+                                        return (row <> row2)) .| C.map (proj (combinedvs qpd))) 
+                                    
 
-execQueryPlan  r (QPSequencingA _ qp1 qp2) =
-        let r1 = execQueryPlan  r qp1
-            rs2 = execQueryPlan  r1 qp2 in
-            rs2
+execQueryPlan2 (QPSequencingA _ qp1 qp2) =
+    execQueryPlan2 qp1 .| execQueryPlan2 qp2
 
-execQueryPlan  rs (QPChoiceA _ qp1 qp2) = do
-    row <- rs
-    let rs1 = execQueryPlan  (pure row) qp1
-        rs2 = execQueryPlan  (pure row) qp2 in
-        rs1 <|> rs2
+execQueryPlan2 (QPChoiceA _ qp1 qp2) = awaitForever (\row -> do
+                yield row .| execQueryPlan2 qp1
+                yield row .| execQueryPlan2 qp2)
 
-execQueryPlan rs (QPParA _ qp1 qp2) = do
-    row <- rs
-    let rs1 = execQueryPlan  (pure row) qp1
-        rs2 = execQueryPlan  (pure row) qp2
-    (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
-    listResultStream rs1' <|> listResultStream rs2'
+execQueryPlan2 (QPParA _ qp1 qp2) = 
+    execQueryPlan2 qp1 .| execQueryPlan2 qp2
+{-    do
+        mrow <- await
+        case mrow of
+            Just row -> do
+                let rs1 = yield row .| execQueryPlan2 qp1
+                    rs2 = yield row .| execQueryPlan2 qp2
+                (rs1', rs2') <- lift $ concurrently (getAllResultsInStream rs1) (getAllResultsInStream rs2)
+                C.yieldMany rs1' 
+                C.yieldMany rs2'
+            Nothing ->
+                return () -}
 
-execQueryPlan r (QPOneA _) = r
-execQueryPlan rs (QPZeroA _) = closeResultStream rs
-execQueryPlan rs (QPAggregateA qpd (FReturn vars) qp) =
-      projResultStream (combinedvs qpd) (execQueryPlan rs qp)
-execQueryPlan rs (QPAggregateA qpd Not qp) =
-    projResultStream (combinedvs qpd) (filterResultStream rs (\row -> do
-        let rs2 = execQueryPlan (pure row) qp
-        isResultStreamEmpty rs2))
-execQueryPlan rs (QPAggregateA qpd Exists qp) =
-    projResultStream (combinedvs qpd) (filterResultStream rs (\row -> do
-        let rs2 = execQueryPlan (pure row) qp
+execQueryPlan2 (QPOneA _) = awaitForever yield
+execQueryPlan2 (QPZeroA _) = C.sinkNull
+execQueryPlan2 (QPAggregateA qpd (FReturn vars) qp) =
+    execQueryPlan2 qp .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd Not qp) =
+    C.filterM (\row -> do
+            let rs2 = yield row .| execQueryPlan2 qp
+            isResultStreamEmpty rs2) .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd Exists qp) =
+    C.filterM (\row -> do
+        let rs2 = yield row .| execQueryPlan2 qp
         emp <- isResultStreamEmpty rs2
-        return (not emp)))
-execQueryPlan rs (QPAggregateA qpd (Summarize funcs groupby) qp) =
-    projResultStream (combinedvs qpd) (do
-        row <- rs
-        let rs2 = execQueryPlan (pure row) qp
-        rows <- lift $ getAllResultsInStream rs2
-        let groups = groupBy (\a b -> all (\var -> get var a == get var b) groupby) rows
-        let rows2 = map (\rows -> mconcat (reverse (map (\(v1, func1) ->
-                      let m = case func1 of
-                                Max v2 ->
-                                    if List.null rows
-                                        then error "max of empty list"
-                                        else maximum (map (get v2) rows)
-                                Min v2 ->
-                                    if List.null rows
-                                        then error "min of empty list"
-                                        else minimum (map (get v2) rows)
-                                Sum v2 ->
-                                    sum (map (get v2) rows)
-                                Average v2 ->
-                                    if List.null rows
-                                        then error "min of empty list"
-                                        else average (map (get v2) rows)
-                                Count ->
-                                    fromIntegral (length rows)
-                                CountDistinct v2 ->
-                                    fromIntegral (length (List.nub (map (get v2) rows)))
-                                Random v2 ->
-                                    if List.null rows
-                                        then error "random of empty list"
-                                        else head (map (get v2) rows) in
-                          sing v1 m) funcs))) groups where
-                              average :: Fractional a => [a] -> a
-                              average n = sum n / fromIntegral (length n)
+        return (not emp)) .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd (Summarize funcs groupby) qp) = awaitForever (\row -> do
+                    let rs2 = yield row .| execQueryPlan2 qp
+                    rows <- lift $ getAllResultsInStream rs2
+                    let groups = groupBy (\a b -> all (\var -> get var a == get var b) groupby) rows
+                    let rows2 = map (\rows -> mconcat (reverse (map (\(v1, func1) ->
+                                let m = case func1 of
+                                            Max v2 ->
+                                                if List.null rows
+                                                    then error "max of empty list"
+                                                    else maximum (map (get v2) rows)
+                                            Min v2 ->
+                                                if List.null rows
+                                                    then error "min of empty list"
+                                                    else minimum (map (get v2) rows)
+                                            Sum v2 ->
+                                                sum (map (get v2) rows)
+                                            Average v2 ->
+                                                if List.null rows
+                                                    then error "min of empty list"
+                                                    else average (map (get v2) rows)
+                                            Count ->
+                                                fromIntegral (length rows)
+                                            CountDistinct v2 ->
+                                                fromIntegral (length (List.nub (map (get v2) rows)))
+                                            Random v2 ->
+                                                if List.null rows
+                                                    then error "random of empty list"
+                                                    else head (map (get v2) rows) in
+                                    sing v1 m) funcs))) groups where
+                                        average :: Fractional a => [a] -> a
+                                        average n = sum n / fromIntegral (length n)
 
-        listResultStream (map (<> row) rows2))
-execQueryPlan rs (QPAggregateA qpd (Limit n) qp) =
-    projResultStream (combinedvs qpd) (do
-        row <- rs
-        liftIO $ infoM "QueryPlan" ("limit " ++ show n ++ " input = " ++ show row)
-        let rs2 = execQueryPlan (pure row) qp
-        takeResultStream n rs2)
-execQueryPlan rs (QPAggregateA qpd Distinct qp) =
-    projResultStream (combinedvs qpd) (do
-        row <- rs
-        liftIO $ infoM "QueryPlan" ("distinct input = " ++ show row)
-        let rs2 = execQueryPlan (pure row) qp
-        l <- lift $ getAllResultsInStream rs2
-        listResultStream (nub l))
-execQueryPlan rs (QPAggregateA qpd (OrderByAsc v1) qp) =
-    projResultStream (combinedvs qpd) (do
-        row <- rs
-        let rs2 = execQueryPlan (pure row) qp
-        rows <- lift $ getAllResultsInStream rs2
-        let rows' = sortBy (\row1 row2 -> compare (get v1 row1) (get v1 row2)) rows
-        listResultStream rows')
-execQueryPlan rs (QPAggregateA qpd (OrderByDesc v1) qp) =
-    projResultStream (combinedvs qpd) (do
-        row <- rs
-        let rs2 = execQueryPlan (pure row) qp
-        rows <- lift $ getAllResultsInStream rs2
-        let rows' = sortBy (\row1 row2 -> comparing Down (get v1 row1) (get v1 row2)) rows
-        trace ("executeQueryPlan: OrderByDesc " ++ show rows ++ show rows') $ listResultStream rows')
+                    C.yieldMany (map (<> row) rows2)) .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd (Limit n) qp) = awaitForever (\row -> do
+                liftIO $ infoM "QueryPlan" ("limit " ++ show n ++ " input = " ++ show row)
+                yield row .| execQueryPlan2 qp .| C.take n) .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd Distinct qp) = awaitForever (\row -> do
+                liftIO $ infoM "QueryPlan" ("distinct input = " ++ show row)
+                let rs2 = yield row .| execQueryPlan2 qp
+                l <- lift $ getAllResultsInStream rs2
+                C.yieldMany (nub l)) .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd (OrderByAsc v1) qp) = awaitForever (\row -> do
+                let rs2 = yield row .| execQueryPlan2 qp
+                rows <- lift $ getAllResultsInStream rs2
+                let rows' = sortBy (\row1 row2 -> compare (get v1 row1) (get v1 row2)) rows
+                C.yieldMany rows') .| C.map (proj (combinedvs qpd))
+execQueryPlan2 (QPAggregateA qpd (OrderByDesc v1) qp) = awaitForever (\row -> do
+                let rs2 = yield row .| execQueryPlan2 qp
+                rows <- lift $ getAllResultsInStream rs2
+                let rows' = sortBy (\row1 row2 -> comparing Down (get v1 row1) (get v1 row2)) rows
+                C.yieldMany rows') .| C.map (proj (combinedvs qpd))
 
 closeQueryPlan :: QueryPlanS row -> IO ()
 closeQueryPlan (ExecA _ (stmt, _)) =

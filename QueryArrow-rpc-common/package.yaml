@@ -24,6 +24,8 @@ dependencies:
 - data-msgpack
 - log-adapter
 - yaml
+- free
+- conduit
 - QueryArrow-common
 library:
   source-dirs: src

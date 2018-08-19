@@ -3,7 +3,8 @@ module QueryArrow.Cache where
 
 import QueryArrow.DB.DB
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Syntax.Type
 import QueryArrow.QueryPlan
 import QueryArrow.Plugin
 import QueryArrow.Data.Heterogeneous.List

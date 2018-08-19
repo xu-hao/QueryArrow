@@ -40,6 +40,7 @@ import QueryArrow.Logging
 import Options.Applicative
 import Data.Maybe (fromMaybe, isJust, fromJust)
 import QueryArrow.FO.Data
+import QueryArrow.Semantics.Value
 import Control.Arrow ((***))
 import Data.Monoid ((<>))
 import QueryArrow.Client
@@ -58,7 +59,7 @@ data Input = Input {
   tcpAddr :: Maybe String,
   tcpPort :: Maybe Int,
   udsAddr :: Maybe String,
-  params ::  [(String, ConcreteResultValue)]
+  params ::  [(String, ResultValue)]
 }
 input :: Parser Input
 input = Input <$>
@@ -81,7 +82,7 @@ mainArgs input = do
     let hdr = words (headers input)
     let qu = query input
     let showhdr = showHeaders input
-    let pars = Map.fromList (map (Var *** AbstractResultValue) (params input))
+    let pars = Map.fromList (map (Var *** id) (params input))
     if isJust (tcpAddr input) && isJust (tcpPort input)
       then
         runTCP (fromJust (tcpAddr input)) (fromJust (tcpPort input)) showhdr hdr qu pars

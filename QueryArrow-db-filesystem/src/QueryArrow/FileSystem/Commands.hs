@@ -14,6 +14,7 @@ module QueryArrow.FileSystem.Commands (
           ) where
 
 import QueryArrow.FO.Data
+import QueryArrow.Semantics.Value
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
 import Data.ByteString (ByteString)
@@ -21,7 +22,8 @@ import QueryArrow.Utils
 import QueryArrow.FileSystem.LocalCommands
 
 import Control.Monad.Free
-import Control.Monad.Trans.State (StateT, get, modify)
+import Control.Monad.Trans.State (StateT, modify)
+import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict (insert)
@@ -69,8 +71,8 @@ data FSCommand x where
    ModificationTime :: File -> (UTCTime -> x) -> FSCommand x
    MoveFile :: File -> File -> x -> FSCommand x
    MoveDir :: File -> File -> x -> FSCommand x
-   EvalResultValue :: Expr -> (ConcreteResultValue -> x) -> FSCommand x
-   SetResultValue :: Var -> ConcreteResultValue -> x -> FSCommand x
+   EvalResultValue :: Expr -> (ResultValue -> x) -> FSCommand x
+   SetResultValue :: Var -> ResultValue -> x -> FSCommand x
    Stop :: FSCommand x
 
 deriving instance Functor FSCommand
@@ -195,10 +197,10 @@ moveDir a b = liftF (MoveDir a b ())
 stop :: FSProgram a
 stop = liftF Stop
 
-setResultValue :: Var -> ConcreteResultValue -> FSProgram ()
+setResultValue :: Var -> ResultValue -> FSProgram ()
 setResultValue var expr = liftF (SetResultValue var expr ())
 
-evalResultValue :: Expr -> FSProgram ConcreteResultValue
+evalResultValue :: Expr -> FSProgram ResultValue
 evalResultValue expr = liftF (EvalResultValue expr id)
 
 type InterMonad = StateT MapResultRow (ReaderT ([((String, String), Interpreter)], [((String, String, String, String), Interpreter2)]) DBResultStream)
@@ -389,11 +391,11 @@ interpret (Foreach as next) = do
   next a
 
 interpret (EvalResultValue a next) = do
-  row <- get
-  next (case evalExpr row a of AbstractResultValue arv -> toConcreteResultValue arv)
+  row <- S.get
+  next (evalExpr row a)
 
 interpret (SetResultValue a b next) = do
-  modify (insert a (AbstractResultValue b))
+  modify (insert a b)
   next
 
 interpret Stop =

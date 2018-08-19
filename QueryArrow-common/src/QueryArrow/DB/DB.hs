@@ -1,8 +1,9 @@
-{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, TypeFamilies, ScopedTypeVariables, RankNTypes #-}
 module QueryArrow.DB.DB where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
+import QueryArrow.Semantics.Value
 import QueryArrow.FO.Utils
 
 import Prelude  hiding (lookup, null)
@@ -47,7 +48,9 @@ data Command = Begin | Prepare | Commit | Rollback | Execute Formula
     instance B a b => A (C a) b
 -}
 
-type DBResultStream = ResultStream (ResourceT IO)
+type DBResultStream row = ResultStream (ResourceT IO) row
+
+type DBResultStreamTrans row = ResultStreamTrans (ResourceT IO) row
 
 class IDBStatement stmt where
     type RowType stmt
@@ -124,11 +127,10 @@ doQueryWithConn db conn vars2 qu vars rs = do
     Right qu -> do
       qu' <- liftIO $ translateQuery db (keysSet vars2) qu (keysSet vars)
       stmt <- liftIO $ prepareQuery conn qu'
-      dbStmtExec stmt rs <|> do
-          liftIO $ catch (do
-                        dbCommit conn
-                        noticeM "QA" "doQuery: commit succeeded") (\e -> errorM "QA" ("doQuery: commit failed with exception " ++ show (e :: SomeException)))
-          emptyResultStream
+      dbStmtExec stmt rs
+      liftIO $ catch (do
+                    dbCommit conn
+                    noticeM "QA" "doQuery: commit succeeded") (\e -> errorM "QA" ("doQuery: commit failed with exception " ++ show (e :: SomeException)))
 
 newtype QueryTypeIso conn = QueryTypeIso (QueryType conn)
 newtype DBQueryTypeIso db = DBQueryTypeIso (DBQueryType db)

@@ -18,6 +18,7 @@ dependencies:
 - regex-compat-tdfa
 - namespace >=0.1.2.2
 - lattices
+- conduit
 - semibounded-lattices
 - heterogeneous-list
 - QueryArrow-common

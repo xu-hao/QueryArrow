@@ -14,6 +14,8 @@ dependencies:
 - scientific
 - aeson
 - lattices
+- conduit
+- data-default
 - QueryArrow-rpc-common
 library:
   source-dirs: src
@@ -25,7 +27,7 @@ library:
   - QueryArrow.Cypher.Neo4jConnection
   - QueryArrow.Cypher.BuiltIn
   - QueryArrow.Cypher.Cypher
-  - QueryArrow.Cypher.ICAT
+  - QueryArrow.Cypher.Mapping
   - QueryArrow.Cypher.SQLToCypher
   dependencies:
   - hslogger

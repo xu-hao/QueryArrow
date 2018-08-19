@@ -7,10 +7,13 @@ module QueryArrow.Cypher.Cypher (CypherVar(..), CypherOper, CypherExpr(..), Labe
     create, set, delete, cwhere, creturn) where
 
 import QueryArrow.FO.Data hiding (Subst(..), var)
-import QueryArrow.FO.Types hiding (instantiate)
+import QueryArrow.Syntax.Type
+import QueryArrow.Semantics.Value
 import QueryArrow.FO.Utils
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.DB
+import QueryArrow.FO.Serialize
+import QueryArrow.FO.TypeChecker hiding (instantiate)
 import QueryArrow.ListUtils
 
 import Prelude hiding (lookup)
@@ -116,9 +119,11 @@ data GraphPattern = GraphPattern [OneGraphPattern] deriving (Show, Read, Eq)
 data OneGraphPattern = GraphEdgePattern NodePattern NodePattern NodePattern
                      | GraphNodePattern NodePattern deriving (Eq, Show, Read)
 
+instance Semigroup GraphPattern where
+    GraphPattern as <> GraphPattern bs = GraphPattern (mergeOneGraphPatterns (as ++ bs))
+
 instance Monoid GraphPattern where
     mempty = GraphPattern []
-    GraphPattern as `mappend` GraphPattern bs = GraphPattern (mergeOneGraphPatterns (as ++ bs))
 
 data CypherPathType = CypherNodePathType CypherVar (Maybe Label) | CypherEdgePathType CypherVar CypherVar (Maybe Label) CypherVar | CypherPropertyPathType CypherVar PropertyKey CypherExpr deriving (Show)
 
@@ -335,8 +340,10 @@ instance Serialize CypherQuery where
 -- false :: Cypher
 -- false = Cypher [] mempty CypherFalseCond [] mempty []
 
+instance Semigroup Cypher where
+    (Cypher r1 m1 w1 s1 c1 d1) <> (Cypher r2 m2 w2 s2 c2 d2) = Cypher (r1 ++ r2) (m1 <> m2) (w1 .&&. w2) (s1 ++ s2) (c1 <> c2) (d1 ++ d2)    
+    
 instance Monoid Cypher where
-    mappend (Cypher r1 m1 w1 s1 c1 d1) (Cypher r2 m2 w2 s2 c2 d2) = Cypher (r1 ++ r2) (m1 <> m2) (w1 .&&. w2) (s1 ++ s2) (c1 <> c2) (d1 ++ d2)
     mempty = Cypher [] mempty CypherTrueCond [] mempty []
 
 cmatch :: GraphPattern -> Cypher
@@ -412,16 +419,17 @@ instance (FV a, FV b) => FV (a, b) where
 newtype CypherVarExprMap = CypherVarExprMap (Map CypherVar CypherExpr) deriving (Eq, Show)
 
 
+instance Semigroup CypherVarExprMap where
+    m1 <> m2 = -- assume that
+    -- fv of m2's codomain is disjoint from m1's domain
+    -- m2's domain is disjoint from m1's domain
+        let (CypherVarExprMap m1') = subst m2 m1
+            (CypherVarExprMap m2') = m2 in
+            CypherVarExprMap (m1' `Map.union` m2')
 
 instance Monoid CypherVarExprMap where
    mempty = CypherVarExprMap empty
-   m1 `mappend` m2 = -- assume that
-                     -- fv of m2's codomain is disjoint from m1's domain
-                     -- m2's domain is disjoint from m1's domain
-       let (CypherVarExprMap m1') = subst m2 m1
-           (CypherVarExprMap m2') = m2 in
-           CypherVarExprMap (m1' `Map.union` m2')
-
+   
 cypherVarExprMap :: CypherVar -> CypherExpr -> CypherVarExprMap
 cypherVarExprMap k v = CypherVarExprMap (insert k v empty)
 
@@ -703,9 +711,9 @@ type CypherEnv = Map CypherVar CypherValue
 instance Convertible Var CypherVar where
     safeConvert = Right . CypherVar . unVar
 instance Convertible MapResultRow CypherEnv where
-    safeConvert = Right . foldlWithKey (\map k v  -> insert (convert k) (convert (case v of AbstractResultValue arv -> toConcreteResultValue arv)) map) empty
+    safeConvert = Right . foldlWithKey (\map k v  -> insert (convert k) (convert v) map) empty
 
-instance Convertible ConcreteResultValue CypherValue where
+instance Convertible ResultValue CypherValue where
     safeConvert (Int64Value i) = Right (CypherIntValue (fromIntegral i))
     safeConvert (StringValue i) = Right (CypherStringValue (T.unpack i))
     safeConvert (Null) = Right (CypherNullValue)
@@ -724,7 +732,7 @@ instance Convertible Expr CypherExpr where
     safeConvert (VarExpr (Var i)) = Right (CypherVarExpr (CypherVar i))
     safeConvert (NullExpr) = Right (CypherNullExpr)
     safeConvert e@(ListConsExpr _ _) = Right (CypherListExpr (cypherExprListFromArg e))
-    safeConvert e@NilExpr = Right (CypherListExpr (cypherExprListFromArg e))
+    safeConvert e@ListNilExpr = Right (CypherListExpr (cypherExprListFromArg e))
     safeConvert (CastExpr TextType e) = Right (CypherAppExpr "toString" [convert e])
     safeConvert (CastExpr Int64Type e) = Right (CypherAppExpr "toInt" [convert e])
 

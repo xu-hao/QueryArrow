@@ -36,7 +36,7 @@ import QueryArrow.DBMap
 import QueryArrow.Config
 
 import Prelude hiding (lookup)
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import QueryArrow.RPC.DB
 import System.IO
 import Control.Exception
@@ -106,7 +106,7 @@ run2 showhdr hdr query params ps = do
     AbstractDatabase tdb <- transDB ps
     conn <- dbOpen tdb
     dbBegin conn
-    ret <- runEitherT $ run (fromList vars) query params tdb conn
+    ret <- runExceptT $ run (fromList vars) query params tdb conn
     case ret of
       Left e -> putStrLn ("error: " ++ show e)
       Right pp -> do

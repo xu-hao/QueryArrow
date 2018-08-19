@@ -133,6 +133,14 @@ pattern FZero = () :< FZeroF
 pattern FOne = () :< FOneF
 pattern Aggregate a b = () :< AggregateF a b
 
+pattern FAtomicA ann a = ann  :< FAtomicF a
+pattern FInsertA ann a = ann  :< FInsertF a
+pattern FChoiceA ann a b = ann  :< FChoiceF a b
+pattern FSequencingA ann a b = ann  :< FSequencingF a b
+pattern FParA ann a b = ann  :< FParF a b
+pattern FZeroA ann = ann  :< FZeroF
+pattern FOneA ann = ann  :< FOneF
+pattern AggregateA ann a b = ann  :< AggregateF a b
 {-
 isConst :: Expr -> Bool
 isConst (IntExpr _) = True

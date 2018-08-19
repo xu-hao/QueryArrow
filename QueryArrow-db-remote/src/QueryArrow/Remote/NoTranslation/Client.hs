@@ -6,7 +6,8 @@ import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
 import QueryArrow.DB.ResultStream
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 import Foreign.Ptr
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions

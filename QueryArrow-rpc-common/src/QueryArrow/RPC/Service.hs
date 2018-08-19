@@ -2,7 +2,8 @@
 
 module QueryArrow.RPC.Service where
 
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Syntax.Type
 import QueryArrow.DB.DB
 import Data.Aeson
 

@@ -23,6 +23,7 @@ dependencies:
 - QueryArrow-db-sql-common
 - postgresql-libpq
 - QueryArrow-common
+- conduit
 library:
   source-dirs: src
   exposed-modules:

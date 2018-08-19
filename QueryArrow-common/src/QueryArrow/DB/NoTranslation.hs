@@ -5,7 +5,7 @@ module QueryArrow.DB.NoTranslation where
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
 import Data.Map.Strict
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
 
 import Data.Set
 

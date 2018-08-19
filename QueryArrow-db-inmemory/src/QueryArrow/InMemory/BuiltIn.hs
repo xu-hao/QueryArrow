@@ -2,7 +2,9 @@
 module QueryArrow.InMemory.BuiltIn where
 
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.Value
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin

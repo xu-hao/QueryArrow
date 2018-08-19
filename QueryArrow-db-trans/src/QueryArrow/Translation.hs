@@ -3,7 +3,9 @@ module QueryArrow.Translation where
 
 import QueryArrow.DB.DB
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.Value
 import QueryArrow.FO.Utils
 import QueryArrow.QueryPlan
 import QueryArrow.Rewriting
@@ -18,7 +20,7 @@ import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Map.Strict (foldrWithKey, elems, lookup, unionWithKey)
 import Control.Monad.Except
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import Control.Monad.Trans.State
 import qualified Data.ByteString.Lazy as B
 import Text.ParserCombinators.Parsec hiding (State)
@@ -116,15 +118,15 @@ getRewriting predmap ps = do
 typecheckRules :: PredTypeMap -> RewritingRuleSets -> Either String RewritingRuleTSets
 typecheckRules ptm (qr, ir, dr) = do
   qr' <- mapM (\r ->
-      case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
+      case runNew (runReaderT (evalStateT (runExceptT (typecheck r)) (mempty, mempty)) ptm) of
           Right a -> return a
           Left err -> Left ("typecheckRules: rewrite rule " ++ show r ++ " type error\n" ++ err)) qr
   ir' <- mapM (\r ->
-      case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
+      case runNew (runReaderT (evalStateT (runExceptT (typecheck r)) (mempty, mempty)) ptm) of
           Right a -> return a
           Left err -> Left ("typecheckRules: insert rewrite rule " ++ show r ++ " type error\n" ++ err)) ir
   dr' <- mapM (\r ->
-      case runNew (runReaderT (evalStateT (runEitherT (typecheck r)) (mempty, mempty)) ptm) of
+      case runNew (runReaderT (evalStateT (runExceptT (typecheck r)) (mempty, mempty)) ptm) of
           Right a -> return a
           Left err -> Left ("typecheckRules: delete rewrite rule " ++ show r ++ " type error\n" ++ err)) dr
   return (qr', ir', dr')

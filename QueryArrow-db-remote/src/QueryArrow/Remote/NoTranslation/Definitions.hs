@@ -8,7 +8,8 @@ import QueryArrow.FO.Data
 import Data.Set
 import Foreign.Ptr
 import Data.Map.Strict
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 
 data RemoteCommand  = GetName
   | GetPreds

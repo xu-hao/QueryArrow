@@ -14,8 +14,12 @@ import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Applicative ((<|>))
 import GHC.Generics
 import Data.MessagePack (MessagePack(..))
+import Data.Conduit
+import qualified Data.Conduit.Combinators as C
 
 import QueryArrow.FO.Data
+import QueryArrow.Syntax.Type
+import QueryArrow.Semantics.Value
 import QueryArrow.DB.DB
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.NoConnection
@@ -33,67 +37,60 @@ type ElasticSearchDB = ESQ.ElasticSearchConnInfo
 instance INoConnectionDatabase2 (GenericDatabase ESTrans ElasticSearchDB) where
     type NoConnectionQueryType (GenericDatabase ESTrans ElasticSearchDB) = (ElasticSearchQuery, [Var])
     type NoConnectionRowType (GenericDatabase ESTrans ElasticSearchDB) = MapResultRow
-    noConnectionDBStmtExec (GenericDatabase _ db _ _) (qu, vars) rs = do
-      row <- rs
-      execWithParams db qu row
+    noConnectionDBStmtExec (GenericDatabase _ db _ _) (qu, vars) rs =
+      rs .| awaitForever (\row ->
+        C.map (const ()) .| execWithParams db qu row)
 
 execWithParams :: ElasticSearchDB -> ElasticSearchQuery -> MapResultRow -> DBResultStream MapResultRow
 execWithParams esci (ElasticSearchQuery type0 rec) args = do
-    hit <- esResultStream esci type0 rec args
-    return (convertHitToMapResultRow type0 rec hit)
+    esResultStream esci type0 rec args .| C.map (convertHitToMapResultRow type0 rec)
 
 execWithParams esci (ElasticSearchInsert type0 rec) args =
     let esquery =
             ESRecord
                 (fromList (foldrWithKey (\key val list -> extractInsertItem key val args : list) [] rec)) in
-        resultStream2 (do
-            _ <- ESQ.postESRecord esci type0 esquery
-            return [mempty]
-            ) (return ())
+        do
+            _ <- liftIO $ ESQ.postESRecord esci type0 esquery
+            yield mempty
 
-execWithParams esci (ElasticSearchDelete type0 rec) args = (do
-    hit <- esResultStream esci type0 rec args
-    _ <- liftIO $ ESQ.deleteById esci type0 (_id hit)
-    emptyResultStream) <|> return mempty
+execWithParams esci (ElasticSearchDelete type0 rec) args =
+    esResultStream esci type0 rec args .| awaitForever (\hit -> do
+        _ <- liftIO $ ESQ.deleteById esci type0 (_id hit)
+        yield mempty) 
 
-execWithParams esci (ElasticSearchUpdateProperty type0 rec updaterec) args = (do
-    hit <- esResultStream esci type0 rec args
-    let rec = _source hit
-        id0 = _id hit
-        updatedrec = updateProps (recordToESRecord updaterec args) rec
-    _ <- liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
-    emptyResultStream
-    ) <|> return mempty
+execWithParams esci (ElasticSearchUpdateProperty type0 rec updaterec) args = 
+    esResultStream esci type0 rec args .| awaitForever (\hit -> do
+        let rec = _source hit
+            id0 = _id hit
+            updatedrec = updateProps (recordToESRecord updaterec args) rec
+        _ <- liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
+        yield mempty)
 
-execWithParams esci (ElasticSearchDeleteProperty type0 rec diff) args = (do
-    hit <- esResultStream esci type0 rec args
-    let rec = _source hit
-        id0 = _id hit
-        updatedrec = deleteProps diff rec
-    _ <- liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
-    emptyResultStream
-    ) <|> return mempty
-
+execWithParams esci (ElasticSearchDeleteProperty type0 rec diff) args =
+    esResultStream esci type0 rec args .| awaitForever (\hit -> do
+        let rec = _source hit
+            id0 = _id hit
+            updatedrec = deleteProps diff rec
+        _ <- liftIO $ ESQ.updateESRecord esci type0 id0 updatedrec
+        yield mempty)
 
 convertExprToString :: Expr -> String
 convertExprToString (IntExpr i) = show i
 convertExprToString (StringExpr s) = unpack s
 convertExprToString _ = error ("unsupported param value expr type")
 
+esToConcreteResultValue :: Value -> ResultValue
+esToConcreteResultValue (String s) = (StringValue s)
+esToConcreteResultValue (Number n) = case toBoundedInteger n of
+                            Just n1 -> (Int64Value n1)
+                            Nothing -> error ("ConvertError Value to ResultValue" ++ show n)
+esToConcreteResultValue a = error ("ConvertError: Value to ResultValue" ++ show a)
 
-instance ResultValue Value where
-    toConcreteResultValue (String s) = (StringValue s)
-    toConcreteResultValue (Number n) = case toBoundedInteger n of
-                                Just n1 -> (Int64Value n1)
-                                Nothing -> error ("ConvertError Value to ResultValue" ++ show n)
-    toConcreteResultValue a = error ("ConvertError: Value to ResultValue" ++ show a)
-    castTypeOf (String s) = TextType
-    castTypeOf (Number n) = Int64Type
-    castTypeOf a = error ("ConvertError: Value to ResultValue" ++ show a)
-    toNetworkResultValue a = toNetworkResultValue (toConcreteResultValue a)
+esCastTypeOf :: Value -> CastType
+esCastTypeOf (String s) = TextType
+esCastTypeOf (Number n) = Int64Type
+esCastTypeOf a = error ("ConvertError: Value to ResultValue" ++ show a)
 
-deriving instance Generic Value
-instance MessagePack Value
 instance MessagePack Scientific where
   toObject a = toObject (fromIntegral (coefficient a) :: Int, base10Exponent a)
   fromObject a = do
@@ -108,7 +105,7 @@ convertHitToMapResultRow _ map2 eshit =
         foldrWithKey (\key val map3 -> case val of
             ElasticSearchQueryVar var ->
                 case lookup key map1 of
-                    Just val2 -> insert var (AbstractResultValue val2) map3
+                    Just val2 -> insert var (esToConcreteResultValue val2) map3
                     Nothing -> map3
             _ -> map3) empty map2
 
@@ -117,7 +114,7 @@ extractQueryItem key val args = case val of
     ElasticSearchQueryParam i ->
         case lookup i args of
             Just expr ->
-                case case expr of AbstractResultValue arv -> toConcreteResultValue arv of
+                case expr of
                     StringValue s -> [ESQ.ESTermQuery (ESQ.ESStrTermQuery key s)]
                     Int64Value i -> [ESQ.ESTermQuery (ESQ.ESIntTermQuery key (fromIntegral i))]
                     _ -> error "unsupported expr type"
@@ -134,7 +131,7 @@ extractInsertItem key val args = case val of
     ElasticSearchQueryParam i ->
         case lookup i args of
             Just expr ->
-                case case expr of AbstractResultValue arv -> toConcreteResultValue arv of
+                case expr of
                     StringValue s -> (key, String s)
                     Int64Value i -> (key, Number (fromInteger (toInteger i)))
                     _ -> error "unsupported expr type"
@@ -173,6 +170,8 @@ esResultStream esci type0 rec args = do
                         Left res1 -> error ("execWithParams: cannot decode response " ++ res1)
                         Right (ESQueryResult _ _ _ (ESQueryResultHits _ _ hits1)) -> return hits1
                 case rows of
-                    [] -> emptyResultStream
-                    _ -> listResultStream rows <|> getrs (off + lim) lim
+                    [] -> return ()
+                    _ -> do
+                        C.yieldMany rows
+                        getrs (off + lim) lim
         getrs 0 page

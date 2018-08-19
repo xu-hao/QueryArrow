@@ -4,7 +4,7 @@ module QueryArrow.DB.GenericDatabase where
 
 import QueryArrow.FO.Data
 import QueryArrow.DB.DB
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
 
 import Data.Set
 

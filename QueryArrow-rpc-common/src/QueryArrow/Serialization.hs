@@ -12,9 +12,12 @@ import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as B8
 import Data.Yaml
 import Data.Text (Text)
+import Control.Comonad.Cofree
 
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.Value
+import QueryArrow.Syntax.Type
 import QueryArrow.DB.DB
 
 type Error = (Int, Text)
@@ -31,9 +34,7 @@ data DynCommand = Quit | Dynamic String | Static [Command] deriving (Generic, Sh
 
 deriving instance Generic Var
 deriving instance Generic Command
-deriving instance Generic (Formula0 a f)
-deriving instance Generic Formula
-deriving instance Generic FormulaT
+deriving instance Generic (FormulaF a f)
 deriving instance Generic Lit
 deriving instance Generic Sign
 deriving instance Generic Atom
@@ -41,13 +42,16 @@ deriving instance Generic Pred
 deriving instance Generic PredType
 deriving instance Generic PredKind
 deriving instance Generic ParamType
-deriving instance Generic (Expr0 a)
-deriving instance Generic Expr
+deriving instance Generic (ExprF a)
 deriving instance Generic Aggregator
 deriving instance Generic Summary
-deriving instance Generic ConcreteResultValue
+deriving instance Generic ResultValue
+deriving instance Generic CastType
 deriving instance Show Command
 deriving instance Read Command
+
+instance MessagePack ResultValue
+instance MessagePack CastType
 
 instance (Key a, MessagePack a) => MessagePack (ObjectPath a) where
     fromObject arr = do
@@ -61,7 +65,7 @@ instance (Ord a, MessagePack a) => MessagePack (Set a) where
     toObject = toObject . toAscList
 
 
-instance MessagePack a => MessagePack (Formula0 Tie a)
+instance MessagePack a => MessagePack (FormulaF () a)
 instance MessagePack Formula
 instance MessagePack FormulaT
 -- (Annotated a (Formula0 Tie)) where
@@ -79,7 +83,7 @@ instance MessagePack Pred
 instance MessagePack PredType
 instance MessagePack PredKind
 instance MessagePack ParamType
-instance MessagePack a => MessagePack (Expr0 a)
+instance MessagePack a => MessagePack (ExprF a)
 instance MessagePack Expr
 instance MessagePack Aggregator
 instance MessagePack Summary
@@ -101,8 +105,8 @@ instance FromJSONKey Var where
 
 instance ToJSONKey Var where
 
-instance FromJSON a => FromJSON (Formula0 Tie a)
-instance ToJSON a => ToJSON (Formula0 Tie a)
+instance FromJSON a => FromJSON (FormulaF () a)
+instance ToJSON a => ToJSON (FormulaF () a)
 instance FromJSON Formula
 instance ToJSON Formula
 instance FromJSON FormulaT
@@ -121,8 +125,8 @@ instance FromJSON PredKind
 instance ToJSON PredKind
 instance FromJSON ParamType
 instance ToJSON ParamType
-instance FromJSON a => FromJSON (Expr0 a)
-instance ToJSON a => ToJSON (Expr0 a)
+instance FromJSON a => FromJSON (ExprF a)
+instance ToJSON a => ToJSON (ExprF a)
 instance FromJSON Expr
 instance ToJSON Expr
 instance FromJSON CastType
@@ -142,12 +146,8 @@ instance ToJSON ResultSet
 instance FromJSON QuerySet
 instance ToJSON QuerySet
 
-instance FromJSON ConcreteResultValue
-instance FromJSON AbstractResultValue where
-  parseJSON a = (AbstractResultValue :: ConcreteResultValue -> AbstractResultValue) <$> parseJSON a
-instance ToJSON ConcreteResultValue
-instance ToJSON AbstractResultValue where
-  toJSON (AbstractResultValue a) = toJSON (toConcreteResultValue a)
+instance FromJSON ResultValue
+instance ToJSON ResultValue
 
 instance FromJSON ByteString where
   parseJSON a = do

@@ -2,7 +2,9 @@
 module QueryArrow.SQL.SQL where
 
 import QueryArrow.FO.Data hiding (Subst, subst)
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
+import QueryArrow.FO.Serialize
 import QueryArrow.FO.Utils
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.ListUtils
@@ -28,6 +30,7 @@ import Algebra.Lattice.Ordered
 import System.Log.Logger
 import GHC.Generics
 import Data.Yaml
+import Control.Comonad.Cofree
 
 type Col = String
 type TableName = String
@@ -266,11 +269,13 @@ instance Subst SQL where
 type SQLQuery0 = ([Var], SQLStmt) -- return vars, sql
 type SQLQuery = ([Var], SQLStmt, [Var]) -- return vars, sql, param vars
 
+instance Semigroup SQL where
+    (SQLQuery sselect1 sfrom1 swhere1 [] Top False []) <> (SQLQuery sselect2 sfrom2 swhere2 [] Top False []) =
+        SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2) [] Top False []
+    _ <> _ =
+        error "sand: incompatible order by, limit, distinct, or group by"
+
 instance Monoid SQL where
-    (SQLQuery sselect1 sfrom1 swhere1 [] Top False []) `mappend` (SQLQuery sselect2 sfrom2 swhere2 [] Top False []) =
-            SQLQuery (sselect1 ++ sselect2) (sfrom1 `mergeTables` sfrom2) (swhere1 .&&. swhere2) [] Top False []
-    _ `mappend` _ =
-            error "sand: incompatible order by, limit, distinct, or group by"
     mempty = SQLQuery [] [] SQLTrueCond [] top False []
 
 sor :: SQL -> SQL -> SQL
@@ -370,7 +375,7 @@ sqlExprFromArg arg = do
         ListConsExpr a b -> do
             l <- sqlExprListFromArg arg
             return (Left (SQLListExpr l))
-        NilExpr -> do
+        ListNilExpr -> do
             l <- sqlExprListFromArg arg
             return (Left (SQLListExpr l))
         NullExpr ->
@@ -920,7 +925,7 @@ data SQLState = SQLState {
 }
 
 pureOrExecF :: SQLTrans -> Set Var -> FormulaT -> StateT SQLState Maybe ()
-pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomic2 _ (Atom n@(PredName _ pn) args)) = do
+pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomicA _ (Atom n@(PredName _ pn) args)) = do
     ks <- get
     if Just n == (predName <$> nextid)
         then lift Nothing
@@ -940,12 +945,12 @@ pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomi
                                 let key = keyComponents pt args
                                 put ks{queryKeys = queryKeys ks `union` [(tablename, key)]}
 
-pureOrExecF  trans@(SQLTrans _ _ _ ptm) dvars form@(FSequencing2 _ form1 form2) = do
+pureOrExecF  trans@(SQLTrans _ _ _ ptm) dvars form@(FSequencingA _ form1 form2) = do
     pureOrExecF  trans dvars form1
     let dvars2 = determinedVars (toDSP ptm) dvars form1
     pureOrExecF  trans dvars2 form2
 
-pureOrExecF  trans dvars form@(FPar2 _ form1 form2) =
+pureOrExecF  trans dvars form@(FParA _ form1 form2) =
     -- only works if all vars are determined
     if freeVars form1 `Set.isSubsetOf` dvars && freeVars form2 `Set.isSubsetOf` dvars
         then do
@@ -958,7 +963,7 @@ pureOrExecF  trans dvars form@(FPar2 _ form1 form2) =
                     pureOrExecF  trans dvars form2
         else
             lift Nothing
-pureOrExecF  trans dvars form@(FChoice2 _ form1 form2) =
+pureOrExecF  trans dvars form@(FChoiceA _ form1 form2) =
     -- only works if all vars are determined
     if freeVars form1 `Set.isSubsetOf` dvars && freeVars form2 `Set.isSubsetOf` dvars
         then do
@@ -971,7 +976,7 @@ pureOrExecF  trans dvars form@(FChoice2 _ form1 form2) =
                     pureOrExecF  trans dvars form2
         else
             lift Nothing
-pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsert2 _ (Lit sign0 (Atom pred0 args))) = do
+pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsertA _ (Lit sign0 (Atom pred0 args))) = do
             ks <- get
             if ksQuery ks || deleteConditional ks
                 then lift Nothing
@@ -1021,57 +1026,57 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsert2 _ (Lit sign
                       let isDeleteConditional = isDelete && not (all isVar (propComponents pt args)) -- || (not isDelete && not (all isVar (keyComponents pt args)))
                       put ks'{deleteConditional = isDeleteConditional}
 
-pureOrExecF  _ _ (FOne2 _) = return ()
-pureOrExecF  _ _ (FZero2 _) = return ()
-pureOrExecF trans dvars for@(Aggregate2 _ Not form) = do
+pureOrExecF  _ _ (FOneA _) = return ()
+pureOrExecF  _ _ (FZeroA _) = return ()
+pureOrExecF trans dvars for@(AggregateA _ Not form) = do
     ks <- get
     if isJust (updateKey ks)
         then lift Nothing
         else do
             put ks {ksQuery = True}
             pureOrExecF trans dvars form
-pureOrExecF trans dvars for@(Aggregate2 _ Exists form) = do
+pureOrExecF trans dvars for@(AggregateA _ Exists form) = do
   ks <- get
   if isJust (updateKey ks)
       then lift Nothing
       else do
           put ks {ksQuery = True}
           pureOrExecF trans dvars form
-pureOrExecF _ _ (Aggregate2 _ _ _) =
+pureOrExecF _ _ (AggregateA _ _ _) =
   lift Nothing
 
 sequenceF :: SQLTrans -> FormulaT -> StateT SQLState Maybe ()
-sequenceF (SQLTrans _ _ (Just nextid1) _) (FAtomic2 _ (Atom p [_])) | predName nextid1 == p =
+sequenceF (SQLTrans _ _ (Just nextid1) _) (FAtomicA _ (Atom p [_])) | predName nextid1 == p =
                         return ()
 sequenceF _ _ = lift Nothing
 
 limitF :: SQLTrans -> Set Var -> FormulaT -> StateT SQLState Maybe ()
-limitF trans dvars (Aggregate2 _ (Limit _) form) = do
+limitF trans dvars (AggregateA _ (Limit _) form) = do
   ks <- get
   put ks {ksQuery = True}
   limitF trans dvars form
 limitF trans dvars form = orderByF trans dvars form
 
 orderByF :: SQLTrans -> Set Var -> FormulaT -> StateT SQLState Maybe ()
-orderByF trans dvars (Aggregate2 _ (OrderByAsc _) form) = do
+orderByF trans dvars (AggregateA _ (OrderByAsc _) form) = do
   ks <- get
   put ks {ksQuery = True}
   orderByF trans dvars form
-orderByF trans dvars (Aggregate2 _ (OrderByDesc _) form) = do
+orderByF trans dvars (AggregateA _ (OrderByDesc _) form) = do
   ks <- get
   put ks {ksQuery = True}
   orderByF trans dvars form
 orderByF trans dvars form = distinctF trans dvars form
 
 distinctF :: SQLTrans -> Set Var -> FormulaT -> StateT SQLState Maybe ()
-distinctF trans dvars (Aggregate2 _ Distinct form) = do
+distinctF trans dvars (AggregateA _ Distinct form) = do
   ks <- get
   put ks {ksQuery = True}
   distinctF trans dvars form
 distinctF trans dvars form = summarizeF trans dvars form
 
 summarizeF :: SQLTrans -> Set Var -> FormulaT -> StateT SQLState Maybe ()
-summarizeF trans dvars (Aggregate2 _ (Summarize _ _) form) = do
+summarizeF trans dvars (AggregateA _ (Summarize _ _) form) = do
   ks <- get
   put ks {ksQuery = True}
   summarizeF trans dvars form
@@ -1082,7 +1087,7 @@ summarizeF trans dvars form = pureOrExecF trans dvars form
 instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], [CastType], String, [Var])
     type GDBFormulaType SQLTrans = FormulaT
-    gTranslateQuery trans ret query@(Annotated vtm _) env = do
+    gTranslateQuery trans ret query@(vtm :< _) env = do
         let (SQLTrans builtin predtablemap nextid ptm) = trans
             env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env
             (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) (stripAnnotations query)) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm}))

@@ -4,7 +4,7 @@ module QueryArrow.Plugin where
 import QueryArrow.Config
 import QueryArrow.DB.DB
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.FO.TypeChecker
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Data.Heterogeneous.List
 

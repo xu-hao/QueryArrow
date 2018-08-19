@@ -5,6 +5,8 @@ import Prelude hiding (lookup)
 import QueryArrow.DB.ParametrizedStatement
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
+import QueryArrow.Syntax.Type
+import QueryArrow.Semantics.Value
 import QueryArrow.FO.Data
 
 import Database.PostgreSQL.LibPQ
@@ -25,6 +27,7 @@ import GHC.Generics
 import Data.Aeson (ToJSON(..), FromJSON(..))
 import Data.MessagePack (MessagePack(..))
 import Foreign.C.Types (CUInt(..))
+import Data.Conduit
 import Data.Typeable (cast)
 
 data LibPQStatement = LibPQStatement Connection Bool [Var] [Oid] ByteString [Var] -- return vars stmt param vars
@@ -49,8 +52,8 @@ instance MessagePack CUInt
 instance MessagePack Oid
 instance MessagePack LibPQValue
 
-instance ResultValue LibPQValue where
-  toConcreteResultValue (LibPQValue oid bs) =
+pqToConcreteResultValue :: LibPQValue -> ResultValue
+pqToConcreteResultValue (LibPQValue oid bs) =
     if oid == int8oid
       then Int64Value (fromIntegral (runGet getWord64be (fromStrict bs)))
       else if oid == int4oid
@@ -60,17 +63,9 @@ instance ResultValue LibPQValue where
           else error ("toConcreteResultValue: unsupported sql expr type: " ++ show oid)
           -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
           -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
-  toNetworkResultValue (LibPQValue oid bs) =
-    NetworkResultValue (if oid == int8oid
-      then Just Int64Type
-      else if oid == int4oid
-        then Just Int32Type
-        else if oid == varcharoid
-          then Just TextType
-          else error ("toNetworkResultValue: unsupported sql expr type: " ++ show oid)) bs
-          -- Currently the generated predicates only contains string, not bytestring. This must match the type of the predicates
-          -- SqlByteString _ -> ByteStringValue (fromSql sqlvalue)
-  castTypeOf (LibPQValue oid bs) =
+
+pqCastTypeOf :: LibPQValue -> CastType
+pqCastTypeOf (LibPQValue oid bs) =
     if oid == int8oid
       then Int64Type
       else if oid == int4oid
@@ -81,24 +76,18 @@ instance ResultValue LibPQValue where
             then ByteStringType
             else error ("typeOf: unsupported sql expr type: " ++ show oid)
 
-convertConcreteResultValueToSQL :: ConcreteResultValue -> (ByteString, Format)
-convertConcreteResultValueToSQL (Int64Value i) = (toStrict (runPut (putWord64be (fromIntegral i))), Binary) -- int8oid
-convertConcreteResultValueToSQL (StringValue s) = (encodeUtf8 s, Binary) -- varcharoid
-convertConcreteResultValueToSQL (ByteStringValue s) = (s, Binary) -- byteaoid
-convertConcreteResultValueToSQL e = error ("unsupported expr type: " ++ show e)
-
-convertResultValueToSQL :: AbstractResultValue -> (ByteString, Format)
-convertResultValueToSQL (AbstractResultValue arv) =
-    case cast arv of
-      Just (LibPQValue oid bs) -> (bs, Binary)
-      Nothing -> convertConcreteResultValueToSQL (toConcreteResultValue arv)
+convertResultValueToSQL :: ResultValue -> (ByteString, Format)
+convertResultValueToSQL (Int64Value i) = (toStrict (runPut (putWord64be (fromIntegral i))), Binary) -- int8oid
+convertResultValueToSQL (StringValue s) = (encodeUtf8 s, Binary) -- varcharoid
+convertResultValueToSQL (ByteStringValue s) = (s, Binary) -- byteaoid
+convertResultValueToSQL e = error ("unsupported expr type: " ++ show e)
 
 convertSQLToResult :: [Var] -> [Oid] -> [Maybe ByteString] -> MapResultRow
 convertSQLToResult vars oids sqlvalues = foldl (\row (var0, oid, sqlvalue) ->
                 insert var0 (
                   case sqlvalue of
-                    Nothing  -> AbstractResultValue Null
-                    Just sqlvalue -> AbstractResultValue (LibPQValue oid sqlvalue)) row) empty (zip3 vars oids sqlvalues)
+                    Nothing  -> Null
+                    Just sqlvalue -> pqToConcreteResultValue (LibPQValue oid sqlvalue)) row) empty (zip3 vars oids sqlvalues)
 
 allRowsResultStream :: [Var] -> [Oid] -> Result -> DBResultStream MapResultRow
 allRowsResultStream vars oids res = do
@@ -107,10 +96,11 @@ allRowsResultStream vars oids res = do
   unless (fromIntegral ncols == length vars) $ error ("number of vars doesn't match number of columns")
   let allRowsResultStreamOffset offset =
           if nrows == offset
-            then emptyResultStream
-            else (do
+            then return ()
+            else do
               sqlvals <- liftIO $ mapM (\i -> getvalue res (fromIntegral offset) (fromIntegral i)) [0..ncols-1]
-              return (convertSQLToResult vars oids sqlvals)) <|> allRowsResultStreamOffset (offset + 1)
+              yield (convertSQLToResult vars oids sqlvals)
+              allRowsResultStreamOffset (offset + 1)
   allRowsResultStreamOffset 0
 
 instance IPSDBStatement LibPQStatement where

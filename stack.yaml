@@ -38,19 +38,19 @@ resolver: lts-12.6
 packages:
     - QueryArrow/
     - QueryArrow-rpc-common
-    - QueryArrow-rpc-http/
-    - QueryArrow-rpc-socket
-    - QueryArrow-ffi-c/
-    - QueryArrow-ffi-c-local
-    - QueryArrow-ffi-c-tcp
-    - QueryArrow-ffi-c-unixdomainsocket
-    - QueryArrow-ffi-c-genquery
-    - QueryArrow-ffi-service
-    - QueryArrow-ffi-service-local
-    - QueryArrow-ffi-service-handle-common
-    - QueryArrow-ffi-service-tcp
-    - QueryArrow-ffi-service-unixdomainsocket
-    - QueryArrow-ffi-genquery
+    # - QueryArrow-rpc-http/
+    # - QueryArrow-rpc-socket
+    # - QueryArrow-ffi-c/
+    # - QueryArrow-ffi-c-local
+    # - QueryArrow-ffi-c-tcp
+    # - QueryArrow-ffi-c-unixdomainsocket
+    # - QueryArrow-ffi-c-genquery
+    # - QueryArrow-ffi-service
+    # - QueryArrow-ffi-service-local
+    # - QueryArrow-ffi-service-handle-common
+    # - QueryArrow-ffi-service-tcp
+    # - QueryArrow-ffi-service-unixdomainsocket
+    # - QueryArrow-ffi-genquery
     - QueryArrow-db-elastic/
     - QueryArrow-db-cypher/
     - QueryArrow-db-sql-common
@@ -60,8 +60,8 @@ packages:
     - QueryArrow-db-sql-hdbc-sqlite3/
     - QueryArrow-db-sql-libpq-postgresql
     - QueryArrow-db-inmemory/
-    - QueryArrow-db-remote
-    - QueryArrow-db-filesystem
+#    - QueryArrow-db-remote
+#    - QueryArrow-db-filesystem
     - QueryArrow-db-include
     - QueryArrow-db-trans
     - QueryArrow-db-sum
@@ -73,7 +73,7 @@ packages:
     - heterogeneous-list
     - log-adapter
     - data-some
-    - test-QueryArrow
+#    - test-QueryArrow
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.

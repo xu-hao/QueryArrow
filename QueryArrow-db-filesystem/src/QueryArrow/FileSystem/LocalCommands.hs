@@ -2,6 +2,7 @@
 module QueryArrow.FileSystem.LocalCommands where
 
 import QueryArrow.FO.Data
+import QueryArrow.Semantics.Value
 import Data.ByteString (ByteString)
 
 import System.FilePath ((</>), equalFilePath, takeDirectory, takeFileName, pathSeparator)
@@ -37,10 +38,10 @@ fsDir file = if equalFilePath [pathSeparator] (fRelP file)
 fsfileName :: File -> String
 fsfileName file = takeFileName (fRelP file)
 
-fileToResultValue :: String -> File -> ConcreteResultValue
+fileToResultValue :: String -> File -> ResultValue
 fileToResultValue ty (File host root path ) = RefValue (pack ty) (pack host) (pack root) (pack path)
 
-resultValueToFile :: ConcreteResultValue -> File
+resultValueToFile :: ResultValue -> File
 resultValueToFile (RefValue _ host root path) = File (unpack host) (unpack root) (unpack path)
 resultValueToFile _ = error ""
 

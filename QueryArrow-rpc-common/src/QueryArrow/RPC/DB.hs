@@ -5,7 +5,9 @@ module QueryArrow.RPC.DB where
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Semantics.Value
+import QueryArrow.FO.TypeChecker
+import QueryArrow.Syntax.Type
 import QueryArrow.Utils
 import QueryArrow.Parser
 
@@ -15,14 +17,15 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
 import Control.Monad.Except
 import QueryArrow.Control.Monad.Logger.HSLogger ()
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import Control.Exception (SomeException(..))
 import System.IO.Error(userError)
 import Data.Set (Set)
+import Data.Conduit
 import Text.Parsec
 import Debug.Trace
 
-run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> EitherT SomeException IO [MapResultRow]
+run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> ExceptT SomeException IO [MapResultRow]
 run3 hdr commands params tdb conn = do
     r <- liftIO $ runResourceT $ dbCatch $ do
                                 concat <$> mapM (\command -> case command of
@@ -39,9 +42,9 @@ run3 hdr commands params tdb conn = do
                                         liftIO $ dbRollback conn
                                         return []
                                     Execute qu -> do
-                                        let (varstinp, varstout) = setToMap2 (map (\(AbstractResultValue arv) -> castTypeOf arv) params) hdr
+                                        let (varstinp, varstout) = setToMap2 (map castTypeOf params) hdr
                                         -- trace ("varstinp = " ++ show varstinp ++ ", varstout" ++ show varstout) $
-                                        getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (pure params))) commands
+                                        getAllResultsInStream ( doQueryWithConn tdb conn varstout qu varstinp (yield params))) commands
                             -- Right (Right Commit) -> do
                             --     b <- liftIO $ dbPrepare tdb
                             --     if b
@@ -56,10 +59,10 @@ run3 hdr commands params tdb conn = do
                             --             liftIO $ dbRollback tdb
                             --             )
     case r of
-        Right rows ->  right rows
-        Left e ->  left e
+        Right rows ->  return rows
+        Left e ->  throwE e
 
-run :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> EitherT SomeException IO [MapResultRow]
+run :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> String -> MapResultRow -> db -> ConnectionType db -> ExceptT SomeException IO [MapResultRow]
 run hdr query par tdb conn =
     case runParser progp () "" query of
                             Left err -> throwError (SomeException (userError ("run: " ++ show err)))

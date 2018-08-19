@@ -3,6 +3,7 @@ module QueryArrow.BuiltIn where
 import System.IO (FilePath, readFile)
 import Text.Read (readMaybe)
 import QueryArrow.FO.Data
+import QueryArrow.Syntax.Type
 
 standardBuiltInPreds = [
         Pred (UQPredName "le") (PredType ObjectPred [ParamType True True False Int64Type, ParamType True True False Int64Type]),

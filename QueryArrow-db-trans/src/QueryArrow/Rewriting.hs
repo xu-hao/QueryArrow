@@ -4,7 +4,9 @@ module QueryArrow.Rewriting where
 
 import Prelude hiding (lookup)
 import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.FO.Serialize
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 import QueryArrow.FO.Domain
 
 import Data.Map.Strict (empty, singleton, union, fromList, lookup)
@@ -92,30 +94,30 @@ rewriteAtomic1 ext a2 (InsertRewritingRuleT p form : rs) =
 rewrite1 :: Set Var ->[InsertRewritingRuleT] -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> FormulaT -> NewEnv FormulaT
 rewrite1 ext  qr  ir dr form0 =
     case form0 of
-        FAtomic2 _ a2 -> do
+        FAtomicA _ a2 -> do
             res <- rewriteAtomic1 ext a2 qr
             return (case res of
                 Nothing -> form0
                 Just form -> form)
-        FChoice2 d disj1 disj2 ->
-            FChoice2 d <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
-        FPar2 d disj1 disj2 ->
-            FPar2 d <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
-        FSequencing2 d conj1 conj2 ->
-            FSequencing2 d <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2
-        FOne2 _ ->
+        FChoiceA d disj1 disj2 ->
+            FChoiceA d <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
+        FParA d disj1 disj2 ->
+            FParA d <$> rewrite1 ext qr  ir dr disj1 <*> rewrite1 ext qr  ir dr disj2
+        FSequencingA d conj1 conj2 ->
+            FSequencingA d <$> rewrite1 ext qr  ir dr conj1 <*> rewrite1 ext qr  ir dr conj2
+        FOneA _ ->
             return form0
-        FZero2 _ ->
+        FZeroA _ ->
             return form0
-        FInsert2 d lit@(Lit s a) -> do
+        FInsertA d lit@(Lit s a) -> do
             res <- rewriteAtomic1 ext a (case s of
                             Pos -> ir
                             Neg -> dr)
             return (case res of
                         Nothing -> form0
                         Just form -> form)
-        Aggregate2 d agg form ->
-            Aggregate2 d agg <$> rewrite1 ext  qr ir dr form
+        AggregateA d agg form ->
+            AggregateA d agg <$> rewrite1 ext  qr ir dr form
 
 rewrites    :: Int -> Set Var -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> [InsertRewritingRuleT] -> FormulaT -> NewEnv FormulaT
 rewrites n ext  rules  ir dr form | n < 0     = error "maximum number of rewrites reached"

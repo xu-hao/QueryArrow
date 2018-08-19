@@ -12,6 +12,7 @@ dependencies:
 - text >=1.2.1.1
 - lattices
 - QueryArrow-rpc-common
+- free
 library:
   source-dirs: src
   ghc-options:

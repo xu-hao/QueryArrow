@@ -2,7 +2,8 @@
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
+import QueryArrow.FO.TypeChecker
 import QueryArrow.Config
 import QueryArrow.Translation
 import QueryArrow.Cache
@@ -23,7 +24,7 @@ import QueryArrow.InMemory.Map
 import qualified QueryArrow.ElasticSearch.ElasticSearch as ElasticSearch
 import qualified QueryArrow.SQL.HDBC.Sqlite3 as Sqlite3
 -- import qualified QueryArrow.Remote.NoTranslation.TCP.TCP as Remote.TCP
-import qualified QueryArrow.FileSystem.FileSystem as FileSystem
+-- import qualified QueryArrow.FileSystem.FileSystem as FileSystem
 import qualified QueryArrow.SQL.LibPQ.PostgreSQL as LibPQ
 
 type DBMap = Map String (AbstractPlugin MapResultRow)
@@ -46,7 +47,7 @@ dbMap0 = fromList [
     ("InMemory/MutableMap", AbstractPlugin stateMapPlugin),
     ("ElasticSearch/ElasticSearch", AbstractPlugin ElasticSearch.ElasticSearchPlugin),
 --    ("Remote/TCP", AbstractPlugin Remote.TCP.RemoteTCPPlugin),
-    ("FileSystem", AbstractPlugin FileSystem.FileSystemPlugin),
+--    ("FileSystem", AbstractPlugin FileSystem.FileSystemPlugin),
     ("Cache", AbstractPlugin CachePlugin),
     ("Translation", AbstractPlugin TransPlugin),
     ("Include", AbstractPlugin IncludePlugin),

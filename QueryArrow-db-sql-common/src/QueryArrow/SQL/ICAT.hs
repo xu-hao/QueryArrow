@@ -3,6 +3,7 @@ module QueryArrow.SQL.ICAT where
 
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FO.Data
+import QueryArrow.Syntax.Type
 import QueryArrow.SQL.SQL
 import QueryArrow.SQL.BuiltIn
 import QueryArrow.ICAT
