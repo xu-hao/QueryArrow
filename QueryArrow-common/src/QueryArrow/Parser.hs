@@ -21,7 +21,7 @@ lexer = T.makeTokenParser T.LanguageDef {
     T.identLetter = alphaNum <|> char '_',
     T.opStart = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
     T.opLetter = oneOf "=~|⊗⊕∧∨∀∃¬⟶𝟏𝟎⊤⊥",
-    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "random", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "int64", "text", "bytestring", "list", "null", "forall"],
+    T.reservedNames = ["commit", "insert", "return", "delete", "key", "object", "property", "input", "output", "rewrite", "predicate", "exists", "import", "export", "qualified", "all", "from", "except", "if", "then", "else", "one", "zero", "random", "max", "min", "sum", "average", "count", "limit", "group", "order", "by", "asc", "desc", "let", "distinct", "int64", "text", "bytestring", "list", "null", "forall", "reference"],
     T.reservedOpNames = ["=", "~", "|", "||", "⊗", "⊕", "‖", "∃", "¬", "⟶","𝟏","𝟎"],
     T.caseSensitive = True
 }
@@ -160,7 +160,7 @@ formulaSequencingp = do
   return (fsequencing formulaConjs)
 
 paramtypep :: FOParser ParamType
-paramtypep = ParamType <$> ((reserved "key" >> return True) <|> return False) <*> ((reserved "input" >> return True) <|> return False) <*> ((reserved "output" >> return True) <|> return False) <*> casttypep
+paramtypep = ParamType <$> ((reserved "key" >> return True) <|> return False) <*> ((reserved "input" >> return True) <|> return False) <*> ((reserved "output" >> return True) <|> return False) <*> ((reserved "reference" >> return True) <|> return False) <*> casttypep
 
 predtypep :: FOParser PredType
 predtypep = PredType <$> (reserved "object" *> return ObjectPred <|> reserved "property" *> return PropertyPred) <*>

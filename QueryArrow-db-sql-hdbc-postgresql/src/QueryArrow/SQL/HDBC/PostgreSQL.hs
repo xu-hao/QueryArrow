@@ -15,12 +15,14 @@ import QueryArrow.DB.AbstractDatabaseList
 import Data.Maybe
 
 import Database.HDBC.PostgreSQL
+import System.Log.Logger (infoM)
 
 newtype PostgreSQLDB = PostgreSQLDB PostgreSQLDBConfig
 
 instance IDatabase2 (GenericDatabase  SQLTrans PostgreSQLDB) where
     newtype ConnectionType (GenericDatabase  SQLTrans PostgreSQLDB) = P HDBCDBConnection
     dbOpen (GenericDatabase  _ (PostgreSQLDB ps) _ _) = do
+        infoM "PostgreSQL" ("connectnig to postgres: host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_name ps++" user="++db_username ps++" password="++db_password ps)
         conn <- connectPostgreSQL ("host="++db_host ps++ " port="++show (db_port ps)++" dbname="++db_name ps++" user="++db_username ps++" password="++db_password ps)
         return (P (HDBCDBConnection conn))
 

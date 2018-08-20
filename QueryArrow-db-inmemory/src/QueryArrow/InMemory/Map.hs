@@ -25,7 +25,7 @@ import GHC.Generics
 
 data MapBinding = MapBinding String String [(ResultValue, ResultValue)] deriving Show
 instance Binding MapBinding where
-    bindingPred (MapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
+    bindingPred (MapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True False TextType, ParamType True True True False TextType])
     bindingSupport _ [_,_] = True
     bindingSupport _ _ = False
     bindingSupportInsert _ = False
@@ -51,7 +51,7 @@ instance Show (IORef a) where
 data StateMapBinding = StateMapBinding String String (IORef [(ResultValue, ResultValue)]) deriving Show
 
 instance Binding StateMapBinding where
-    bindingPred (StateMapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True TextType, ParamType True True True TextType])
+    bindingPred (StateMapBinding ns predname _) = Pred (QPredName ns [] predname) (PredType ObjectPred [ParamType True True True False TextType, ParamType True True True False TextType])
     bindingSupport _ [_,_] = True
     bindingSupport _ _ = False
     bindingSupportInsert _ = True

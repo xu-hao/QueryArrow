@@ -9,6 +9,7 @@ dependencies:
 - base >=4
 - aeson
 - HDBC-postgresql
+- hslogger
 - heterogeneous-list
 - QueryArrow-common
 - QueryArrow-db-sql-common

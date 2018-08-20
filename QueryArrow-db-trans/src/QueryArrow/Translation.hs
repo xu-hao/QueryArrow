@@ -108,6 +108,7 @@ instance (IDatabase db) => IDBConnection (ConnectionType (TransDB db)) where
 
 getRewriting :: PredMap -> ICATTranslationConnInfo -> IO (RewritingRuleSets, PredMap, PredMap)
 getRewriting predmap ps = do
+    debugM "QA" ("loading rewriting rules from " ++ rewriting_file_path ps)
     d0 <- toString <$> B.readFile (rewriting_file_path ps)
     d1 <- runCpphs defaultCpphsOptions{includes = include_file_path ps, boolopts = defaultBoolOptions {locations = False}}  (rewriting_file_path ps) d0
     case runParser rulesp () (rewriting_file_path ps) d1 of
@@ -134,9 +135,11 @@ typecheckRules ptm (qr, ir, dr) = do
 transDB :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => String -> db -> ICATTranslationConnInfo -> IO (TransDB db)
 transDB name sumdb transinfo = do
             let predmap0 = constructDBPredMap sumdb
+            debugM "QA" ("predmap = " ++ show predmap0)
             -- trace ("preds:\n" ++ intercalate "\n" (map show (elems predmap0))) $ return ()
             (rewriting, predmap, exports) <- getRewriting predmap0 transinfo
             let exportmap = allObjects exports
+            debugM "QA" ("exportmap = " ++ show exportmap)
             let (rules0, exportedpreds) = foldrWithKey (\key pred1@(Pred pn predtype@(PredType _ paramTypes)) (rules0', exportedpreds') ->
                     if key /= pn
                         then

@@ -13,12 +13,14 @@ import Data.Namespace.Namespace
 import Data.Yaml
 
 import Data.Map.Strict (fromList, keys)
+import System.Log.Logger
 
 nextidPred :: [String] -> String -> Pred
-nextidPred nss nextid = Pred (PredName nss nextid) (PredType ObjectPred [ParamType True False True TextType])
+nextidPred nss nextid = Pred (PredName nss nextid) (PredType ObjectPred [ParamType True False True False TextType])
 
 makeICATSQLDBAdapter :: String -> String -> String -> Maybe String -> a -> IO (GenericDatabase SQLTrans a)
 makeICATSQLDBAdapter ns predsPath mappingsPath nextid conninfo = do
+    debugM "SQL" ("loading predicate from " ++ predsPath)
     preds0 <- loadPreds predsPath
     let preds =
           case nextid of
@@ -27,6 +29,8 @@ makeICATSQLDBAdapter ns predsPath mappingsPath nextid conninfo = do
     mappings <- loadMappings mappingsPath
     let (BuiltIn builtin) = sqlBuiltIn (lookupPred ns)
     let builtinpreds = keys builtin
+    debugM "SQL" ("preds standard = " ++ show (qStandardPreds ns preds))
+    debugM "SQL" ("preds builtin = " ++ show (map lookupPredByName builtinpreds))
     return (GenericDatabase (sqlStandardTrans ns preds mappings nextid) conninfo ns (qStandardPreds ns preds ++ map lookupPredByName builtinpreds))
 
 loadMappings :: FilePath -> IO [SQLMapping]

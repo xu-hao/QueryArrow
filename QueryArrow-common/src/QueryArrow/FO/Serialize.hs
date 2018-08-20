@@ -91,6 +91,6 @@ instance Serialize PredName where
     serialize = predNameToString
   
 instance Serialize ParamType where
-    serialize (ParamType key input output t) = (if key then "key " else ""  ) ++ (if input then "input " else "") ++ (if output then "output " else "") ++ serialize t
+    serialize (ParamType key input output isRef t) = (if key then "key " else ""  ) ++ (if input then "input " else "") ++ (if output then "output " else "") ++ (if isRef then "ref " else "") ++ serialize t
   
   

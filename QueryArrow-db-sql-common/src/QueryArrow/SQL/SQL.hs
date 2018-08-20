@@ -1093,7 +1093,7 @@ instance IGenericDatabase01 SQLTrans where
             (sql@(retvars, sqlquery, _), ts') = runNew (runStateT (translateQueryToSQL (toAscList ret) (stripAnnotations query)) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid = nextid, ptm = ptm}))
             retvartypes = map (\var0 -> case lookup var0 vtm of
                                                 Nothing -> error ("var type not found: " ++ show var0 ++ " from " ++ show query)
-                                                Just (ParamType _ _ _ p) -> p) retvars
+                                                Just (ParamType _ _ _ _ p) -> p) retvars
         debugM "SQL" ("gTranslateQuery of SQLTrans: " ++ show env ++ "\n-----------------\n" ++ serialize query ++ "\n---------------->\n" ++ serialize sqlquery ++ "\n----------------")
         return (case sqlquery of
                 SQLQueryStmt _ -> True

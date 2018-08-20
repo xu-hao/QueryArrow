@@ -5,7 +5,7 @@ import QueryArrow.Cypher.Cypher
 import QueryArrow.SQL.SQL
 import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map, fromList)
 import Data.List (partition)
-import QueryArrow.FO.Data (PredTypeMap, keyComponents, propComponents)
+import QueryArrow.FO.Data (PredTypeMap, keyComponents, propComponents, isReference, keyComponentsParamType, propComponentsParamType)
 import QueryArrow.ListUtils
 import Control.Arrow ((***))
 import Data.Maybe (fromMaybe)
@@ -41,15 +41,13 @@ sqlToCypher ptm mappings =
             let cols = map (\(SQLQualifiedCol _ key0) -> lookup2 key0 colprop) qcols
                 colsi = zip cols [1..length cols]
                 predtype = fromMaybe (error ("sqlToCypher: cannot find predicate " ++ show predname)) (lookup predname ptm)
-                keycols = keyComponents predtype colsi
-                propcols = propComponents predtype colsi
-                (keyedges, keyprops) =
+                keycols = keyComponentsParamType predtype colsi
+                propcols = propComponentsParamType predtype colsi
+                (keyedges, keyprops) = (map snd *** map snd) (
                       case length keycols of
                         1 -> ([], keycols)
-                        2
-                          | tablename == "r_data_main" -> partition (\(col, _) -> col /= "data_id") keycols
-                        _ -> partition (\(col, _) -> col `endsWith` "_id" && col /= "data_access_id") keycols
-                (propedges, propprops) = partition (\(col, _) -> endswith "_id" col) propcols
+                        _ -> partition (\(pt, _) -> isReference pt) keycols)
+                (propedges, propprops) = (map snd *** map snd) (partition (\(pt, _) -> isReference pt) propcols)
                 ty = lookup2 tablename tabletype
                 foreignkeyedges = map ((\key -> lookup2 key foreignKeys) *** id) keyedges
                 mapping' = case propcols of
