@@ -1,9 +1,9 @@
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, OverloadedStrings, InstanceSigs #-}
 module QueryArrow.Cypher.Neo4jConnection where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.Serialize
+import QueryArrow.Syntax.Serialize
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection

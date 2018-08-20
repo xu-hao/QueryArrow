@@ -39,7 +39,7 @@ import System.Log.Logger
 import QueryArrow.Logging
 import Options.Applicative
 import Data.Maybe (fromMaybe, isJust, fromJust)
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
 import Control.Arrow ((***))
 import Data.Monoid ((<>))

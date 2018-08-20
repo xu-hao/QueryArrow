@@ -4,9 +4,9 @@ module QueryArrow.Sum where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.QueryPlan
 import QueryArrow.ListUtils
 import QueryArrow.Data.Heterogeneous.List

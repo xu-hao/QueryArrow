@@ -1,13 +1,14 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, StandaloneDeriving, OverloadedStrings, TypeFamilies #-}
 
 module Main where
 import QueryArrow.QueryPlan
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Parser
 import QueryArrow.SQL.SQL
-import qualified QueryArrow.ICAT as ICAT
+import qualified QueryArrow.Mapping as ICAT
 import qualified QueryArrow.BuiltIn as BuiltIn
 import qualified QueryArrow.SQL.ICAT as SQL.ICAT
 import QueryArrow.DB.GenericDatabase
@@ -32,10 +33,13 @@ import Data.Namespace.Namespace
 import Data.Namespace.Path
 import Data.Maybe
 import Algebra.Lattice
+import QueryArrow.Serialize (loadPreds)
 import qualified Data.Set as Set
+import QueryArrow.Syntax.Serialize
+import QueryArrow.Syntax.Utils
 
 
-standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen.yaml") <*> pure BuiltIn.standardBuiltInPreds
+standardPreds = (++) <$> (loadPreds "../QueryArrow-gen/gen/ICATGen.yaml") <*> pure BuiltIn.standardBuiltInPreds
 standardMappings =  (SQL.ICAT.loadMappings "../QueryArrow-gen/gen/SQL/ICATGen.yaml")
 
 sqlStandardTrans ns = SQL.ICAT.sqlStandardTrans ns <$> standardPreds <*> standardMappings <*> pure (Just "nextid")
@@ -62,6 +66,9 @@ translateQuery1 trans vars qu env =
   let (SQLTrans  builtin predtablemap _ ptm) = trans
       env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
       fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid=Just (SQL.ICAT.nextidPred ["cat"] "nextid"), ptm = ptm})))
+
+support :: (IDatabase1 db, DBFormulaType db ~ FormulaT) => db -> Set.Set Var -> Formula -> Set.Set Var -> Bool
+support db vs1 f vs2 = supported db vs1 (addAnnotations f) vs2
 
 testTranslateSQLInsert :: String -> String -> String -> IO ()
 testTranslateSQLInsert ns qus sqls = do
@@ -124,10 +131,10 @@ main = hspec $ do
             sql <- translateQuery2 <$> (sqlStandardTrans "cat") <*> pure (Set.fromList [Var "x", Var "y", Var "z"]) <*> pure qu
             sql `shouldBe` ([Var "x", Var "y", Var "z"], SQLQueryStmt (SQLQuery
                     [
-                        (Var "x", SQLColExpr (SQLVar "r_data_main", "data_id")),
-                        (Var "y", SQLColExpr (SQLVar "r_data_main", "resc_id")),
-                        (Var "z", SQLColExpr (SQLVar "r_data_main", "data_name"))]
-                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                        (Var "x", SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "data_id")),
+                        (Var "y", SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "resc_id")),
+                        (Var "z", SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "data_name"))]
+                    [SimpleTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
                     top
@@ -139,7 +146,7 @@ main = hspec $ do
             sql `shouldBe` ([Var "a"], SQLQueryStmt (SQLQuery
                     [
                         (Var "a", SQLFuncExpr "count" [(SQLExprText "*")])]
-                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                    [SimpleTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
                     top
@@ -151,9 +158,9 @@ main = hspec $ do
             sql `shouldBe` ([Var "a", Var "b", Var "c"], SQLQueryStmt (SQLQuery
                     [
                         (Var "a", SQLFuncExpr "count" [SQLExprText "*"]),
-                        (Var "b", SQLFuncExpr "max" [SQLColExpr (SQLVar "r_data_main", "data_id")]),
-                        (Var "c", SQLFuncExpr "min" [SQLColExpr (SQLVar "r_data_main", "data_id")])]
-                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                        (Var "b", SQLFuncExpr "coalesce" [SQLFuncExpr "max" [SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "data_id")],SQLIntConstExpr 0]),
+                        (Var "c", SQLFuncExpr "coalesce" [SQLFuncExpr "min" [SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "data_id")],SQLIntConstExpr 0])]
+                    [SimpleTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
                     top
@@ -162,16 +169,16 @@ main = hspec $ do
         {- it "test translate sql query 0" $ do
             let qu = parseStandardQuery "DATA_NAME(x, y, z) return x y"
             let sql = translateQuery2 (sqlStandardTrans "") qu
-            sql `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [OneTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), []) -}
+            sql `shouldBe` ([Var "x", Var "y"], SQLQ (SQL0 [SQLColExpr (SQLVar "r_data_main", "data_id"), SQLColExpr (SQLVar "r_data_main", "data_name")] [SimpleTable "r_data_main" (SQLVar "r_data_main")] SQLTrueCond), []) -}
         it "test translate sql query with param" $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
             sql <- translateQuery1 <$> (sqlStandardTrans "cat") <*> pure (Set.fromList [Var "x", Var "y", Var "z"]) <*> pure qu <*> pure (Set.fromList [Var "w"])
             sql `shouldBe` ([Var "x", Var "y", Var "z"], SQLQueryStmt (SQLQuery
                     [
-                        (Var "x", SQLColExpr (SQLVar "r_data_main", "data_id")),
-                        (Var "y", SQLColExpr (SQLVar "r_data_main", "resc_id")),
-                        (Var "z", SQLColExpr (SQLVar "r_data_main", "data_name"))]
-                    [OneTable "r_data_main" (SQLVar "r_data_main")]
+                        (Var "x", SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "data_id")),
+                        (Var "y", SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "resc_id")),
+                        (Var "z", SQLColExpr (SQLQualifiedCol (SQLVar "r_data_main") "data_name"))]
+                    [SimpleTable "r_data_main" (SQLVar "r_data_main")]
                     SQLTrueCond
                     []
                     top
@@ -214,18 +221,19 @@ main = hspec $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", \"foo1\") insert ~cat.DATA_NAME(x, \"bar\", \"foo1\")" "UPDATE r_data_main SET data_name = NULL WHERE (resc_id = 'bar' AND data_name = 'foo1')"
         it "test translate sql insert 21 no insert and delete" $ do
             form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") cat.DATA_SIZE(x, \"bar\", 1000)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
+
+            sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
             sql `shouldBe` False
             -- length sql `shouldBe` 2
             -- show (sql !! 0) `shouldBe` "UPDATE r_data_main SET data_size = 1000"
             -- show (sql !! 1) `shouldBe` "UPDATE r_data_main SET data_name = NULL WHERE data_name = 'foo1'"
         it "test translate sql insert 22 no delete conditional and other delete" $ do
             form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", \"foo1\") ~cat.DATA_SIZE(x, \"bar\", 1000)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
+            sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
             sql `shouldBe` False
         it "test translate sql insert 23 delete and other delete" $ do
             form <- parseStandardQuery "insert ~cat.DATA_NAME(x, \"bar\", w) ~cat.DATA_SIZE(x, \"bar\", z)"
-            sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
+            sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure form <*> pure Set.empty
             sql `shouldBe` True
         it "test translate sql insert 8" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar1\", \"bar\") insert cat.DATA_NAME(x, \"bar1\", \"foo\")" "UPDATE r_data_main SET data_name = 'foo' WHERE (resc_id = 'bar1' AND data_name = 'bar')"
@@ -241,7 +249,7 @@ main = hspec $ do
         it "test translate sql insert 12" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.substr(y, 0, 1, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = substr(data_name,0,1) WHERE resc_id = 'bar'"
         it "test translate sql insert 13" $ do
-            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.eq(integer y, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = cast(data_name as integer) WHERE resc_id = 'bar'"
+            testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.eq(int64 y, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = cast(data_name as integer) WHERE resc_id = 'bar'"
         it "test translate sql insert 14" $ do
             testTranslateSQLInsert "cat" "cat.DATA_NAME(x, \"bar\", y) cat.strlen(y, l0) cat.add(l0,-1,l) cat.substr(y, l, l0, z) insert cat.DATA_NAME(x, \"bar\", z)" "UPDATE r_data_main SET data_name = substr(data_name,(length(data_name)+-1),length(data_name)) WHERE resc_id = 'bar'"
         it "test translate sql insert 15" $ do
@@ -257,17 +265,17 @@ main = hspec $ do
             (serialize ((\(_,x,_) -> x)sql)) `shouldBe` "SELECT (?+1) AS \"z\""
         it "test translate sql insert 18" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y)"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
+                sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
                 sql `shouldBe` False
         it "test translate sql insert 19" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) (cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y))"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
+                sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
                 sql `shouldBe` True
         it "test translate sql insert 20" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, \"bar\", y) | cat.DATA_NAME(x, \"bar\", y)"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure (Set.fromList [Var "x", Var "y"])
+                sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure (Set.fromList [Var "x", Var "y"])
                 sql `shouldBe` True
-        it "test sql query supported" $ do
+        it "test sql query support" $ do
                 qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, n) cat.DATA_SIZE(x, y, s)"
-                sql <- supported <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
+                sql <- support <$> (GenericDatabase <$> (sqlStandardTrans "cat") <*> pure () <*> pure "cat" <*> standardPreds) <*> pure mempty <*> pure qu <*> pure Set.empty
                 sql `shouldBe` True

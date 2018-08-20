@@ -1,10 +1,10 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, PatternSynonyms, DeriveGeneric, RankNTypes, GADTs #-}
 module QueryArrow.InMemory.Map where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoConnection
 import QueryArrow.Plugin

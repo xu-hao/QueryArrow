@@ -2,9 +2,9 @@
 module QueryArrow.QueryPlan where
 
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import Algebra.SemiBoundedLattice
 import QueryArrow.DB.DB
 import QueryArrow.Data.Heterogeneous.List
@@ -24,7 +24,7 @@ import Algebra.Lattice
 import Data.Set (Set, fromList, toAscList)
 import Data.Ord (comparing, Down(..))
 import Control.Comonad.Cofree
-import QueryArrow.FO.Serialize
+import QueryArrow.Syntax.Serialize
 import Data.Conduit
 import qualified Data.Conduit.Combinators as C
 import Debug.Trace

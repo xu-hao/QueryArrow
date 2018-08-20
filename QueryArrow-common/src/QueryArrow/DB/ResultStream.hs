@@ -9,7 +9,7 @@ import Control.Applicative (empty, (<|>), Alternative)
 import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (lift, MonadTrans)
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import Data.Conduit
 import Data.Conduit.Combinators
 import Control.Monad.Trans.Resource

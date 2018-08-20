@@ -2,8 +2,8 @@
 
 module QueryArrow.FFI.GenQuery.Translate where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Term
+import QueryArrow.Syntax.Type
 
 import Prelude hiding (lookup)
 import Data.Text (Text, pack)

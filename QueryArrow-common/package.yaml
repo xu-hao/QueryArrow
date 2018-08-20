@@ -25,19 +25,40 @@ dependencies:
 - exceptions
 - utf8-string
 - lattices
+- hslogger
+- regex-tdfa
+- lifted-async
+- namespace >=0.1.2.2
+- semibounded-lattices
+- conduit-extra
+- monad-logger
+- fast-logger
+- constraints
+- either
+- yaml
+- filepath
+- binary
+- base64-bytestring
+- comonad
+- free
+- deriving-compat
+- heterogeneous-list
+- log-adapter
 library:
   source-dirs: src
   ghc-options:
   - -Wall
   - -fPIC
   exposed-modules:
-  - QueryArrow.FO.Data
-  - QueryArrow.FO.TypeChecker
-  - QueryArrow.FO.Domain
-  - QueryArrow.FO.Utils
-  - QueryArrow.FO.Serialize
+  - QueryArrow.Syntax.Term
+  - QueryArrow.Semantics.TypeChecker
+  - QueryArrow.Semantics.Domain
+  - QueryArrow.Syntax.Utils
+  - QueryArrow.Syntax.Serialize
   - QueryArrow.Syntax.Type
+  - QueryArrow.Semantics.Compute
   - QueryArrow.Semantics.Value
+  - QueryArrow.Serialize
   - QueryArrow.DB.DB
   - QueryArrow.DB.NoTranslation
   - QueryArrow.DB.GenericDatabase
@@ -45,7 +66,7 @@ library:
   - QueryArrow.DB.ParametrizedStatement
   - QueryArrow.DB.ResultStream
   - QueryArrow.DB.AbstractDatabaseList
-  - QueryArrow.ICAT
+  - QueryArrow.Mapping
   - QueryArrow.BuiltIn
   - QueryArrow.QueryPlan
   - QueryArrow.Logging
@@ -54,28 +75,7 @@ library:
   - QueryArrow.ListUtils
   - QueryArrow.Utils
   - QueryArrow.Plugin
-  dependencies:
-  - hslogger
-  - regex-tdfa
-  - lifted-async
-  - namespace >=0.1.2.2
-  - semibounded-lattices
-  - conduit-extra
-  - cpphs
-  - monad-logger
-  - fast-logger
-  - constraints
-  - either
-  - lrucache
-  - yaml
-  - filepath
-  - binary
-  - base64-bytestring
-  - comonad
-  - free
-  - deriving-compat
-  - heterogeneous-list
-  - log-adapter
+  dependencies: []
 tests:
   Test:
     main: Test.hs

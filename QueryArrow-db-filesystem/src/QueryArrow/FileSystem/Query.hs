@@ -1,8 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses, TypeFamilies, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, OverloadedStrings #-}
 module QueryArrow.FileSystem.Query where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Term
+import QueryArrow.Syntax.Type
 import QueryArrow.DB.DB
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.FileSystem.Builtin

@@ -50,13 +50,19 @@ dependencies:
 executables:
   test_parser_main:
     main: TestChopper.hs
-    source-dirs: src
+    source-dirs: 
+      - src 
+      - app/chopper
     ghc-options: -Wall
   test_dedupper_main:
     main: TestDedupper.hs
-    source-dirs: src
+    source-dirs: 
+      - src 
+      - app/dedupper
     ghc-options: -Wall
   test_runner_main:
     main: TestRunner.hs
-    source-dirs: src
+    source-dirs: 
+      - src 
+      - app/runner
     ghc-options: -Wall

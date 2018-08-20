@@ -1,18 +1,18 @@
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs #-}
 module QueryArrow.Cypher.Mapping where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Cypher.Neo4jConnection
 import QueryArrow.Cypher.Cypher
 import QueryArrow.Cypher.BuiltIn
 import QueryArrow.Cypher.SQLToCypher
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.NoConnection
-import QueryArrow.ICAT
+import QueryArrow.Mapping
 import QueryArrow.BuiltIn
 import QueryArrow.SQL.ICAT hiding (lookupPred, lookupPredByName)
 import QueryArrow.SQL.SQL
-import QueryArrow.Serialization
+import QueryArrow.Serialize
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (empty, Map, insert, (!), member, singleton, adjust, foldlWithKey, lookup, fromList, keys, elems)

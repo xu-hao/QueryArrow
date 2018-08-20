@@ -2,11 +2,11 @@
 
 module QueryArrow.FFI.Auxiliary where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.Serialize
+import QueryArrow.Syntax.Serialize
 import QueryArrow.DB.DB
 
 import Prelude hiding (lookup)

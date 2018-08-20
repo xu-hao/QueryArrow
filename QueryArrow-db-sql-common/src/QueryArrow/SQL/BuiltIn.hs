@@ -2,9 +2,9 @@
 module QueryArrow.SQL.BuiltIn where
 
 import QueryArrow.DB.GenericDatabase
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.SQL.SQL
-import QueryArrow.ICAT
+import QueryArrow.Mapping
 import Data.Namespace.Namespace
 
 import Data.Text (unpack)

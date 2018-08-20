@@ -10,7 +10,7 @@ import Control.Monad.Trans.Resource
 import Control.Monad.IO.Class
 import QueryArrow.Remote.NoTranslation.Definitions
 import QueryArrow.Remote.Definitions
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
 import Control.Exception.Lifted (catch, SomeException)
 
 runQueryArrowServer :: forall db a. (Channel a, SendType a ~ RemoteResultSet, ReceiveType a ~ RemoteCommand,

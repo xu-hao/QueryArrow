@@ -17,6 +17,12 @@ dependencies:
 - conduit
 - data-default
 - QueryArrow-rpc-common
+- hslogger
+- namespace >=0.1.2.2
+- heterogeneous-list
+- semibounded-lattices
+- QueryArrow-common
+- QueryArrow-db-sql-common
 library:
   source-dirs: src
   ghc-options:
@@ -29,13 +35,7 @@ library:
   - QueryArrow.Cypher.Cypher
   - QueryArrow.Cypher.Mapping
   - QueryArrow.Cypher.SQLToCypher
-  dependencies:
-  - hslogger
-  - namespace >=0.1.2.2
-  - heterogeneous-list
-  - semibounded-lattices
-  - QueryArrow-common
-  - QueryArrow-db-sql-common
+  dependencies: []
 tests:
   Test:
     main: Test.hs

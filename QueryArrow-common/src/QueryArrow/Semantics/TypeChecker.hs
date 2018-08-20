@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving #-}
 
-module QueryArrow.FO.TypeChecker where
+module QueryArrow.Semantics.TypeChecker where
 
 import Prelude hiding (lookup, null, filter)
 import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty, mapKeys, toList, singleton)
@@ -8,8 +8,8 @@ import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
 import Data.Set (Set, (\\), toAscList, member, null, filter)
 import qualified Data.Set as Set
-import QueryArrow.FO.Data
-import QueryArrow.FO.Domain
+import QueryArrow.Syntax.Term
+import QueryArrow.Semantics.Domain
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Reader
@@ -20,7 +20,7 @@ import Control.Comonad.Cofree
 import Data.Maybe (fromMaybe)
 import Algebra.Lattice
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.Serialize
+import QueryArrow.Syntax.Serialize
 
 type VarTypeMap = Map Var ParamType
 type TVarMap = Map String CastType

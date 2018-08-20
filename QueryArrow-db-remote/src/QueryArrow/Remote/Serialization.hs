@@ -12,7 +12,7 @@ import Foreign.Ptr
 import GHC.Fingerprint
 import GHC.StaticPtr
 import Data.Map.Strict
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import Data.Maybe (fromJust)
 import System.IO.Unsafe (unsafePerformIO)
 import Data.Binary.Get

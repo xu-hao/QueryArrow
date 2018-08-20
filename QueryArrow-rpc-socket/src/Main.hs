@@ -9,7 +9,7 @@ import Prelude hiding (lookup)
 import System.Log.Logger
 import QueryArrow.Logging
 import QueryArrow.Control.Monad.Logger.HSLogger ()
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import Options.Applicative hiding (Success)
 import Data.Maybe
 import Data.Map.Strict

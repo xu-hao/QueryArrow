@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, OverloadedStrings #-}
 module QueryArrow.Cypher.BuiltIn where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Cypher.Cypher
 
 import Data.Map.Strict (fromList)

@@ -4,9 +4,9 @@ module QueryArrow.RPC.DB where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB hiding (Null)
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Syntax.Type
 import QueryArrow.Utils
 import QueryArrow.Parser

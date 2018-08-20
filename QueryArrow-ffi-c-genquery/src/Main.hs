@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, GADTs, ExistentialQuantification, ForeignFunctionInterface #-}
 
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 
 import Prelude hiding (lookup)
 import qualified Data.Text as Text
@@ -21,7 +21,7 @@ import QueryArrow.FFI.Service
 import QueryArrow.FFI.Auxiliary
 import QueryArrow.FFI.GenQuery.Translate
 import QueryArrow.FFI.GenQuery.Data
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import System.Environment
 
 main :: IO ()

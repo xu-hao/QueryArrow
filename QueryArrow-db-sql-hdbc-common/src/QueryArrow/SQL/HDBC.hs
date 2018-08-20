@@ -5,7 +5,7 @@ import Prelude hiding (lookup)
 import QueryArrow.DB.ParametrizedStatement
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.Value
 

@@ -4,12 +4,12 @@ module QueryArrow.Remote.NoTranslation.Definitions where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.NoTranslation
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import Data.Set
 import Foreign.Ptr
 import Data.Map.Strict
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 
 data RemoteCommand  = GetName
   | GetPreds

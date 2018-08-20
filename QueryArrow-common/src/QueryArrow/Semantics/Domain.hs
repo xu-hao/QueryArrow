@@ -1,8 +1,9 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, RankNTypes, FlexibleContexts, UndecidableInstances #-}
 
-module QueryArrow.FO.Domain where
+module QueryArrow.Semantics.Domain where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
+import QueryArrow.Syntax.Type
 
 import Data.Map.Strict (lookup)
 import Prelude hiding (lookup)

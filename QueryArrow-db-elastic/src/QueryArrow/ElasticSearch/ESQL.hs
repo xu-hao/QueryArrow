@@ -9,8 +9,8 @@ import Data.Map.Strict (lookup, fromList, Map, keys)
 import Data.Text (Text)
 import Data.Set (toAscList)
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Syntax.Term
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Syntax.Type
 import QueryArrow.DB.GenericDatabase
 

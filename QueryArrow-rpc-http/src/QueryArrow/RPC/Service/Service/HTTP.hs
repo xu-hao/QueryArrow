@@ -5,9 +5,9 @@
 
 module QueryArrow.RPC.Service.Service.HTTP where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.DBMap
 import QueryArrow.RPC.Config

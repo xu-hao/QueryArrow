@@ -12,7 +12,7 @@ import Control.Monad.Trans.Except
 import QueryArrow.RPC.DB
 import System.IO (Handle)
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.FFI.Auxiliary
 
 worker :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()

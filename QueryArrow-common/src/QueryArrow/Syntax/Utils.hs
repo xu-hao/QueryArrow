@@ -1,11 +1,11 @@
 {-# LANGUAGE PatternSynonyms #-}
 
-module QueryArrow.FO.Utils where
+module QueryArrow.Syntax.Utils where
 
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import Control.Comonad.Cofree
 import Data.Map.Strict (empty)
 
@@ -23,8 +23,8 @@ pattern PTPropIORef a = ParamType False True True True a
 pattern PTPropIRef a = ParamType False True False True a
 pattern PTPropORef a = ParamType False False True True a
 
-stripAnnotations :: FormulaT -> Formula
-stripAnnotations (_ :< a) = () :< (fmap stripAnnotations a)
+stripAnnotations :: Formula2 b a -> Formula2 b ()
+stripAnnotations = fmap (const ())
 
--- addAnnotations :: Formula -> FormulaT
--- addAnnotations (Tie a) = Annotated empty (fmap addAnnotations a)
+addAnnotations :: Monoid a => Formula2 b () -> Formula2 b a
+addAnnotations = fmap (const mempty)

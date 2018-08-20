@@ -2,9 +2,9 @@
 
 module QueryArrow.DB.GenericDatabase where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.DB.DB
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 
 import Data.Set
 

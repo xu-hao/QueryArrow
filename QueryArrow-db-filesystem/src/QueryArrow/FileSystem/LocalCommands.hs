@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, StandaloneDeriving, MultiParamTypeClasses, DeriveGeneric, FlexibleInstances, PatternSynonyms #-}
 module QueryArrow.FileSystem.LocalCommands where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
 import Data.ByteString (ByteString)
 

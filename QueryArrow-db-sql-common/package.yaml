@@ -13,6 +13,11 @@ dependencies:
 - lattices
 - QueryArrow-rpc-common
 - free
+- hslogger
+- yaml
+- namespace >=0.1.2.2
+- semibounded-lattices
+- QueryArrow-common
 library:
   source-dirs: src
   ghc-options:
@@ -22,12 +27,7 @@ library:
   - QueryArrow.SQL.ICAT
   - QueryArrow.SQL.SQL
   - QueryArrow.SQL.BuiltIn
-  dependencies:
-  - hslogger
-  - yaml
-  - namespace >=0.1.2.2
-  - semibounded-lattices
-  - QueryArrow-common
+  dependencies: []
 tests:
   Test:
     main: Test.hs

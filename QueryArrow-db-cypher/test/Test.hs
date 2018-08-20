@@ -4,13 +4,13 @@ module Main where
 import QueryArrow.QueryPlan
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Parser
 import QueryArrow.SQL.SQL
-import qualified QueryArrow.ICAT as ICAT
+import qualified QueryArrow.Mapping as ICAT
 import qualified QueryArrow.BuiltIn as BuiltIn
 import qualified QueryArrow.SQL.ICAT as SQL.ICAT
-import QueryArrow.Cypher.ICAT
+import QueryArrow.Cypher.Mapping
 import QueryArrow.Cypher.Cypher
 import qualified QueryArrow.Cypher.Cypher as Cypher
 import QueryArrow.DB.GenericDatabase
@@ -35,9 +35,11 @@ import Data.Namespace.Namespace
 import Data.Namespace.Path
 import Data.Maybe
 import Algebra.Lattice
+import QueryArrow.Syntax.Serialize
+import QueryArrow.Serialize
 import qualified Data.Set as Set
 
-standardPreds = (++) <$> (ICAT.loadPreds "../QueryArrow-gen/gen/ICATGen.yaml") <*> pure BuiltIn.standardBuiltInPreds
+standardPreds = (++) <$> (loadPreds "../QueryArrow-gen/gen/ICATGen.yaml") <*> pure BuiltIn.standardBuiltInPreds
 standardMappings =  (SQL.ICAT.loadMappings "../QueryArrow-gen/gen/SQL/ICATGen.yaml")
 
 sqlStandardTrans ns = SQL.ICAT.sqlStandardTrans ns <$> standardPreds <*> standardMappings <*> pure (Just "nextid")

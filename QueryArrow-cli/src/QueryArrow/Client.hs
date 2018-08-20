@@ -44,7 +44,7 @@ import QueryArrow.Serialization
 import Network.Socket
 import Network
 import QueryArrow.RPC.Message
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import Data.Set (fromList)
 
 import QueryArrow.Utils

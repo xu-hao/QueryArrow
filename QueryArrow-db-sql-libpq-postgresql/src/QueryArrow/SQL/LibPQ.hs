@@ -7,7 +7,7 @@ import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
 import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 
 import Database.PostgreSQL.LibPQ
 import Control.Monad.IO.Class (liftIO)

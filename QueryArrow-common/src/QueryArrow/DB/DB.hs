@@ -2,9 +2,9 @@
 module QueryArrow.DB.DB where
 
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 
 import Prelude  hiding (lookup, null)
 import Data.Map.Strict (Map, empty, insert, lookup, singleton, keysSet, unionWithKey)
@@ -17,7 +17,7 @@ import Data.Set (Set)
 import System.Log.Logger (errorM, noticeM)
 import Control.Applicative ((<|>))
 import Control.Exception (catch, SomeException)
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Semantics.Value
 import Data.ByteString (ByteString)
 

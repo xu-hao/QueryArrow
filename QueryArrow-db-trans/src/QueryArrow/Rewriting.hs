@@ -3,11 +3,11 @@
 module QueryArrow.Rewriting where
 
 import Prelude hiding (lookup)
-import QueryArrow.FO.Data
-import QueryArrow.FO.Serialize
+import QueryArrow.Syntax.Term
+import QueryArrow.Syntax.Serialize
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
-import QueryArrow.FO.Domain
+import QueryArrow.Semantics.TypeChecker
+import QueryArrow.Semantics.Domain
 
 import Data.Map.Strict (empty, singleton, union, fromList, lookup)
 import Control.Monad

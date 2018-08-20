@@ -2,10 +2,11 @@
 
 module QueryArrow.Binding.Binding where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Semantics.Value
+import QueryArrow.Semantics.Compute
 import QueryArrow.Utils
 import QueryArrow.DB.ResultStream
 import QueryArrow.DB.DB
@@ -18,7 +19,7 @@ import Data.List (find)
 import Data.Maybe
 import Data.Conduit
 import qualified Data.Conduit.Combinators as C
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 
 -- dbName :: a -> String
 data ParamIO = I | O

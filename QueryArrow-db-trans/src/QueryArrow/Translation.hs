@@ -2,11 +2,11 @@
 module QueryArrow.Translation where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Semantics.Value
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 import QueryArrow.QueryPlan
 import QueryArrow.Rewriting
 import QueryArrow.Config

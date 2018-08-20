@@ -5,9 +5,9 @@ module SchemaParser where
 import qualified Text.Parsec.Token as T
 import Text.ParserCombinators.Parsec
 import Control.Applicative ((*>), (<*), (<$>), (<*>))
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 import QueryArrow.SQL.SQL
 import System.IO.Unsafe
 import Data.List (partition)

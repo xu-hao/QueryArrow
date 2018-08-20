@@ -1,15 +1,15 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts, RankNTypes, GADTs, PatternSynonyms, TypeFamilies, DeriveGeneric, GeneralizedNewtypeDeriving #-}
 module QueryArrow.SQL.SQL where
 
-import QueryArrow.FO.Data hiding (Subst, subst)
+import QueryArrow.Syntax.Term hiding (Subst, subst)
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
-import QueryArrow.FO.Serialize
-import QueryArrow.FO.Utils
+import QueryArrow.Semantics.TypeChecker
+import QueryArrow.Syntax.Serialize
+import QueryArrow.Syntax.Utils
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.ListUtils
 import QueryArrow.Utils
-import QueryArrow.FO.Domain
+import QueryArrow.Semantics.Domain
 
 import Prelude hiding (lookup)
 import Data.List (intercalate, (\\),union, nub)

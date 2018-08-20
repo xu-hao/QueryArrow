@@ -3,7 +3,7 @@ module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Config
 import QueryArrow.Translation
 import QueryArrow.Cache

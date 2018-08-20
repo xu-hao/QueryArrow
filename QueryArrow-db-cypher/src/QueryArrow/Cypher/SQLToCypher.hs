@@ -5,7 +5,8 @@ import QueryArrow.Cypher.Cypher
 import QueryArrow.SQL.SQL
 import Data.Map.Strict (foldrWithKey, empty, lookup, insert, Map, fromList)
 import Data.List (partition)
-import QueryArrow.FO.Data (PredTypeMap, keyComponents, propComponents, isReference, keyComponentsParamType, propComponentsParamType)
+import QueryArrow.Syntax.Type
+import QueryArrow.Syntax.Term (PredTypeMap)
 import QueryArrow.ListUtils
 import Control.Arrow ((***))
 import Data.Maybe (fromMaybe)

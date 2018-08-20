@@ -2,8 +2,8 @@
 
 module QueryArrow.FFI.C.PluginGen where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Term
+import QueryArrow.Syntax.Utils
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
 import QueryArrow.DB.ResultStream

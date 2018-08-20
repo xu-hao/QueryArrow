@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.Service where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.DB.DB
 import QueryArrow.Serialization
 

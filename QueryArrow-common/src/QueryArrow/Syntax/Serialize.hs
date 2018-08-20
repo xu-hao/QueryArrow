@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, StandaloneDeriving, DeriveFunctor, UndecidableInstances, DeriveGeneric,
    RankNTypes, FlexibleContexts, GADTs, PatternSynonyms, ScopedTypeVariables #-}
 
-module QueryArrow.FO.Serialize where
+module QueryArrow.Syntax.Serialize where
 
 import Prelude hiding (lookup)
 import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, foldrWithKey)
@@ -20,7 +20,7 @@ import Data.Monoid ((<>))
 import Control.Comonad
 import Control.Comonad.Cofree
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import Debug.Trace
 
 

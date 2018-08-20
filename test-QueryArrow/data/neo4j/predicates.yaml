@@ -1,0 +1,19 @@
+- predName:
+  - META_OBJ
+  predType:
+    paramsType:
+    - isInput: true
+      paramType:
+        tag: TypeCons
+        contents: int64
+      isOutput: true
+      isKey: true
+      isReference: false
+    - isInput: true
+      paramType:
+        tag: TypeCons
+        contents: text
+      isOutput: true
+      isKey: true
+      isReference: false
+    predKind: ObjectPred

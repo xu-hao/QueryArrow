@@ -17,7 +17,7 @@ import Data.MessagePack (MessagePack(..))
 import Data.Conduit
 import qualified Data.Conduit.Combinators as C
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.Value
 import QueryArrow.DB.DB

@@ -2,13 +2,14 @@
 module QueryArrow.SQL.ICAT where
 
 import QueryArrow.DB.GenericDatabase
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
 import QueryArrow.SQL.SQL
 import QueryArrow.SQL.BuiltIn
-import QueryArrow.ICAT
+import QueryArrow.Mapping
 import QueryArrow.BuiltIn
-import QueryArrow.Serialization
+import QueryArrow.Mapping
+import QueryArrow.Serialize
 import Data.Namespace.Namespace
 import Data.Yaml
 

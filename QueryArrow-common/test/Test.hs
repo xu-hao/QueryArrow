@@ -4,9 +4,9 @@ module Main where
 import QueryArrow.QueryPlan
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Parser
-import qualified QueryArrow.ICAT as ICAT
+import qualified QueryArrow.Mapping as ICAT
 import qualified QueryArrow.BuiltIn as BuiltIn
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.Utils

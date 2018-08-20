@@ -1,0 +1,31 @@
+- predName:
+  - COLL_OBJ
+  predType:
+    paramsType:
+    - isInput: true
+      paramType:
+        tag: TypeCons
+        contents: int64
+      isOutput: true
+      isKey: true
+      isReference: false
+    predKind: ObjectPred
+- predName:
+  - COLL_NAME
+  predType:
+    paramsType:
+    - isInput: true
+      paramType:
+        tag: TypeCons
+        contents: int64
+      isOutput: true
+      isKey: true
+      isReference: false
+    - isInput: true
+      paramType:
+        tag: TypeCons
+        contents: text
+      isOutput: true
+      isKey: false
+      isReference: false
+    predKind: PropertyPred

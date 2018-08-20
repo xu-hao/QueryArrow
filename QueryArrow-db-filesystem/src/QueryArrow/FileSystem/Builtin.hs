@@ -1,9 +1,9 @@
 {-# LANGUAGE PatternSynonyms #-}
 module QueryArrow.FileSystem.Builtin where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Utils
 
 pattern FilePathPredName ns = QPredName ns [] "FILE_PATH"
 

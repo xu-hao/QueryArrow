@@ -2,8 +2,8 @@
 module QueryArrow.Cache where
 
 import QueryArrow.DB.DB
-import QueryArrow.FO.Data
-import QueryArrow.FO.TypeChecker
+import QueryArrow.Syntax.Term
+import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Syntax.Type
 import QueryArrow.QueryPlan
 import QueryArrow.Plugin

@@ -2,7 +2,7 @@
 
 module QueryArrow.FFI.Service.Local where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.DB.DB
 import QueryArrow.QueryPlan
 import QueryArrow.DB.ResultStream
@@ -16,7 +16,7 @@ import System.Log.Logger (infoM)
 import QueryArrow.FFI.Service
 import QueryArrow.Config
 import QueryArrow.DBMap
-import QueryArrow.FO.Types
+import QueryArrow.Syntax.Type
 
 data Session = forall db. (IDatabaseUniformRowAndDBFormula MapResultRow FormulaT db) => Session db (ConnectionType db)
 

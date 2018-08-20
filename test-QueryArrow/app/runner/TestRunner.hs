@@ -14,11 +14,11 @@ import qualified Text.Parsec.Token as P
 import Control.Monad.IO.Class
 import qualified Data.Map as M
 import Data.Time.Clock
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 
 normalizeResultSet :: ResultSet -> ResultSet
 normalizeResultSet rset@(ResultSetError _) = rset
-normalizeResultSet (ResultSetNormal rl) = ResultSetNormal (map (M.map (\(AbstractResultValue rv) -> AbstractResultValue (toConcreteResultValue rv))) rl)
+normalizeResultSet (ResultSetNormal rl) = ResultSetNormal rl
 
 sortResultSet :: ResultSet -> ResultSet
 sortResultSet rset@(ResultSetError _) = rset

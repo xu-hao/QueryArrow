@@ -13,7 +13,7 @@ module QueryArrow.FileSystem.Commands (
     Interpreter(..), Interpreter2(..)
           ) where
 
-import QueryArrow.FO.Data
+import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
 import QueryArrow.DB.DB
 import QueryArrow.DB.ResultStream

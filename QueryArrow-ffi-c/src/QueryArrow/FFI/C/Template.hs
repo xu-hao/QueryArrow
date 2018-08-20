@@ -2,8 +2,8 @@
 
 module QueryArrow.FFI.C.Template where
 
-import QueryArrow.FO.Data
-import QueryArrow.FO.Utils
+import QueryArrow.Syntax.Term
+import QueryArrow.Syntax.Utils
 import QueryArrow.Rewriting
 import QueryArrow.Translation
 import QueryArrow.Config
