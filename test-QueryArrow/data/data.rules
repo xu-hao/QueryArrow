@@ -2,3 +2,8 @@ export qualified all from postgres
 export qualified all from neo4j
 export all from postgres
 export all from neo4j
+
+predicate COLL_META object (input output text, input output text)
+rewrite COLL_META(a, b) 
+  COLL_NAME(c, a) META_OBJ(c, b)
+export COLL_META

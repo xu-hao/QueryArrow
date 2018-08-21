@@ -218,7 +218,7 @@ instance Typecheck Aggregator () where
     let vtm' = foldl' (\vtm0 var0 -> insert var0 (fromMaybe (error "typecheck: cannot find bounded var") (lookup var0 vtm)) vtm0) mempty vars
     lift $ modify (const vtm' *** id)
   typecheck  (Summarize cols _) = do
-    vtml <- mapM (\(v, s) ->
+    vtml <- mapM (\(Bind v s) ->
       case s of
         Max v2 -> do
             checkVarType v2 (ParamType False True False False Int64Type)

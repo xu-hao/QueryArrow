@@ -83,6 +83,7 @@ instance MessagePack a => MessagePack (ExprF a)
 instance MessagePack Expr
 instance MessagePack Aggregator
 instance MessagePack Summary
+instance MessagePack Bind
 instance MessagePack Var
 instance MessagePack Command
 instance MessagePack DynCommand

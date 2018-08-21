@@ -115,7 +115,7 @@ neg (Lit Neg a) = Lit Pos a
 returnp :: FOParser [Var]
 returnp = reserved "return" *> varsp
 
-letp :: FOParser (Var, Summary)
+letp :: FOParser Bind
 letp = do
     v <- varp
     reservedOp "="
@@ -125,7 +125,7 @@ letp = do
       <|> (reserved "average" >> Average <$> varp)
       <|> (reserved "count" >> (try (reserved "distinct" >> CountDistinct <$> varp) <|> return Count))
       <|> (reserved "random" >> Random <$> varp)
-    return (v,s)
+    return (Bind v s)
 
 formula1p :: FOParser Formula
 formula1p = try (parens formulap)

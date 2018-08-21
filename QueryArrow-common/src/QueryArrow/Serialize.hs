@@ -24,6 +24,7 @@ deriving instance Generic ParamType
 deriving instance Generic (ExprF a)
 deriving instance Generic Aggregator
 deriving instance Generic Summary
+deriving instance Generic Bind
 deriving instance Generic ResultValue
 deriving instance Generic CastType
 instance FromJSON (ObjectPath String) where
@@ -68,6 +69,8 @@ instance FromJSON Aggregator
 instance ToJSON Aggregator
 instance FromJSON Summary
 instance ToJSON Summary
+instance FromJSON Bind
+instance ToJSON Bind
 instance FromJSON Var
 instance ToJSON Var
 

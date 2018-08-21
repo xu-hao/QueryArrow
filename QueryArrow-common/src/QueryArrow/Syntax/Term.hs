@@ -4,10 +4,10 @@
 module QueryArrow.Syntax.Term where
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, foldrWithKey)
+import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, foldrWithKey, delete)
 import Data.List (intercalate, union, unwords)
 import Control.Monad.Trans.State.Strict (evalState,get, put, State)
-import Data.Set (Set, singleton)
+import Data.Set (Set, singleton, (\\))
 import qualified Data.Set as Set
 import Data.Maybe
 import qualified Data.Map as Map
@@ -96,7 +96,8 @@ pattern Lit a b = Lit1 a b
 
 
 data Summary = Random Var | Max Var | Min Var | Sum Var | Average Var | CountDistinct Var | Count deriving (Eq, Ord, Show, Read)
-data Aggregator = Summarize [(Var, Summary)] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists | FReturn [Var] deriving (Eq, Ord, Show, Read)
+data Bind = Bind Var Summary deriving (Eq, Ord, Show, Read)
+data Aggregator = Summarize [Bind] [Var] | Limit Int | OrderByAsc Var | OrderByDesc Var | Distinct | Not | Exists | FReturn [Var] deriving (Eq, Ord, Show, Read)
 
 data FormulaF a f = FAtomicF (Atom1 a)
              | FInsertF (Lit1 a)
@@ -175,7 +176,7 @@ instance FreeVars (Formula2 a b) where
       FParF form1 form2 ->
         freeVars form1 \/ freeVars form2
       AggregateF agg form ->
-        freeVars agg \/ freeVars form
+        freeVars agg \/ (freeVars form \\ boundVars agg)
       FZeroF -> bottom
       FOneF -> bottom
 
@@ -204,6 +205,9 @@ instance FreeVars a => FreeVars [a] where
 instance FreeVars a => FreeVars (Set a) where
     freeVars sa = Set.unions (map freeVars (Set.toAscList sa))
 
+instance FreeVars Bind where
+    freeVars (Bind a b) = freeVars b
+
 instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
     freeVars (a,b) = freeVars a \/ freeVars b
 
@@ -219,6 +223,34 @@ instance FreeVars Summary where
   freeVars Count = bottom
   freeVars (Random a) = singleton a
 
+class BoundVars a where
+    boundVars :: a -> Set Var
+
+instance BoundVars Aggregator where
+    boundVars agg = case agg of
+      (FReturn vars) ->
+        bottom
+      Not ->
+        bottom
+      Exists ->
+        bottom
+      (Summarize funcs groupby) ->
+        boundVars funcs
+      (Limit _) ->
+        bottom
+      Distinct ->
+        bottom
+      (OrderByAsc var) ->
+        bottom
+      (OrderByDesc var) ->
+        bottom
+
+instance BoundVars a => BoundVars [a] where
+    boundVars = Set.unions . map boundVars
+        
+instance BoundVars Bind where
+    boundVars (Bind a _) = singleton a
+    
 class Unify a where
     unify :: a -> a -> Maybe Substitution
 
@@ -500,17 +532,17 @@ instance (Subst (Atom1 a), Subst b) => Subst (Formula2 a b) where
     subst s a = (subst s (extract a)) :< case unwrap a of
                         FAtomicF a -> FAtomicF (subst s a)
                         FInsertF lits -> FInsertF (subst s lits)
-                        FSequencingF form1 form2 -> FSequencingF form1 form2
-                        FChoiceF form1 form2 -> FChoiceF form1 form2
-                        FParF form1 form2 -> FParF form1 form2
-                        AggregateF (FReturn vars) form -> AggregateF (FReturn (subst s vars)) form
-                        AggregateF Not a -> AggregateF Not a
-                        AggregateF Exists a -> AggregateF Exists a
-                        AggregateF (Summarize funcs groupby) a -> AggregateF (Summarize (subst s funcs) (map (subst s) groupby)) a
-                        AggregateF (Limit n) a -> AggregateF (Limit n) a
-                        AggregateF Distinct a -> AggregateF Distinct a
-                        AggregateF (OrderByAsc var1) a -> AggregateF (OrderByAsc (subst s var1)) a
-                        AggregateF (OrderByDesc var1) a -> AggregateF (OrderByDesc (subst s var1)) a
+                        FSequencingF form1 form2 -> FSequencingF (subst s form1) (subst s form2)
+                        FChoiceF form1 form2 -> FChoiceF (subst s form1) (subst s form2)
+                        FParF form1 form2 -> FParF (subst s form1) (subst s form2)
+                        AggregateF (FReturn vars) form -> AggregateF (FReturn (subst s vars)) (subst s form)
+                        AggregateF Not a -> AggregateF Not (subst s a)
+                        AggregateF Exists a -> AggregateF Exists (subst s a)
+                        AggregateF (Summarize funcs groupby) a -> AggregateF (Summarize (subst s funcs) (map (subst s) groupby)) (subst (foldr delete s (boundVars funcs)) a)
+                        AggregateF (Limit n) a -> AggregateF (Limit n) (subst s a)
+                        AggregateF Distinct a -> AggregateF Distinct (subst s a)
+                        AggregateF (OrderByAsc var1) a -> AggregateF (OrderByAsc (subst s var1)) (subst s a)
+                        AggregateF (OrderByDesc var1) a -> AggregateF (OrderByDesc (subst s var1)) (subst s a)
                         FZeroF -> FZeroF
                         FOneF -> FOneF
 
@@ -519,6 +551,9 @@ instance Subst a => Subst [a] where
 
 instance (Subst a, Subst b) => Subst (a, b) where
     subst s (a, b) = (subst s a, subst s b)
+
+instance Subst Bind where
+    subst s (Bind a b) = Bind a (subst s b)
 
 instance (Subst a, Ord a) => Subst (Set a) where
     subst s = Set.map (subst s)

@@ -100,7 +100,7 @@ instance DeterminedVars (Formula2 a f) a where
       (AggregateF Not _) -> vars
       (AggregateF Distinct form) -> determinedVars dsp vars form
       (AggregateF Exists _) -> vars
-      (AggregateF (Summarize funcs groupby) _) -> (fromList (fst (unzip funcs))) \/ vars
+      (AggregateF (Summarize funcs groupby) _) -> (fromList (map (\(Bind a _) -> a) funcs)) \/ vars
       (AggregateF (Limit _) form) -> determinedVars dsp vars form
       (AggregateF (OrderByAsc _) form) -> determinedVars dsp vars form
       (AggregateF (OrderByDesc _) form) -> determinedVars dsp vars form
@@ -151,7 +151,7 @@ instance OutputVars Formula where
     outputVars _ vars (Aggregate Not _) = return vars
     outputVars dsp vars (Aggregate Distinct form) = outputVars dsp vars form
     outputVars _ vars (Aggregate Exists _) = return vars
-    outputVars _ vars (Aggregate (Summarize funcs groupby) _) = return (fromList (fst (unzip funcs)) \/ vars)
+    outputVars _ vars (Aggregate (Summarize funcs groupby) _) = return (fromList (map (\(Bind a _) -> a) funcs) \/ vars)
     outputVars dsp vars (Aggregate (Limit _) form) = outputVars dsp vars form
     outputVars dsp vars (Aggregate (OrderByAsc _) form) = outputVars dsp vars form
     outputVars dsp vars (Aggregate (OrderByDesc _) form) = outputVars dsp vars form

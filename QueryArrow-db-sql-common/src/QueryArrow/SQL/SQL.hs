@@ -595,7 +595,7 @@ translateFormulaToSQL (Aggregate Not form) =
 
 translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
     sql@(SQLQuery sel fro whe ord lim dis gro) <- translateFormulaToSQL conj
-    funcs' <- mapM (\(v@(Var vn), s) -> do
+    funcs' <- mapM (\(Bind v@(Var vn) s) -> do
                 r <- case s of
                     Max v2 -> do
                         r <- findRep v2

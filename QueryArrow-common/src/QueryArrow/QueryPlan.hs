@@ -287,7 +287,7 @@ calculateVars1 rvars  (QPAggregate vtm agg@Exists qp1) =
         QPAggregateA  makeQueryPlanData{freevs = freevs qpd1, determinevs = bottom, linscopevs = rvars, rinscopevs = rvars, vartypemap = vtm}  agg qp1'
 calculateVars1 rvars  (QPAggregate vtm agg@(Summarize funcs groupby) qp1) =
     let qp1'@(qpd1 :< _) = calculateVars1 rvars qp1 in
-        QPAggregateA  makeQueryPlanData{freevs = freevs qpd1, determinevs = fromList (map fst funcs), linscopevs = linscopevs qpd1, rinscopevs = rvars \/ Include (fromList (map fst funcs)), vartypemap = vtm}  agg qp1'
+        QPAggregateA  makeQueryPlanData{freevs = freevs qpd1, determinevs = fromList (map (\(Bind a _) -> a) funcs), linscopevs = linscopevs qpd1, rinscopevs = rvars \/ Include (fromList (map (\(Bind a _) -> a) funcs)), vartypemap = vtm}  agg qp1'
 calculateVars1 rvars  (QPAggregate vtm agg@(Limit _) qp1) =
     let qp1'@(qpd1 :< _) = calculateVars1 rvars qp1 in
         QPAggregateA makeQueryPlanData{freevs = freevs qpd1, determinevs = determinevs qpd1, linscopevs = linscopevs qpd1, rinscopevs = rinscopevs qpd1, vartypemap = vtm}  agg qp1'
@@ -644,7 +644,7 @@ execQueryPlan2 (QPAggregateA qpd (Summarize funcs groupby) qp) = awaitForever (\
                     let rs2 = yield row .| execQueryPlan2 qp
                     rows <- lift $ getAllResultsInStream rs2
                     let groups = groupBy (\a b -> all (\var -> get var a == get var b) groupby) rows
-                    let rows2 = map (\rows -> mconcat (reverse (map (\(v1, func1) ->
+                    let rows2 = map (\rows -> mconcat (reverse (map (\(Bind v1 func1) ->
                                 let m = case func1 of
                                             Max v2 ->
                                                 if List.null rows

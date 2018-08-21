@@ -21,7 +21,7 @@ db_plugin:
                 db_port: 5432
                 db_name: pdb
                 db_password: qap
-                db_host: localhost
+                db_host: postgres
                 db_username: data
                 db_predicates: "/queryarrow/postgres/predicates.yaml"
                 db_namespace: postgres
@@ -32,8 +32,8 @@ db_plugin:
                 db_port: 7687
                 db_name: ndb
                 db_password: qap
-                db_host: localhost
-                db_username: neo4j
+                db_host: neo4j
+                db_username: data
                 db_predicates: "/queryarrow/neo4j/predicates.yaml"
                 db_namespace: neo4j
                 db_sql_mapping: "/queryarrow/neo4j/mapping.yaml"

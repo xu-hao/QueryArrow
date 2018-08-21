@@ -66,6 +66,9 @@ instance Serialize Summary where
     serialize (CountDistinct v) = "count distinct(" ++ serialize v ++ ")"
     serialize (Random v) = "randomw " ++ serialize v
 
+instance Serialize Bind where
+    serialize (Bind var1 func1) = serialize var1 ++ " = " ++ serialize func1
+    
 instance (Serialize a, Serialize b) => Serialize (Formula2 a b) where
     serialize f1 = "[" ++ serialize (extract f1) ++ "]" ++ case unwrap f1 of
       FAtomicF a -> serialize a
@@ -79,7 +82,7 @@ instance (Serialize a, Serialize b) => Serialize (Formula2 a b) where
       AggregateF Exists form -> "∃" ++ serialize form
       AggregateF Not form -> "¬" ++ serialize form
       AggregateF Distinct form -> "(distinct " ++ serialize form ++ ")"
-      AggregateF (Summarize funcs groupby) form -> "(let " ++ unwords (map (\(var1, func1) -> serialize var1 ++ " = " ++ serialize func1) funcs) ++ " " ++ (if null groupby then "" else "group by " ++ unwords (map serialize groupby) ++ " ") ++ serialize form ++ ")"
+      AggregateF (Summarize funcs groupby) form -> "(let " ++ unwords (map serialize funcs) ++ " " ++ (if null groupby then "" else "group by " ++ unwords (map serialize groupby) ++ " ") ++ serialize form ++ ")"
       AggregateF (Limit n) form -> "(limit " ++ show n ++ " " ++ serialize form ++ ")"
       AggregateF (OrderByAsc var1) form -> "(order by " ++ serialize var1 ++ " asc " ++ serialize form ++ ")"
       AggregateF (OrderByDesc var1) form -> "(order by " ++ serialize var1 ++ " desc " ++ serialize form ++ ")"
