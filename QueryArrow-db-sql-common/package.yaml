@@ -24,7 +24,7 @@ library:
   - -Wall
   - -fPIC
   exposed-modules:
-  - QueryArrow.SQL.ICAT
+  - QueryArrow.SQL.Mapping
   - QueryArrow.SQL.SQL
   - QueryArrow.SQL.BuiltIn
   dependencies: []

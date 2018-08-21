@@ -3,7 +3,7 @@ module QueryArrow.SQL.LibPQ.PostgreSQL where
 
 import QueryArrow.DB.DB
 import QueryArrow.DB.GenericDatabase
-import QueryArrow.SQL.ICAT
+import QueryArrow.SQL.Mapping
 import QueryArrow.Config
 import QueryArrow.SQL.SQL
 import Data.Aeson

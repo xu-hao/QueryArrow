@@ -16,8 +16,7 @@ dependencies:
 - either
 - QueryArrow-rpc-common
 - QueryArrow-common
-- QueryArrow-rpc-common
-- QueryArrow
+- QueryArrow-plugins
 library:
   source-dirs: src
   ghc-options: -Wall

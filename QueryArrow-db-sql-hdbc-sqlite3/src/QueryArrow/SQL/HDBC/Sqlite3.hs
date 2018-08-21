@@ -6,7 +6,7 @@ import QueryArrow.DB.DB
 import QueryArrow.Config
 import QueryArrow.SQL.HDBC
 import QueryArrow.SQL.SQL
-import QueryArrow.SQL.ICAT
+import QueryArrow.SQL.Mapping
 import QueryArrow.Plugin
 import QueryArrow.Data.Heterogeneous.List
 import QueryArrow.DB.AbstractDatabaseList

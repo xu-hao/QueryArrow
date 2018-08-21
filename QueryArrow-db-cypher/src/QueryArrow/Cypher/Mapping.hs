@@ -10,7 +10,7 @@ import QueryArrow.DB.GenericDatabase
 import QueryArrow.DB.NoConnection
 import QueryArrow.Mapping
 import QueryArrow.BuiltIn
-import QueryArrow.SQL.ICAT hiding (lookupPred, lookupPredByName)
+import QueryArrow.SQL.Mapping hiding (lookupPred, lookupPredByName)
 import QueryArrow.SQL.SQL
 import QueryArrow.Serialize
 

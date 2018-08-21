@@ -49,7 +49,7 @@ dependencies:
 - either
 - QueryArrow-rpc-common
 - QueryArrow-common
-- QueryArrow
+- QueryArrow-plugins
 - template-haskell
 library:
   source-dirs: src

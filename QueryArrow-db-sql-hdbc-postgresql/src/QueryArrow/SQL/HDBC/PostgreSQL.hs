@@ -4,7 +4,7 @@ module QueryArrow.SQL.HDBC.PostgreSQL where
 import QueryArrow.DB.DB
 import QueryArrow.SQL.HDBC
 import QueryArrow.DB.GenericDatabase
-import QueryArrow.SQL.ICAT
+import QueryArrow.SQL.Mapping
 import QueryArrow.Config
 import QueryArrow.SQL.SQL
 import Data.Aeson

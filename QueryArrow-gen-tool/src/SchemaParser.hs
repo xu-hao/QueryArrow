@@ -46,7 +46,8 @@ data ColType = Text
 data Constraint = NotNull
                 | DI Integer
                 | DS String
-                | PrimaryKey deriving (Eq, Show)
+                | PrimaryKey
+                | ForeignKey deriving (Eq, Show)
 
 
 prog :: Parser [Stmt2]
@@ -132,40 +133,44 @@ constraint = (reserved "not" <|> reserved "NOT") *> (reserved "null" <|> reserve
          <|> try(reserved "DEFAULT" *> (DI <$> integer))
          <|> reserved "DEFAULT" *> (DS <$> stringp)
          <|> reserved "primary" *> reserved "key" *> return PrimaryKey
+         <|> reserved "references" *> identifier *> parens identifier *> return ForeignKey
 
-findAllKeys :: String -> [ColDef] -> ([ColDef], [ColDef])
-findAllKeys prefix coldefs =
-    case prefix of
-        "SERVER_LOAD" -> (coldefs, []) -- special case for server load
-        "SERVER_LOAD_DIGEST" -> (coldefs, []) -- special case for server load digest
-        "QUOTA_USAGE" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "RESC_ID" == key1 || "USER_ID" == key1)  coldefs  -- specical case for quota usage
-        "DATA" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "DATA_ID" == key1 || "RESC_ID" == key1)  coldefs  -- specical case for data
-        "USER_PASSWORD" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "USER_ID" == key1 || "RCAT_PASSWORD" == key1)  coldefs  -- special case for user password
-        "USER_AUTH" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "USER_ID" == key1 || "USER_AUTH_NAME" == key1)  coldefs  -- specical case for user auth
-        "TICKET_ALLOWED_HOSTS" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "TICKET_ID" == key1 || "HOST" == key1)  coldefs  -- specical case for user auth
-        "TICKET_ALLOWED_GROUPS" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "TICKET_ID" == key1 || "GROUP_NAME" == key1)  coldefs  -- specical case for user auth
-        "TICKET_ALLOWED_USERS" -> partition (\(ColDef key0 _ _) ->
-                                    let key1 = map toUpper key0 in
-                                          "TICKET_ID" == key1 || "USER_NAME" == key1)  coldefs  -- specical case for user auth
-        "GRID_CONFIGURATION" -> (coldefs, [])  -- specical case for user auth
-        _ ->
-            let par@(key, _) = partition (\(ColDef key0 _ constraints) -> map toUpper key0 == prefix ++ "_ID" || PrimaryKey `elem` constraints)  coldefs in
-                if null key
-                    then partition (\(ColDef key0 _ _) -> let key1 = (map toUpper key0) in
-                                                                              (endswith "_ID" key1)) coldefs
-                    else par
+findAllKeys :: [ColDef] -> ([ColDef], [ColDef])
+findAllKeys coldefs = 
+    partition (\(ColDef _ _ constraints) -> PrimaryKey `elem` constraints) coldefs
+-- findAllKeys :: String -> [ColDef] -> ([ColDef], [ColDef])
+-- findAllKeys prefix coldefs =
+--     case prefix of
+--         "SERVER_LOAD" -> (coldefs, []) -- special case for server load
+--         "SERVER_LOAD_DIGEST" -> (coldefs, []) -- special case for server load digest
+--         "QUOTA_USAGE" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "RESC_ID" == key1 || "USER_ID" == key1)  coldefs  -- specical case for quota usage
+--         "DATA" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "DATA_ID" == key1 || "RESC_ID" == key1)  coldefs  -- specical case for data
+--         "USER_PASSWORD" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "USER_ID" == key1 || "RCAT_PASSWORD" == key1)  coldefs  -- special case for user password
+--         "USER_AUTH" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "USER_ID" == key1 || "USER_AUTH_NAME" == key1)  coldefs  -- specical case for user auth
+--         "TICKET_ALLOWED_HOSTS" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "TICKET_ID" == key1 || "HOST" == key1)  coldefs  -- specical case for user auth
+--         "TICKET_ALLOWED_GROUPS" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "TICKET_ID" == key1 || "GROUP_NAME" == key1)  coldefs  -- specical case for user auth
+--         "TICKET_ALLOWED_USERS" -> partition (\(ColDef key0 _ _) ->
+--                                     let key1 = map toUpper key0 in
+--                                           "TICKET_ID" == key1 || "USER_NAME" == key1)  coldefs  -- specical case for user auth
+--         "GRID_CONFIGURATION" -> (coldefs, [])  -- specical case for user auth
+--         _ ->
+--             let par@(key, _) = partition (\(ColDef key0 _ constraints) -> map toUpper key0 == prefix ++ "_ID" || PrimaryKey `elem` constraints)  coldefs in
+--                 if null key
+--                     then partition (\(ColDef key0 _ _) -> let key1 = (map toUpper key0) in
+--                                                                               (endswith "_ID" key1)) coldefs
+--                     else par
 
 findAllNotNulls :: [ColDef] -> [ColDef]
 findAllNotNulls = filter (\(ColDef _ _ cs) -> any (\c -> case c of NotNull -> True ; _ -> False) cs)
@@ -199,10 +204,12 @@ generateICATDef (Stmt tablename coldefs) = do
         else do
             let predname = prefixToPredName prefix
             -- find all keys
-            let (keys, props) = findAllKeys prefix coldefs
-            let keysq = map (\(ColDef _ keytype _) -> PTKeyIO (colTypeToQExp keytype)) keys
+            let (keys, props) = findAllKeys coldefs
+            let keysq = case length keys of
+                    1 -> map (\(ColDef _ keytype _) -> PTKeyIO (colTypeToQExp keytype)) keys
+                    _ -> map (\(ColDef _ keytype constraints) -> (if ForeignKey `elem` constraints then PTKeyIORef else PTKeyIO) (colTypeToQExp keytype)) keys
             let q1 = Pred (UQPredName predname) (PredType ObjectPred keysq)
-            let propPred (ColDef key2 keytype2 _) = Pred (UQPredName (colNameToPredName prefix key2)) (PredType PropertyPred (keysq ++  [PTPropIO (colTypeToQExp keytype2)]))
+            let propPred (ColDef key2 keytype2 constraints) = Pred (UQPredName (colNameToPredName prefix key2)) (PredType PropertyPred (keysq ++ [(if ForeignKey `elem` constraints then PTPropIORef else PTPropIO) (colTypeToQExp keytype2)]))
             let propPreds = map propPred props
             q1 : propPreds
 
@@ -218,7 +225,7 @@ generateICATMapping (Stmt tablename coldefs) = do
         else do
             let predname = prefixToPredName prefix
             -- find all keys
-            let (keys, props) = findAllKeys prefix coldefs
+            let (keys, props) = findAllKeys coldefs
             let tn = map toLower tablename
             let v = SQLVar "1"
             let t = OneTable tn v
