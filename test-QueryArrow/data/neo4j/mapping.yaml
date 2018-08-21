@@ -1,9 +1,5 @@
-- sqlMappingTable:
-    sqlVar: '1'
-    tableName: r_meta_main
+- sqlMappingTable: r_meta_main
   sqlMappingPredName: META_OBJ
   sqlMappingCols:
-  - colName: coll_id
-    tableVar: '1'
-  - colName: metadata
-    tableVar: '1'
+  - coll_id
+  - metadata

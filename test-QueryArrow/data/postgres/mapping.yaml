@@ -1,16 +1,9 @@
-- sqlMappingTable:
-    sqlVar: '1'
-    tableName: r_coll_main
+- sqlMappingTable: r_coll_main
   sqlMappingPredName: COLL_OBJ
   sqlMappingCols:
-  - colName: coll_id
-    tableVar: '1'
-- sqlMappingTable:
-    sqlVar: '1'
-    tableName: r_coll_main
+  - coll_id
+- sqlMappingTable: r_coll_main
   sqlMappingPredName: COLL_NAME
   sqlMappingCols:
-  - colName: coll_id
-    tableVar: '1'
-  - colName: coll_name
-    tableVar: '1'
+  - coll_id
+  - coll_name

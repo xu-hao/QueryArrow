@@ -227,11 +227,10 @@ generateICATMapping (Stmt tablename coldefs) = do
             -- find all keys
             let (keys, props) = findAllKeys coldefs
             let tn = map toLower tablename
-            let v = SQLVar "1"
-            let t = OneTable tn v
-            let keysq = map (\(ColDef key _ _) -> SQLQualifiedCol v key) keys
+            let t = tn
+            let keysq = map (\(ColDef key _ _) -> key) keys
             let q1 = SQLMapping predname t keysq
-            let propPred (ColDef key2 _ _) = SQLMapping (colNameToPredName prefix key2) t (keysq ++ [SQLQualifiedCol v key2])
+            let propPred (ColDef key2 _ _) = SQLMapping (colNameToPredName prefix key2) t (keysq ++ [key2])
             let propPreds = map propPred props
             q1 : propPreds
 

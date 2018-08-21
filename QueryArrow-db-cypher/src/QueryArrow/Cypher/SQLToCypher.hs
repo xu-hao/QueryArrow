@@ -38,9 +38,9 @@ endsWith a b =
 
 sqlToCypher :: PredTypeMap -> PredTableMap -> CypherPredTableMap
 sqlToCypher ptm mappings =
-        foldrWithKey (\predname (OneTable tablename _, qcols) mappings' ->
-            let cols = map (\(SQLQualifiedCol _ key0) -> lookup2 key0 colprop) qcols
-                colsi = zip cols [1..length cols]
+        foldrWithKey (\predname (tablename, cols) mappings' ->
+            let cols1 = map (\key0 -> lookup2 key0 colprop) cols
+                colsi = zip cols1 [1..length cols1]
                 predtype = fromMaybe (error ("sqlToCypher: cannot find predicate " ++ show predname)) (lookup predname ptm)
                 keycols = keyComponentsParamType predtype colsi
                 propcols = propComponentsParamType predtype colsi

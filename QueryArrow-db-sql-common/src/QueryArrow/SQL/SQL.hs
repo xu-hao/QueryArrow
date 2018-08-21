@@ -38,8 +38,8 @@ data Table = OneTable {tableName::TableName, sqlVar:: SQLVar} deriving (Eq, Ord,
 data FromTable = SimpleTable TableName SQLVar | QueryTable SQL SQLVar deriving (Eq, Ord, Show)
 data SQLMapping = SQLMapping {
   sqlMappingPredName :: String,
-  sqlMappingTable :: Table,
-  sqlMappingCols :: [SQLQualifiedCol]} deriving (Eq, Ord, Show, Generic)
+  sqlMappingTable :: TableName,
+  sqlMappingCols :: [Col]} deriving (Eq, Ord, Show, Generic)
 
 type SQLTableList = [FromTable]
 
@@ -305,7 +305,7 @@ swhere swhere1 = SQLQuery [] [] swhere1 [] top False []
 type RepMap = Map Var SQLExpr
 type TableMap = Map (TableName, [Expr]) SQLVar
 -- predicate -> table
-type PredTableMap = Map PredName (Table, [SQLQualifiedCol])
+type PredTableMap = Map PredName (TableName, [Col])
 -- table -> cols, primary key
 type Schema = Map TableName ([Col], [Col])
 -- builtin predicate -> op, neg op
@@ -671,9 +671,8 @@ translateAtomToSQL (Atom name args) = do
         Just builtinpred ->
             builtinpred args
         Nothing -> case lookup name (predtablemap ts) of
-            Just (table, cols) -> do
-                (tables, varmap, cols2, args2) <- case table of
-                    OneTable tablename sqlvar ->
+            Just (tablename, cols) -> do
+                (tables, varmap, cols2, args2) <- 
                         case lookup name (ptm ts) of
                             Nothing ->
                                 error ("translateAtomToSQL: cannot find predicate " ++ show name)
@@ -684,17 +683,16 @@ translateAtomToSQL (Atom name args) = do
                                 (new, v) <- lookupTableVar tablename prikeyargs
                                 if new
                                     then
-                                        return ([SimpleTable tablename sqlvar], singleton sqlvar v, cols, args)
+                                        return ([SimpleTable tablename v], v, cols, args)
                                     else do
                                         let cols2 = cols \\ prikeyargcols
                                         let args2 = args \\ prikeyargs
-                                        return ([], singleton sqlvar v, cols2 , args2)
+                                        return ([], v, cols2 , args2)
 
-                let tables2 = map (subst varmap) tables
-                let cols3 = map (subst varmap) cols2
+                let cols3 = map (SQLQualifiedCol varmap) cols2
                 condsFromArgs <- mapM condFromArg (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
-                return (SQLQuery [] tables2 cond3 [] top False []
+                return (SQLQuery [] tables cond3 [] top False []
                             )
             Nothing -> error (show name ++ " is not defined")
 
@@ -761,15 +759,14 @@ combineLitsSQL lits = do
     ts <- get
     combineLits (ptm ts) lits generateUpdateSQL generateInsertSQL generateDeleteSQL
 
-preproc0 tname sqlvar qcols pred1 args = do
+preproc0 tname cols pred1 args = do
         let key = keyComponents pred1 args
         (_, sqlvar2) <- lookupTableVar tname key
-        let varmap = singleton sqlvar sqlvar2
-        let qcol_args = zip (subst varmap qcols) args
+        let qcol_args = zip (map (SQLQualifiedCol sqlvar2) cols) args
         return (qcol_args, sqlvar2)
 
-preproc tname sqlvar qcols pred1 args = do
-        (qcol_args , sqlvar2) <- preproc0 tname sqlvar qcols pred1 args
+preproc tname cols pred1 args = do
+        (qcol_args , sqlvar2) <- preproc0 tname cols pred1 args
         let keyqcol_args = keyComponents pred1 qcol_args
         let propqcol_args = propComponents pred1 qcol_args
         return (keyqcol_args, propqcol_args, sqlvar2)
@@ -806,12 +803,12 @@ translateDeleteAtomToSQL :: Atom -> TransMonad SQLStmt
 translateDeleteAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
-        Just (OneTable tname sqlvar, qcols) ->
+        Just (tname, cols) ->
             case lookup pred1 (ptm ts) of
                 Nothing ->
                     error ("translateDeleteAtomToSQL: cannot find predicate " ++ show pred1)
                 Just pt -> do
-                    (qcol_args, sqlvar2) <- preproc0 tname sqlvar qcols pt args
+                    (qcol_args, sqlvar2) <- preproc0 tname cols pt args
                     cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToDelete qcol_args
                     return (SQLDeleteStmt (tname, sqlvar2) cond)
         Nothing -> error "not an updatable predicate"
@@ -820,9 +817,9 @@ translatePosInsertAtomToSQL :: Atom -> TransMonad SQLStmt
 translatePosInsertAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
-        Just (OneTable tname _, qcols) -> do
-            let qcol_args = zip qcols args
-            colexprs <- mapM qcolArgToValue qcol_args
+        Just (tname, cols) -> do
+            let col_args = zip cols args
+            colexprs <- mapM colArgToValue col_args
             return (SQLInsertStmt tname colexprs [] SQLTrueCond)
         Nothing -> error "not an updatable predicate"
 
@@ -830,12 +827,12 @@ translatePosUpdateAtomToSQL :: Atom -> TransMonad SQLStmt
 translatePosUpdateAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
-        Just (OneTable tname sqlvar, qcols) ->
+        Just (tname, cols) ->
             case lookup pred1 (ptm ts) of
                 Nothing ->
                     error ("translatePosUpdateAtomToSQL: cannot find predicate " ++ show pred1)
                 Just pt -> do
-                    (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols pt args
+                    (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname cols pt args
                     cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToUpdateCond keyqcol_args
                     set <- mapM qcolArgToSet propqcol_args
                     return (SQLUpdateStmt (tname, sqlvar2) set cond)
@@ -846,12 +843,12 @@ translateNegUpdateAtomToSQL :: Atom -> TransMonad SQLStmt
 translateNegUpdateAtomToSQL (Atom pred1 args) = do
     ts <- get
     case lookup pred1 (predtablemap ts) of
-        Just (OneTable tname sqlvar, qcols) ->
+        Just (tname, cols) ->
             case lookup pred1 (ptm ts) of
                 Nothing ->
                     error ("translatePosUpdateAtomToSQL: cannot find predicate " ++ show pred1)
                 Just pt -> do
-                    (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname sqlvar qcols pt args
+                    (keyqcol_args, propqcol_args, sqlvar2) <- preproc tname cols pt args
                     cond <- foldl (.&&.) SQLTrueCond <$> mapM qcolArgToUpdateCond keyqcol_args
                     (set, conds) <- unzip <$> mapM qcolArgToSetNull propqcol_args
                     return (SQLUpdateStmt (tname, sqlvar2) set (foldl (.&&.) cond conds))
@@ -864,14 +861,14 @@ qcolArgToDelete (qcol, arg) = do
         Left sqlexpr -> return (SQLColExpr qcol .=. sqlexpr)
         Right var -> error ("unbounded var " ++ show var)
 
-qcolArgToValue :: (SQLQualifiedCol, Expr) -> TransMonad (Col, SQLExpr)
-qcolArgToValue (qcol@(SQLQualifiedCol var col), arg) = do
+colArgToValue :: (Col, Expr) -> TransMonad (Col, SQLExpr)
+colArgToValue (col, arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (col, sqlexpr)
         Right _ -> do
             ts <- get
-            error ("qcolArgToValue: set value to unbounded var" ++ show qcol ++ " " ++ serialize arg ++ " " ++ show (repmap ts))
+            error ("qcolArgToValue: set value to unbounded var" ++ show col ++ " " ++ serialize arg ++ " " ++ show (repmap ts))
 
 qcolArgToUpdateCond :: (SQLQualifiedCol, Expr) -> TransMonad SQLCond
 qcolArgToUpdateCond (qcol, arg) = do
@@ -937,7 +934,7 @@ pureOrExecF  (SQLTrans  (BuiltIn builtin) predtablemap nextid ptm) dvars (FAtomi
                     Nothing ->
                         -- trace ("pureOrExecF: cannot find table for predicate " ++ show n ++ " ignored, the predicate nextid is " ++ show nextid) $
                         return ()
-                    Just (OneTable tablename _, _) ->
+                    Just (tablename, _) ->
                         case lookup n ptm of
                             Nothing ->
                                 error ("pureOrExecF: cannot find predicate " ++ show n ++ " available predicates: " ++ show ptm)
@@ -986,7 +983,7 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsertA _ (Lit sign
                     Just pt -> do
                       let key = keyComponents pt args
                           tablename = case lookup pred0 predtablemap of
-                              Just (OneTable tn _, _) -> tn
+                              Just (tn, _) -> tn
                               Nothing -> error ("pureOrExecF: cannot find table for predicate " ++ show pred0)
                       let isObject = isObjectPred ptm pred0
                       let isDelete = case sign0 of
