@@ -32,6 +32,13 @@ CALL dbms.security.createUser("data", "qap", false)
 docker run -v (pwd)/data:/queryarrow --link postgres:postgres --link neo4j:neo4j --rm --name queryarrow -p 12345 --entrypoint QueryArrowServer queryarrow:0.1.0 /queryarrow/data.yaml
 ```
 
+# run QueryArrow http server
+`fish`
+
+```
+docker run -v (pwd)/data:/queryarrow --link postgres:postgres --link neo4j:neo4j --rm --name queryarrow -p 12345 --entrypoint QueryArrowServer queryarrow:0.1.0 /queryarrow/datahttp.yaml
+```
+
 # run QueryArrow CLI
 
 ## insert data
