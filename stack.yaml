@@ -68,6 +68,7 @@ packages:
     - QueryArrow-db-cache
     - QueryArrow-common/
     - QueryArrow-cli
+    - QueryArrow-sql
     - QueryArrow-gen
     - QueryArrow-gen-tool
     - heterogeneous-list

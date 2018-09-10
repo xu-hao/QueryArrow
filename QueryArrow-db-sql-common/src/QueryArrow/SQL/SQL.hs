@@ -55,6 +55,8 @@ instance ToJSON Table
 
 instance FromJSON SQLQualifiedCol
 instance ToJSON SQLQualifiedCol
+instance FromJSON SQLExpr
+instance ToJSON SQLExpr
 instance FromJSON SQLMapping
 instance ToJSON SQLMapping
 
@@ -64,7 +66,8 @@ data SQLQualifiedCol = SQLQualifiedCol {
 
 type SQLOper = String
 
-data SQLExpr = SQLColExpr2 String
+data SQLExpr = SQLVarExpr String
+             | SQLTableAliasExpr SQLVar
              | SQLColExpr SQLQualifiedCol
              | SQLIntConstExpr Integer
              | SQLStringConstExpr T.Text
@@ -76,7 +79,7 @@ data SQLExpr = SQLColExpr2 String
              | SQLArrayExpr SQLExpr SQLExpr
              | SQLInfixFuncExpr String SQLExpr SQLExpr
              | SQLFuncExpr String [SQLExpr]
-             | SQLFuncExpr2 String SQLExpr deriving (Eq, Ord, Show)
+             | SQLUnaryOpExpr String SQLExpr deriving (Eq, Ord, Show, Generic)
 
 isSQLConstExpr :: SQLExpr -> Bool
 isSQLConstExpr (SQLIntConstExpr _ ) = True
@@ -147,7 +150,8 @@ instance Show2 SQLCond where
     show2 (SQLExistsCond sql) sqlvar = "(EXISTS (" ++ show2 sql sqlvar ++ "))"
     show2 (SQLNotCond sql) sqlvar = "(NOT (" ++ show2 sql sqlvar ++ "))"
 instance Show2 SQLExpr where
-    show2 (SQLColExpr2 col) sqlvar = col
+    show2 (SQLVarExpr col) sqlvar = col
+    show2 (SQLTableAliasExpr col) sqlvar = serialize col
     show2 (SQLColExpr (SQLQualifiedCol var col)) sqlvar = if var `elem` sqlvar
         then col
         else serialize var ++ "." ++ col
@@ -159,7 +163,7 @@ instance Show2 SQLExpr where
     show2 (SQLInfixFuncExpr fn a b) sqlvar = "(" ++ show2 a sqlvar ++ fn ++ show2 b sqlvar ++ ")"
     show2 (SQLListExpr args) sqlvar = "ARRAY[" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ "]"
     show2 (SQLFuncExpr fn args) sqlvar = fn ++ "(" ++ intercalate "," (map (\a -> show2 a sqlvar) args) ++ ")"
-    show2 (SQLFuncExpr2 fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
+    show2 (SQLUnaryOpExpr fn arg) sqlvar = fn ++ " " ++ show2 arg sqlvar
     show2 (SQLExprText s) _ = s
     show2 SQLNullExpr _ = "NULL"
 
@@ -252,7 +256,7 @@ instance Subst SQLExpr where
     subst _ a = a
 
 instance Subst SQLQualifiedCol where
-    subst varmap (SQLQualifiedCol var col) = SQLQualifiedCol (subst varmap var) col
+    subst varmap (SQLQualifiedCol ( var) col) = SQLQualifiedCol ( (subst varmap var)) col
 
 instance Subst a => Subst [a] where
     subst varmap = map (subst varmap)
@@ -421,7 +425,7 @@ instance Params SQLExpr where
     params (SQLArrayExpr a b) = params a ++ params b
     params (SQLInfixFuncExpr _ a b) = params a ++ params b
     params (SQLFuncExpr _ es) = foldMap params es
-    params (SQLFuncExpr2 _ e) = params e
+    params (SQLUnaryOpExpr _ e) = params e
     params _ = []
 
 instance Params SQLCond where
@@ -613,11 +617,11 @@ translateFormulaToSQL (Aggregate (Summarize funcs groupby) conj) = do
                         return (v, SQLFuncExpr "count" [SQLExprText "*"])
                     CountDistinct v2 -> do
                         r <- findRep v2
-                        return (v, SQLFuncExpr "count" [SQLFuncExpr2 "distinct" r])
+                        return (v, SQLFuncExpr "count" [SQLUnaryOpExpr "distinct" r])
                     Random v2 -> do
                         r <- findRep v2
                         return (v, SQLArrayExpr (SQLFuncExpr "array_agg" [r]) (SQLIntConstExpr 1))
-                addVarRep v (SQLColExpr2 vn)
+                addVarRep v (SQLVarExpr vn)
                 return r) funcs
     groupbyreps <- mapM findRep groupby
 
@@ -689,7 +693,7 @@ translateAtomToSQL (Atom name args) = do
                                         let args2 = args \\ prikeyargs
                                         return ([], v, cols2 , args2)
 
-                let cols3 = map (SQLQualifiedCol varmap) cols2
+                let cols3 = map (SQLQualifiedCol ( varmap)) cols2
                 condsFromArgs <- mapM condFromArg (zip args2 cols3)
                 let cond3 = foldl (.&&.) SQLTrueCond condsFromArgs
                 return (SQLQuery [] tables cond3 [] top False []
@@ -762,7 +766,7 @@ combineLitsSQL lits = do
 preproc0 tname cols pred1 args = do
         let key = keyComponents pred1 args
         (_, sqlvar2) <- lookupTableVar tname key
-        let qcol_args = zip (map (SQLQualifiedCol sqlvar2) cols) args
+        let qcol_args = zip (map (SQLQualifiedCol ( sqlvar2)) cols) args
         return (qcol_args, sqlvar2)
 
 preproc tname cols pred1 args = do
@@ -889,7 +893,7 @@ qcolArgToCond (qcol, arg) = do
             return SQLTrueCond -- unbounded var
 
 qcolArgToSet :: (SQLQualifiedCol, Expr) -> TransMonad (Col, SQLExpr)
-qcolArgToSet (SQLQualifiedCol var col, arg) = do
+qcolArgToSet (SQLQualifiedCol ( var) col, arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return (col, sqlexpr)
@@ -898,7 +902,7 @@ qcolArgToSet (SQLQualifiedCol var col, arg) = do
             error ("qcolArgToSet: set value to unbounded var" ++ show (var, col) ++ " " ++ serialize arg ++ " " ++ show (repmap ts))
 
 qcolArgToSetNull :: (SQLQualifiedCol, Expr) -> TransMonad ((Col, SQLExpr), SQLCond)
-qcolArgToSetNull (qcol@(SQLQualifiedCol var col), arg) = do
+qcolArgToSetNull (qcol@(SQLQualifiedCol ( var) col), arg) = do
     sqlexpr <- sqlExprFromArg arg
     case sqlexpr of
         Left sqlexpr -> return ((col, SQLNullExpr), SQLColExpr qcol .=. sqlexpr)
@@ -1079,7 +1083,8 @@ summarizeF trans dvars (AggregateA _ (Summarize _ _) form) = do
   summarizeF trans dvars form
 summarizeF trans dvars form = pureOrExecF trans dvars form
 
-
+instance New SQLVar SQLVar where
+    new (SQLVar svn) = SQLVar <$> new (StringWrapper svn)
 
 instance IGenericDatabase01 SQLTrans where
     type GDBQueryType SQLTrans = (Bool, [Var], [CastType], String, [Var])
