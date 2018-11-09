@@ -638,21 +638,24 @@ label @@+ args =  (FInsert (Lit Pos (Atom (UQPredName label) args)))
 (@@-) :: String -> [Expr] -> Formula
 label @@- args =  (FInsert (Lit Neg (Atom (UQPredName label) args)))
 
-(.*.) :: Formula -> Formula -> Formula
-FOne .*. b = b
-FZero .*. _ =  FZero
-a .*.  FOne = a
-a .*. b =  (FSequencing a b)
+(.*.) :: Monoid b => Formula2 a b -> Formula2 a b -> Formula2 a b 
+FOneA anna .*. (annb :< b) = (anna <> annb) :< b
+(anna :< a) .*. FOneA annb = (anna <> annb) :< a
+a .*. (FSequencingA _ b c) =  a .*. b .*. c
+FZeroA anna .*. (annb :< b) = (anna <> annb) :< FZeroF
+a@(anna :< _) .*. b@(annb :< _) =  (anna <> annb) :< FSequencingF a b
 
-(.+.) :: Formula -> Formula -> Formula
-FZero .+. b = b
-a .+.  FZero = a
-a .+. b =  (FChoice a b)
+(.+.) :: Monoid b => Formula2 a b -> Formula2 a b -> Formula2 a b
+FZeroA anna .+. (annb :< b) = (anna <> annb) :< b
+(anna :< a) .+. FZeroA annb = (anna <> annb) :< a
+a .+. (FChoiceA _ b c) =  a .+. b .+. c
+a@(anna :< _) .+. b@(annb :< _) =  (anna <> annb) :< FChoiceF a b
 
-(.|.) :: Formula -> Formula -> Formula
-FZero .|. b = b
-a .|.  FZero = a
-a .|. b =  (FPar a b)
+(.|.) :: Monoid b => Formula2 a b -> Formula2 a b -> Formula2 a b
+FZeroA anna .|. (annb :< b) = (anna <> annb) :< b
+(anna :< a) .|. FZeroA annb = (anna <> annb) :< a
+a .|. (FParA _ b c) =  a .|. b .|. c
+a@(anna :< _) .|. b@(annb :< _) =  (anna <> annb) :< FParF a b
 
 -- get the top level conjucts
 getFsequencings :: Formula2 a f -> [Formula2 a f]
@@ -746,4 +749,30 @@ type PredMap = Namespace String Pred
 
 -- type Location = [String]
 
-
+{- near semi-ring -}
+normalize :: Monoid b => Formula2 a b -> Formula2 a b
+normalize form@(FAtomicA _ _) = form
+normalize form@(FInsertA _ _) = form
+normalize (FChoiceA _ a b) =
+    normalize a .+. normalize b
+normalize (FParA _ a b) =
+    normalize a .|. normalize b
+normalize (FSequencingA _ a b) =
+    normalize a .*. normalize b
+normalize (AggregateA ann Not a) =
+    let a' = normalize a in
+    case a' of
+        FOneA _ -> FZeroA ann
+        FZeroA _ -> FOneA ann
+        _ -> AggregateA ann Not a'
+normalize (AggregateA ann Exists a) =
+    let a' = normalize a in
+    case a' of
+        FOneA _ -> FOneA ann
+        FZeroA _ -> FZeroA ann
+        _ -> AggregateA ann Exists a'
+normalize (AggregateA ann agg a) =
+    let a' = normalize a in
+        AggregateA ann agg a'
+normalize form@(FZeroA _) = form
+normalize form@(FOneA _) = form

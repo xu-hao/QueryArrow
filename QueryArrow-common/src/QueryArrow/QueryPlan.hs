@@ -162,42 +162,8 @@ formulaToQueryPlan   ins@(vtm :< (FInsertF (Lit _ (Atom pred1 _)))) =
 
 
 
-{- near semi-ring -}
-simplifyQueryPlan :: QueryPlan -> QueryPlan
 
-simplifyQueryPlan qp@(Exec _ _) = qp
-simplifyQueryPlan (QPChoice vtm qp1 qp2) =
-    let qp1' = simplifyQueryPlan  qp1
-        qp2' = simplifyQueryPlan  qp2 in
-        case (qp1', qp2') of
-            (QPZero _, _) -> qp2'
-            (_, QPZero _) -> qp1'
-            (_, _) -> QPChoice vtm qp1' qp2'
-simplifyQueryPlan (QPPar vtm qp1 qp2) =
-    let qp1' = simplifyQueryPlan  qp1
-        qp2' = simplifyQueryPlan  qp2 in
-        case (qp1', qp2') of
-            (QPZero _, _) -> qp2'
-            (_, QPZero _) -> qp1'
-            (_, _) -> QPPar vtm qp1' qp2'
-simplifyQueryPlan  (QPSequencing vtm qp1 qp2) =
-    let qp1' = simplifyQueryPlan  qp1
-        qp2' = simplifyQueryPlan  qp2 in
-        case (qp1', qp2') of
-            (QPOne _, _) -> qp2'
-            (QPZero _, _) -> QPZero vtm
-            (_, QPOne _) -> qp1'
-            (_, _) -> QPSequencing vtm qp1' qp2'
-simplifyQueryPlan  (QPAggregate vtm Not qp1) =
-    let qp1' = simplifyQueryPlan  qp1 in
-        case qp1' of
-            QPOne _ -> QPZero vtm
-            QPZero _ -> QPOne vtm
-            _ -> QPAggregate vtm Not qp1'
-simplifyQueryPlan  (QPAggregate vtm agg qp1) =
-    let qp1' = simplifyQueryPlan  qp1 in
-        QPAggregate vtm agg qp1'
-simplifyQueryPlan  qp = qp
+
 
 combineQPSequencingData :: QueryPlanData  -> QueryPlanData  -> QueryPlanData
 combineQPSequencingData qp1 qp2 =

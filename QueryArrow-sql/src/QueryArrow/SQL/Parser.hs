@@ -12,6 +12,7 @@ import Algebra.Lattice
 import QueryArrow.SQL.SQL
 import QueryArrow.Syntax.Term
 import Data.List (intercalate)
+import Data.Text (pack)
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",
@@ -123,6 +124,12 @@ exprP =
     minP
     e <- parens exprP
     return (SQLFuncExpr "min" [e])) <|>
+  try (do
+    i <- integer
+    return (SQLIntConstExpr i)) <|>
+  try (do
+    s <- stringp
+    return (SQLStringConstExpr (pack s))) <|>
   try (do
     tablename <- identifier
     dot

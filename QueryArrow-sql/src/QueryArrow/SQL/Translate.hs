@@ -64,6 +64,14 @@ data Mutable = Mutable {
   
 type TransMonad = ReaderT Immutable (StateT Mutable NewEnv)
 
+runTrans :: TransMonad a -> Immutable -> a
+runTrans a im = runNew (evalStateT (runReaderT a im) (Mutable
+                    M.empty
+                    M.empty
+                    M.empty
+                    M.empty))
+
+
 -- | return or generate a new default alias for table name
 getAliasByTableName :: TableName -> TransMonad SQLVar
 getAliasByTableName tablename = do
@@ -143,8 +151,9 @@ translateSQLToQuery qu@(SQLQuery sel from whe _ _ _ groupbys) = do
       return (Aggregate (Summarize binds groups) form)
     else
       error ("translateSQLToQuery: mixed aggregation and nonaggregation selects")
-  else
-    return form
+  else do
+    vars <- mapM translateSelectToReturn sel
+    return (Aggregate (FReturn vars) form)
 
 
 -- | add aliases in from to alias to table map and table to aliases map
@@ -242,6 +251,10 @@ translateSQLExprToExpr sqlexpr =
           translateSQLExprToExpr sqlexpr2
         Nothing ->
           getQColByCol name >>= getVarByQCol >>= (return . VarExpr)
+    SQLIntConstExpr i -> 
+      return (IntExpr i)
+    SQLStringConstExpr s ->
+      return (StringExpr s)
     _ -> 
       error ("translateSQLExprToExpr: unsupported " ++ show sqlexpr)
   
@@ -310,5 +323,17 @@ translateGroupByToVar sqlexpr = do
       error ("translateGroupByToVar: unsupported " ++ show sqlexpr)
   getVarByQCol qcol
 
-
+translateSelectToReturn :: (Var, SQLExpr) -> TransMonad Var
+translateSelectToReturn (Var "", sqlexpr) =
+  case sqlexpr of
+    SQLColExpr qcol ->
+      getVarByQCol qcol
+    SQLVarExpr name ->
+      return (Var name)
+    _ ->
+      error ("translateSelectToReturn: unsupported " ++ show sqlexpr)
+translateSelectToReturn (v, _) = 
+  return v
+  
+  
 

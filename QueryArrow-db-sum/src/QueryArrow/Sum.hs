@@ -34,9 +34,7 @@ import Debug.Trace
 
 queryPlan :: FormulaT ->  QueryPlan
 queryPlan formula =
-    let qp = formulaToQueryPlan formula
-        qp1 = simplifyQueryPlan qp in
-        qp1
+    formulaToQueryPlan (normalize formula)
 
 -- queryPlan2 :: AbstractDBList row -> Set Var -> MSet Var -> Formula -> QueryPlan2
 -- queryPlan2 dbs vars vars2  formula =
