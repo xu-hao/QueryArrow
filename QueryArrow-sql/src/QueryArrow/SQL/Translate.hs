@@ -20,6 +20,8 @@ import QueryArrow.SQL.SQL hiding (TransMonad)
 import QueryArrow.SQL.Mapping
 import Control.Arrow ((***))
 import Data.Namespace.Path
+import Algebra.Lattice.Dropped
+import Algebra.Lattice.Ordered
 
 
 type SQLTableColToPredIndex = M.Map TableName (M.Map Col [(PredName, Int)])
@@ -143,14 +145,14 @@ translateQColToQuery (SQLQualifiedCol alias colname) = do
     Nothing -> error ("translateQColToQuery: cannot find col index for table \"" ++ tablename ++ "\"")
 
 translateSQLToQuery :: SQL -> TransMonad Formula
-translateSQLToQuery qu@(SQLQuery sel from whe _ _ _ groupbys) = do
+translateSQLToQuery qu@(SQLQuery sel from whe orderbys limit distinct groupbys) = do
   mapM_ addFromToAliasMap from
   mapM_ addSelectToColAliasMap sel
   mapM_ generateAliasesInFrom from
   selq <- fsequencing <$> mapM translateSelectToQuery sel
   wheq <- translateWhereToQuery whe
   let form = selq .*. wheq
-  if isSQLAnyAggregation qu then
+  form2 <- if isSQLAnyAggregation qu then
     if isSQLAllAggregation qu then do
       binds <- mapM translateSelToBind sel
       groups <- mapM translateGroupByToVar groupbys
@@ -160,6 +162,25 @@ translateSQLToQuery qu@(SQLQuery sel from whe _ _ _ groupbys) = do
   else do
     vars <- mapM translateSelectToReturn sel
     return (Aggregate (FReturn vars) form)
+  let form3 = if distinct 
+                then Aggregate Distinct form2
+                else form2
+  form4 <- foldM translateOrderBy form3 (reverse orderbys)
+  let form5 = case limit of
+                Top -> form3
+                Drop a -> Aggregate (Limit (getOrdered a)) form4
+  return form5
+
+translateOrderBy :: Formula -> (SQLExpr, SQLOrder) -> TransMonad Formula
+translateOrderBy form orderby = do
+  let (sqlexpr, sqlorder) = orderby
+  qcol <- case sqlexpr of
+    SQLVarExpr v -> getQColByCol v
+    SQLColExpr qcol -> return qcol
+  var <- getVarByQCol qcol
+  return (Aggregate ((case sqlorder of
+                      ASC -> OrderByAsc
+                      DESC -> OrderByDesc) var) form)
 
 
 -- | add aliases in from to alias to table map and table to aliases map
