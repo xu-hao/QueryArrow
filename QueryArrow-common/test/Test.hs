@@ -55,16 +55,16 @@ main = hspec $ do
             formula <- parseStandardQuery "let a = count (DATA_NAME(x, y, z)) return a"
             formula `shouldBe`
               Aggregate (FReturn [Var "a"])
-                (Aggregate (Summarize [(Var "a", Count)] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [Bind (Var "a") Count] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
 
         it "test parse query 1.2" $ do
             formula <- parseStandardQuery "let a = count distinct b (DATA_NAME(x, y, z)) return a"
             formula `shouldBe`
               Aggregate (FReturn [Var "a"])
-                (Aggregate (Summarize [(Var "a", CountDistinct (Var "b"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [Bind (Var "a") (CountDistinct (Var "b"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
 
         it "test parse query 1.1" $ do
             formula <- parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
             formula `shouldBe`
               Aggregate (FReturn [Var "a"])
-                (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [Bind (Var "a") Count, Bind (Var "b") (Max (Var "x")), Bind (Var "c") (Min (Var "x"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))

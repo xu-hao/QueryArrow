@@ -9,7 +9,7 @@ import QueryArrow.Parser
 import QueryArrow.SQL.SQL
 import qualified QueryArrow.Mapping as ICAT
 import qualified QueryArrow.BuiltIn as BuiltIn
-import qualified QueryArrow.SQL.ICAT as SQL.ICAT
+import qualified QueryArrow.SQL.Mapping as SQL.ICAT
 import QueryArrow.Cypher.Mapping
 import QueryArrow.Cypher.Cypher
 import qualified QueryArrow.Cypher.Cypher as Cypher

@@ -21,7 +21,7 @@
 --
 
 CREATE TABLE r_coll_main (
-    coll_id bigint NOT NULL,
+    coll_id bigint NOT NULL primary key,
     parent_coll_name character varying(2700) NOT NULL,
     coll_name character varying(2700) NOT NULL,
     coll_owner_name character varying(250) NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE r_coll_main (
 --
 
 CREATE TABLE r_data_main (
-    data_id bigint NOT NULL,
+    data_id bigint NOT NULL primary key,
     coll_id bigint NOT NULL,
     data_name character varying(1000) NOT NULL,
     data_repl_num integer NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE r_data_main (
     create_ts character varying(32),
     modify_ts character varying(32),
     resc_hier character varying(1000),
-    resc_id bigint
+    resc_id bigint references r_resc_main(resc_id) primary key
 );
 
 
@@ -88,7 +88,7 @@ CREATE TABLE r_grid_configuration (
 --
 
 CREATE TABLE r_meta_main (
-    meta_id bigint NOT NULL,
+    meta_id bigint NOT NULL primary key,
     meta_namespace character varying(250),
     meta_attr_name character varying(2700) NOT NULL,
     meta_attr_value character varying(2700) NOT NULL,
@@ -250,7 +250,7 @@ CREATE TABLE r_resc_group (
 --
 
 CREATE TABLE r_resc_main (
-    resc_id bigint NOT NULL,
+    resc_id bigint NOT NULL primary key,
     resc_name character varying(250) NOT NULL,
     zone_name character varying(250) NOT NULL,
     resc_type_name character varying(250) NOT NULL,

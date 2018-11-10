@@ -10,7 +10,7 @@ import QueryArrow.Parser
 import QueryArrow.SQL.SQL
 import qualified QueryArrow.Mapping as ICAT
 import qualified QueryArrow.BuiltIn as BuiltIn
-import qualified QueryArrow.SQL.ICAT as SQL.ICAT
+import qualified QueryArrow.SQL.Mapping as SQL.ICAT
 import QueryArrow.DB.GenericDatabase
 import QueryArrow.Utils
 
@@ -110,21 +110,21 @@ main = hspec $ do
             standardPredMap <- standardPredMap
             formula `shouldBe`
               Aggregate (FReturn [Var "a"])
-                (Aggregate (Summarize [(Var "a", Count)] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [Bind (Var "a") Count] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
 
         it "test parse query 1.2" $ do
             formula <- parseStandardQuery "let a = count distinct b (DATA_NAME(x, y, z)) return a"
             standardPredMap <- standardPredMap
             formula `shouldBe`
               Aggregate (FReturn [Var "a"])
-                (Aggregate (Summarize [(Var "a", CountDistinct (Var "b"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [Bind (Var "a") (CountDistinct (Var "b"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
 
         it "test parse query 1.1" $ do
             formula <- parseStandardQuery "let a = count, b = max x, c = min x (DATA_NAME(x, y, z)) return a"
             standardPredMap <- standardPredMap
             formula `shouldBe`
               Aggregate (FReturn [Var "a"])
-                (Aggregate (Summarize [(Var "a", Count), (Var "b", Max (Var "x")), (Var "c", Min (Var "x"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
+                (Aggregate (Summarize [Bind (Var "a") Count, Bind (Var "b") (Max (Var "x")), Bind (Var "c") (Min (Var "x"))] []) (FAtomic (Atom (ObjectPath mempty "DATA_NAME") [VarExpr (Var "x"), VarExpr (Var "y"), VarExpr (Var "z")])))
 
         it "test translate sql query 0.1" $ do
             qu <- qParseStandardQuery "cat" "cat.DATA_NAME(x, y, z)"
@@ -152,7 +152,7 @@ main = hspec $ do
                     top
                     False
                     []), [])
-        it "test translate sql query 0.2" $ do
+        it "test translate sql query 0.3" $ do
             qu <- qParseStandardQuery "cat" "let a = count, b = max x, c = min x (cat.DATA_NAME(x, y, z))"
             sql <- translateQuery2 <$> (sqlStandardTrans "cat") <*> pure (Set.fromList [Var "a", Var "b", Var "c"]) <*> pure qu
             sql `shouldBe` ([Var "a", Var "b", Var "c"], SQLQueryStmt (SQLQuery
