@@ -7,6 +7,7 @@ import Text.Parsec
 import Data.Namespace.Path
 import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Serialize
+import QueryArrow.SQL.Tools
 
 mapping :: [SQLMapping]
 mapping = [
@@ -16,13 +17,6 @@ mapping = [
 
 namespacePath :: NamespacePath String
 namespacePath = NamespacePath ["db1"]
-
-immutable :: Immutable
-immutable = Immutable 
-    (createSQLTableIndex namespacePath mapping)
-    (createSQLPredIndex namespacePath mapping)
-    (createSQLColIndex mapping)
-    (createSQLSQLOperToPredIndex namespacePath)
 
 predName1 :: PredName
 predName1 = ObjectPath namespacePath "p1"
@@ -40,15 +34,8 @@ shouldBe2 a b = do
     serialize anorm `shouldBe` serialize bnorm
     anorm `shouldBe` bnorm
 
-parseSQL :: String -> IO SQL
-parseSQL s = case parse sqlP "" s of
-    Left err -> fail (show err)
-    Right sql -> return sql
-
 parseTrans :: String -> IO Formula
-parseTrans s = do
-    sql <- parseSQL s
-    return (runTrans (translateSQLToQuery sql) immutable)
+parseTrans = parseSQLTrans (immutable namespacePath mapping)
 
     
 main :: IO ()

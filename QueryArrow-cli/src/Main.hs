@@ -44,6 +44,8 @@ import QueryArrow.Semantics.Value
 import Control.Arrow ((***))
 import Data.Monoid ((<>))
 import QueryArrow.Client
+import QueryArrow.SQL.Tools
+import QueryArrow.Syntax.Serialize
 
 
 main::IO()
@@ -53,6 +55,9 @@ main = execParser opts >>= mainArgs where
 data Input = Input {
   query:: String,
   headers::  String,
+  sql :: Bool,
+  translate :: Bool,
+  sqlMappingFiles :: [([String], String)],
   configFile:: Maybe String,
   verbose :: Maybe Priority,
   showHeaders :: Bool,
@@ -65,29 +70,40 @@ input :: Parser Input
 input = Input <$>
             strArgument (metavar "QUERY" <> help "query") <*>
             strArgument (metavar "HEADERS" <> help "headers") <*>
+            switch (long "sql" <> help "use a subset of sql as query") <*>
+            switch (long "translate" <> help "translate sql to qal") <*>
+            many (option auto (long "sqlmappingfile" <> metavar "SQLMAPPINGFILE" <> help "sql mapping namespace and file")) <*>
             optional (strOption (long "config" <> short 'c' <> metavar "CONFIG" <> help "config file")) <*>
             optional (option auto (long "verbose" <> short 'v' <> metavar "VERBOSE" <> help "verbose")) <*>
             switch (long "show-headers" <> short 's' <> help "show headers") <*>
             optional (strOption (long "tcpaddr" <> metavar "TCPADDR" <> help "tcp address")) <*>
             optional (option auto (long "tcpport" <> metavar "TCPPORT" <> help "tcp port")) <*>
             optional (strOption (long "udsaddr" <> metavar "UDSADDR" <> help "unix domain socket address")) <*>
-            many (option auto (long "params" <> short 'p' <> metavar "PARAMS" <> help "parameters"))
+            many (option auto (long "param" <> short 'p' <> metavar "PARAM" <> help "parameter"))
 
 mainArgs :: Input -> IO ()
 mainArgs input = do
     setup (case verbose input of
                Nothing -> WARNING
                Just v -> v) Nothing
-    ps <- getConfig (fromMaybe "/etc/QueryArrow/tdb-plugin-gen-abs.yaml" (configFile input))
     let hdr = words (headers input)
-    let qu = query input
-    let showhdr = showHeaders input
-    let pars = Map.fromList (map (Var *** id) (params input))
-    if isJust (tcpAddr input) && isJust (tcpPort input)
-      then
-        runTCP (fromJust (tcpAddr input)) (fromJust (tcpPort input)) showhdr hdr qu pars
-      else if isJust (udsAddr input)
-        then
-          runUDS (fromJust (udsAddr input)) showhdr hdr qu pars
-        else
-          run2 showhdr hdr qu pars ps
+    let qu0 = query input
+    if translate input
+      then parseSQLTransConfig (sqlMappingFiles input) qu0 >>= putStrLn . serialize
+      else do
+        qu <- if sql input
+                then
+                  SQL <$> parseSQLTransConfig (sqlMappingFiles input) qu0
+                else 
+                  return (QAL qu0)
+        let showhdr = showHeaders input
+        let pars = Map.fromList (map (Var *** id) (params input))
+        if isJust (tcpAddr input) && isJust (tcpPort input)
+          then
+            runTCP (fromJust (tcpAddr input)) (fromJust (tcpPort input)) showhdr hdr qu pars
+          else if isJust (udsAddr input)
+            then
+              runUDS (fromJust (udsAddr input)) showhdr hdr qu pars
+            else do
+              ps <- getConfig (fromMaybe "/etc/QueryArrow/tdb-plugin-gen-abs.yaml" (configFile input))
+              run2 showhdr hdr qu pars ps

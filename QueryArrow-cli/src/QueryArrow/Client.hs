@@ -49,14 +49,15 @@ import Data.Set (fromList)
 
 import QueryArrow.Utils
 
-runTCP :: String -> Int -> Bool -> [String] -> String -> MapResultRow -> IO ()
+data Query = QAL String | SQL Formula
+runTCP :: String -> Int -> Bool -> [String] -> Query -> MapResultRow -> IO ()
 runTCP  addr port showhdr hdr qu params =
   bracket
     (connectTo addr (PortNumber (fromIntegral port)))
     hClose
     (\ handle -> runHandle handle showhdr hdr qu params)
 
-runUDS :: String -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runUDS :: String -> Bool -> [String] -> Query -> MapResultRow -> IO ()
 runUDS addr showhdr hdr qu params =
   bracket
     (do
@@ -66,7 +67,7 @@ runUDS addr showhdr hdr qu params =
     hClose
     (\ handle -> runHandle handle showhdr hdr qu params)
 
-runHandle :: Handle -> Bool -> [String] -> String -> MapResultRow -> IO ()
+runHandle :: Handle -> Bool -> [String] -> Query -> MapResultRow -> IO ()
 runHandle handle showhdr hdr qu params = do
   sendMsgPack handle QuerySet {
                   qsquery = Static [Begin],
@@ -74,7 +75,9 @@ runHandle handle showhdr hdr qu params = do
                   qsparams = mempty}
   _ <- receiveMsgPack handle :: IO (Maybe ResultSet)
   let name = QuerySet {
-                qsquery = Dynamic qu,
+                qsquery = case qu of 
+                            QAL qu -> Dynamic qu
+                            SQL qu -> Static [Execute qu],
                 qsheaders = fromList (map Var hdr),
                 qsparams = params
                 }
@@ -100,13 +103,15 @@ runHandle handle showhdr hdr qu params = do
         }
   sendMsgPack handle name2
 
-run2 ::  Bool -> [String] -> String -> MapResultRow -> TranslationInfo -> IO ()
+run2 ::  Bool -> [String] -> Query -> MapResultRow -> TranslationInfo -> IO ()
 run2 showhdr hdr query params ps = do
     let vars = map Var hdr
     AbstractDatabase tdb <- transDB ps
     conn <- dbOpen tdb
     dbBegin conn
-    ret <- runExceptT $ run (fromList vars) query params tdb conn
+    ret <- runExceptT $ case query of
+                          QAL qu -> run (fromList vars) qu params tdb conn
+                          SQL qu -> run3 (fromList vars) [Execute qu] params tdb conn
     case ret of
       Left e -> putStrLn ("error: " ++ show e)
       Right pp -> do

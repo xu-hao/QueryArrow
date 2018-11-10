@@ -27,6 +27,7 @@ library:
   exposed-modules:
     - QueryArrow.SQL.Translate
     - QueryArrow.SQL.Parser
+    - QueryArrow.SQL.Tools
 tests:
   spec:
     main: Spec.hs
