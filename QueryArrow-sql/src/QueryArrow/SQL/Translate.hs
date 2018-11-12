@@ -156,7 +156,8 @@ translateSQLToQuery qu@(SQLQuery sel from whe orderbys limit distinct groupbys) 
     if isSQLAllAggregation qu then do
       binds <- mapM translateSelToBind sel
       groups <- mapM translateGroupByToVar groupbys
-      return (Aggregate (Summarize binds groups) form)
+      let getBindVars = map (\(Bind v _) -> v)
+      return (Aggregate (FReturn (getBindVars binds)) (Aggregate (Summarize binds groups) form))
     else
       error ("translateSQLToQuery: mixed aggregation and nonaggregation selects")
   else do
@@ -167,7 +168,7 @@ translateSQLToQuery qu@(SQLQuery sel from whe orderbys limit distinct groupbys) 
                 else form2
   form4 <- foldM translateOrderBy form3 (reverse orderbys)
   let form5 = case limit of
-                Top -> form3
+                Top -> form4
                 Drop a -> Aggregate (Limit (getOrdered a)) form4
   return form5
 
@@ -292,7 +293,7 @@ isSQLAllAggregation :: SQL -> Bool
 isSQLAllAggregation (SQLQuery sel _ _ _ _ _ _) = all isSelAggregation sel
 
 isSelAggregation :: (Var, SQLExpr) -> Bool
-isSelAggregation (_, SQLFuncExpr fn _) = aggregateFunction fn
+isSelAggregation (_, SQLFuncExpr fn _) | aggregateFunction fn = True
 isSelAggregation (_, SQLFuncExpr fn _) = error ("isSelAggregation: unsupported " ++ fn)
 isSelAggregation _ = False
 
@@ -310,12 +311,21 @@ addSelectToColAliasMap (Var aliasname, sqlexpr) = do
   else do
     lift . lift $ register [aliasname]
     let sqlvartosqlexprindex' = M.insert aliasname sqlexpr (varToSQLExpr mutable)
-    lift $ put mutable{varToSQLExpr = sqlvartosqlexprindex'}
-addSelectToColAliasMap a = error ("addSelectToColAliasMap: unsupported " ++ show a)
+    if occur sqlvartosqlexprindex' sqlexpr 
+      then error ("addSelectToColAliasMap: reference to alias \"" ++ aliasname ++ "\" in select expression")
+      else lift $ put mutable{varToSQLExpr = sqlvartosqlexprindex'}
+
+occur :: M.Map String a -> SQLExpr ->  Bool
+occur _ (SQLColExpr _) = False
+occur _ (SQLIntConstExpr _) = False
+occur _ (SQLStringConstExpr _) = False
+occur vmap (SQLVarExpr name)  = name `M.member` vmap
+occur vmap (SQLFuncExpr _ args) = any (occur vmap) args
+occur _ sqlexpr = error ("occur: unsupported " ++ show sqlexpr)
 
 -- | a query that assigns the value of columns that appear in the clause to variables
 translateSelToBind :: (Var, SQLExpr) -> TransMonad Bind
-translateSelToBind (Var vn, sqlexpr) =
+translateSelToBind (alias@(Var vn), sqlexpr) =
   case sqlexpr of
     SQLFuncExpr fn [arg] -> do
       qcol <- case arg of 
@@ -326,7 +336,11 @@ translateSelToBind (Var vn, sqlexpr) =
         _ -> 
           error ("translateSelToBind: unsupported " ++ show sqlexpr)
       var <- getVarByQCol qcol
-      bvar <- lift . lift $ new var
+      bvar <- if vn == "" 
+                then
+                  lift . lift $ new var
+                else 
+                  return alias
       return (Bind bvar (case fn of
         "min" -> Min var
         "max" -> Max var

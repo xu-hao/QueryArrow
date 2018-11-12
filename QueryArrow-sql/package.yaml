@@ -35,4 +35,5 @@ tests:
       - test
     dependencies:
       - hspec
+      - deepseq
       - QueryArrow-sql
