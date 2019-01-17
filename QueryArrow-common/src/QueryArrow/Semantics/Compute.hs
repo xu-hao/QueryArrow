@@ -1,21 +1,14 @@
 module QueryArrow.Semantics.Compute where
 
-import QueryArrow.DB.ResultStream
 import QueryArrow.Syntax.Term
-import QueryArrow.ListUtils
 import QueryArrow.DB.DB
 import QueryArrow.Semantics.Value
 import QueryArrow.Syntax.Type
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, mapKeys)
-import qualified Data.Map.Strict as M
-import Data.List ((\\), intercalate, transpose)
-import Data.Maybe
-import Data.Tree
-import Data.Text (Text, pack, unpack)
+import Data.Map.Strict (lookup)
+import Data.Text (pack, unpack)
 import Data.Text.Encoding
-import Data.Int (Int64)
 
         
 evalExpr :: MapResultRow -> Expr -> ResultValue

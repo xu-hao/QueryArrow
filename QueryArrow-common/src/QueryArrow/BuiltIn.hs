@@ -1,7 +1,5 @@
 module QueryArrow.BuiltIn where
 
-import System.IO (FilePath, readFile)
-import Text.Read (readMaybe)
 import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
 

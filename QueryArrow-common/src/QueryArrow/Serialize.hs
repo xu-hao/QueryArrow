@@ -1,8 +1,7 @@
 {-# LANGUAGE StandaloneDeriving, FlexibleInstances, DeriveGeneric #-}
 module QueryArrow.Serialize where
 
-import System.IO (FilePath, readFile)
-import Text.Read (readMaybe)
+import System.IO (FilePath)
 import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
 import Data.Aeson

@@ -22,13 +22,14 @@ instance (IDatabase0 db) => (IDatabase0 (NoConnectionDatabase db)) where
 
 instance (IDatabase1 db) => (IDatabase1 (NoConnectionDatabase db)) where
     type DBQueryType (NoConnectionDatabase db) = DBQueryType db
+    type DBFormulaType1 (NoConnectionDatabase db) = DBFormulaType1 db
     translateQuery (NoConnectionDatabase db) = translateQuery db
 
 instance (INoConnectionDatabase2 db) => IDatabase2 (NoConnectionDatabase db) where
     data ConnectionType (NoConnectionDatabase db) = NoConnectionDBConnection db
     dbOpen (NoConnectionDatabase db) = return (NoConnectionDBConnection db)
 
-instance (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db) => IDatabase (NoConnectionDatabase db) where
+instance (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBFormulaType db ~ DBFormulaType1 db, DBQueryType db ~ NoConnectionQueryType db) => IDatabase (NoConnectionDatabase db) where
 
 -- instance for IDBConnection
 

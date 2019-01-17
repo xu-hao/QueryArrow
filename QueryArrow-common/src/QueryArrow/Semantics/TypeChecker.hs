@@ -1,9 +1,9 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
 
 module QueryArrow.Semantics.TypeChecker where
 
 import Prelude hiding (lookup, null, filter)
-import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty, mapKeys, toList, singleton)
+import Data.Map.Strict (Map, lookup, insert, delete, fromList, keysSet, unionWith, filterWithKey, union, empty, toList, singleton)
 import qualified Data.Map.Strict as Map
 import Data.List (foldl', intercalate)
 import Data.Set (Set, (\\), toAscList, member, null, filter)

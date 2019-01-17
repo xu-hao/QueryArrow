@@ -5,10 +5,7 @@ import Data.Aeson
 import Data.Aeson.TH
 import Data.Maybe
 import Data.Yaml
-import System.FilePath
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 
 -- config info
 

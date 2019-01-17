@@ -3,7 +3,6 @@ module QueryArrow.QueryPlan where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.Syntax.Term
-import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.TypeChecker
 import Algebra.SemiBoundedLattice
 import QueryArrow.DB.DB
@@ -13,12 +12,9 @@ import Prelude  hiding (lookup, null)
 import Data.List (elem, sortBy, groupBy, nub)
 import qualified Data.List as List
 import Control.Monad.Except
-import Control.Applicative ((<|>))
 import Data.Maybe
 import Data.Monoid  ((<>))
 import Data.Tree
-import Data.Conduit
-import Control.Concurrent.Async.Lifted
 import System.Log.Logger
 import Algebra.Lattice
 import Data.Set (Set, fromList, toAscList)
@@ -133,7 +129,7 @@ type QueryPlanT l = QueryPlan2 (HVariant' DBQueryTypeIso l, String) QueryPlanDat
 type QueryPlanS row = QueryPlan2 (AbstractDBStatement row, String) QueryPlanData
 
 
-findDB :: forall  (l :: [*]) . (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l) => Set Var -> FormulaT -> Set Var -> HList l -> Int
+findDB :: forall  (l :: [*]) . (HMapC (IDatabaseUniformDBFormula FormulaT) l) => Set Var -> FormulaT -> Set Var -> HList l -> Int
 findDB sing form env dbs =
   let pred0 = case form of
                   _ :< (FAtomicF (Atom pred0 _)) -> pred0
@@ -144,7 +140,7 @@ findDB sing form env dbs =
       (fromMaybe (error ("no database for predicate " ++ show pred0 ++ " available " ++ (
           let preds = filter (\(Pred (PredName _ pn1) _) ->
                           case pred0 of
-                            PredName _ pn0 -> pn1 == pn0) (concat (hMapCUL @(IDatabaseUniformDBFormula FormulaT) getPreds dbs))
+                            PredName _ pn0 -> pn1 == pn0) (hFoldMapCUL @(IDatabaseUniformDBFormula FormulaT) getPreds dbs)
           in show preds))) (hFindCULV @(IDatabaseUniformDBFormula FormulaT) (\db -> pred0 `elem` (map predName (getPreds db)) && supported db sing form env) dbs))
 
 formulaToQueryPlan :: FormulaT -> QueryPlan
@@ -327,7 +323,7 @@ calculateVars2 lvars  (QPAggregateA qpd agg@(FReturn vars) qp1) =
 supportedDB :: IDatabaseUniformDBFormula FormulaT db => Set Var -> FormulaT -> Set Var -> db -> Bool
 supportedDB sing form vars db = supported db sing form vars
 
-findDBQueryPlan :: HMapConstraint (IDatabaseUniformDBFormula FormulaT) l => HList l -> QueryPlanC -> QueryPlanD
+findDBQueryPlan :: HMapC (IDatabaseUniformDBFormula FormulaT) l => HList l -> QueryPlanC -> QueryPlanD
 findDBQueryPlan dbsx qp@(ExecA qpd form) =
   let dbx = findDB (returnvs qpd) form (paramvs qpd) dbsx in
       (ExecA qpd (IndexedFormula form dbx))
@@ -352,7 +348,7 @@ findDBQueryPlan dbsx (QPAggregateA qpd agg qp1) =
         (QPAggregateA qpd agg qp1')
 
 
-optimizeQueryPlan :: HMapConstraint (IDatabaseUniformDBFormula FormulaT) l => HList l -> QueryPlanD -> QueryPlanD
+optimizeQueryPlan :: HMapC (IDatabaseUniformDBFormula FormulaT) l => HList l -> QueryPlanD -> QueryPlanD
 optimizeQueryPlan _ qp@(ExecA qpd _) = qp
 
 optimizeQueryPlan dbsx (QPSequencingA qpd ip1  ip2) =
@@ -489,7 +485,7 @@ addTransaction qp@(_, QPReturn2 _) = (False, qp)
 --         (dbxs, (qpd, QPAggregate2 agg qp1'))
 
 
-translateQueryPlan :: (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l) => HList l -> QueryPlanD -> IO (QueryPlanT l)
+translateQueryPlan :: (HMapC (IDatabaseUniformDBFormula FormulaT) l) => HList l -> QueryPlanD -> IO (QueryPlanT l)
 
 translateQueryPlan dbs (ExecA qpd (IndexedFormula form x)) = do
         let vars = paramvs qpd
@@ -517,27 +513,27 @@ translateQueryPlan dbs  (QPAggregateA qpd agg qp1) = do
         qp1' <- translateQueryPlan dbs  qp1
         return (QPAggregateA qpd agg qp1')
 
-hDbOpen :: (HMapConstraint IDatabase l) => HList l -> IO (HList' ConnectionType l)
+hDbOpen :: (HMapC IDatabase l) => HList l -> IO (HList' ConnectionType l)
 hDbOpen dbs =
     let dbo :: (IDatabase db) => db -> IO (ConnectionType db)
         dbo db = dbOpen db in
         hMapACULL @IDatabase @ConnectionType dbo dbs
 
-class (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDatabaseUniformRow row conn
-instance (IDatabase conn, RowType (StatementType (ConnectionType conn)) ~ row) => IDatabaseUniformRow row conn
+class (IDatabase db, RowType (StatementType (ConnectionType db)) ~ row) => IDatabaseUniformRow row db
+instance (IDatabase db, RowType (StatementType (ConnectionType db)) ~ row) => IDatabaseUniformRow row db
 
-class (IDatabase conn, DBFormulaType conn ~ form) => IDatabaseUniformDBFormula form conn
-instance (IDatabase conn, DBFormulaType conn ~ form) => IDatabaseUniformDBFormula form conn
+class (IDatabase db, DBFormulaType db ~ form) => IDatabaseUniformDBFormula form db
+instance (IDatabase db, DBFormulaType db ~ form) => IDatabaseUniformDBFormula form db
 
 class (IDatabaseUniformRow row db, IDatabaseUniformDBFormula formula db) => IDatabaseUniformRowAndDBFormula row formula db
 instance (IDatabaseUniformRow row db, IDatabaseUniformDBFormula formula db) => IDatabaseUniformRowAndDBFormula row formula db
 
-prepareQueryPlan :: forall (row :: *) (l :: [*]). (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l,
-                HMapConstraint IDBConnection (HMap ConnectionType l)) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlanS row )
+prepareQueryPlan :: forall (row :: *) (l :: [*]). (IResultRow row, HMapC (IDatabaseUniformRow row) l,
+                HMapC IDBConnection (HMapF ConnectionType l)) => HList' ConnectionType l -> QueryPlanT l -> IO (QueryPlanS row )
 prepareQueryPlan conns (ExecA qpd (qu, stmtshow)) = do
             let pq :: (IDatabaseUniformRow row conn) => ConnectionType conn -> DBQueryTypeIso conn -> IO (AbstractDBStatement row)
                 pq conn (DBQueryTypeIso qu') = AbstractDBStatement <$> prepareQuery conn qu'
-            stmt <- hApply2CULV' @(IDatabaseUniformRow row) @ConnectionType @DBQueryTypeIso pq conns qu
+            stmt <- hZipWithACLV @(IDatabaseUniformRow row) @ConnectionType @DBQueryTypeIso pq conns qu
             return (ExecA qpd (stmt, stmtshow))
 prepareQueryPlan dbs  (QPChoiceA qpd qp1 qp2) = do
     qp1' <- prepareQueryPlan dbs  qp1

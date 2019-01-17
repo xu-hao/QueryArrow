@@ -32,6 +32,7 @@ instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase0 (CacheTransDB db)
 
 instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase1 (CacheTransDB db) where
     type DBQueryType (CacheTransDB db) = DBQueryType db
+    type DBFormulaType1 (CacheTransDB db) = FormulaT
     translateQuery (CacheTransDB _ db cache ) vars2 qu vars = do
         infoM "TransCache" ("looking up " ++ show qu)
         qu' <- lookup (vars2, qu, vars) cache

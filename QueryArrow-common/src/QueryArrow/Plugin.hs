@@ -3,7 +3,6 @@ module QueryArrow.Plugin where
 
 import QueryArrow.Config
 import QueryArrow.DB.DB
-import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.TypeChecker
 import QueryArrow.DB.AbstractDatabaseList
 import QueryArrow.Data.Heterogeneous.List

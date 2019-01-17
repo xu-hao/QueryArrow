@@ -4,8 +4,8 @@
 module QueryArrow.Syntax.Term where
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, foldrWithKey, delete)
-import Data.List (intercalate, union, unwords)
+import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, delete)
+import Data.List (intercalate, union)
 import Control.Monad.Trans.State.Strict (evalState,get, put, State)
 import Data.Set (Set, singleton, (\\))
 import qualified Data.Set as Set
@@ -23,7 +23,6 @@ import Data.Eq.Deriving (deriveEq1)
 import Data.Ord.Deriving (deriveOrd1)
 import Text.Read.Deriving (deriveRead1)
 import Text.Show.Deriving (deriveShow1)    
-import Data.Functor.Classes (Show1)
 import QueryArrow.Syntax.Type
 import Debug.Trace
 
@@ -57,14 +56,31 @@ type Expr1 = Cofree ExprF
 type Expr = Expr1 () 
 
 
+pattern VarExpr :: Var -> Expr1 ()
 pattern VarExpr a = () :< VarExprF a
+
+pattern ConsExpr :: String -> Expr1 ()
 pattern ConsExpr a = () :< ConsExprF a
+
+pattern IntExpr :: Integer -> Expr1 ()
 pattern IntExpr a = () :< IntExprF a
+
+pattern StringExpr :: T.Text -> Expr1 ()
 pattern StringExpr a = () :< StringExprF a
+
+pattern AppExpr :: Expr1 () -> Expr1 () -> Expr1 ()
 pattern AppExpr a b = () :< AppExprF a b
+
+pattern NullExpr :: Expr1 ()
 pattern NullExpr = () :< NullExprF
+
+pattern CastExpr :: CastType -> Expr1 () -> Expr1 ()
 pattern CastExpr a b = () :< CastExprF a b
+
+pattern ListConsExpr :: Expr1 () -> Expr1 () -> Expr1 ()
 pattern ListConsExpr a b = AppExpr (AppExpr (ConsExpr "(:)") a) b
+
+pattern ListNilExpr :: Expr1 ()
 pattern ListNilExpr = ConsExpr "[]"
 
 listExpr :: [Expr] -> Expr
@@ -81,6 +97,7 @@ data Atom1 a = Atom1 { atomPred :: PredName, atomArgs :: [Expr1 a] } deriving (E
 
 type Atom = Atom1 ()
 
+pattern Atom :: forall a. PredName -> [Expr1 a] -> Atom1 a
 pattern Atom a b = Atom1 a b
 
 
@@ -92,6 +109,7 @@ data Lit1 a = Lit1 { sign :: Sign,  atom :: Atom1 a } deriving (Eq, Ord, Show, R
 
 type Lit = Lit1 ()
 
+pattern Lit :: forall a. Sign -> Atom1 a -> Lit1 a
 pattern Lit a b = Lit1 a b
 
 
@@ -118,23 +136,68 @@ type Formula2 a = Cofree (FormulaF a)
 type Formula = Formula2 () ()
 
 
+pattern FAtomic :: forall a. Atom1 a -> Formula2 a ()
 pattern FAtomic a = () :< FAtomicF a
+
+pattern FInsert :: forall a. Lit1 a -> Formula2 a ()
 pattern FInsert a = () :< FInsertF a
+
+pattern FChoice :: forall a.
+                     Formula2 a ()
+                     -> Formula2 a () -> Formula2 a ()
 pattern FChoice a b = () :< FChoiceF a b
+
+pattern FSequencing :: forall a.
+                     Formula2 a ()
+                     -> Formula2 a () -> Formula2 a ()
 pattern FSequencing a b = () :< FSequencingF a b
+
+pattern FPar :: forall a.
+                     Formula2 a ()
+                     -> Formula2 a () -> Formula2 a ()
 pattern FPar a b = () :< FParF a b
+
+pattern FZero :: Formula2 a ()
 pattern FZero = () :< FZeroF
+
+pattern FOne :: Formula2 a ()
 pattern FOne = () :< FOneF
+
+pattern Aggregate :: forall a.
+                       Aggregator -> Formula2 a () -> Formula2 a ()
 pattern Aggregate a b = () :< AggregateF a b
 
+pattern FAtomicA :: forall ann a. ann -> Atom1 a -> Formula2 a ann
 pattern FAtomicA ann a = ann  :< FAtomicF a
+
+pattern FInsertA :: forall ann a. ann -> Lit1 a -> Formula2 a ann
 pattern FInsertA ann a = ann  :< FInsertF a
+
+pattern FChoiceA :: forall ann a. ann ->
+                     Formula2 a ann
+                     -> Formula2 a ann -> Formula2 a ann
 pattern FChoiceA ann a b = ann  :< FChoiceF a b
+
+pattern FSequencingA :: forall ann a. ann ->
+                     Formula2 a ann
+                     -> Formula2 a ann -> Formula2 a ann
 pattern FSequencingA ann a b = ann  :< FSequencingF a b
+
+pattern FParA :: forall ann a. ann ->
+                     Formula2 a ann
+                     -> Formula2 a ann -> Formula2 a ann
 pattern FParA ann a b = ann  :< FParF a b
+
+pattern FZeroA :: ann -> Formula2 a ann
 pattern FZeroA ann = ann  :< FZeroF
+
+pattern FOneA :: ann -> Formula2 a ann
 pattern FOneA ann = ann  :< FOneF
+
+pattern AggregateA :: forall ann a. ann ->
+                       Aggregator -> Formula2 a ann -> Formula2 a ann
 pattern AggregateA ann a b = ann  :< AggregateF a b
+
 {-
 isConst :: Expr -> Bool
 isConst (IntExpr _) = True
@@ -151,17 +214,17 @@ instance FreeVars (Expr1 a) where
     freeVars e1 = case unwrap e1 of
       CastExprF _ e -> freeVars e
       VarExprF var0 -> Set.singleton var0
-      ConsExprF var0 -> bottom
+      ConsExprF _ -> bottom
       IntExprF _ -> bottom
       StringExprF _ -> bottom
       AppExprF a b -> freeVars a \/ freeVars b
       NullExprF -> bottom
 
 instance FreeVars (Atom1 a) where
-    freeVars (Atom _ theargs) = freeVars theargs
+    freeVars (Atom1 _ theargs) = freeVars theargs
 
 instance FreeVars (Lit1 a) where
-    freeVars (Lit _ theatom) = freeVars theatom
+    freeVars (Lit1 _ theatom) = freeVars theatom
 
 instance FreeVars (Formula2 a b) where
     freeVars f1 = case unwrap f1 of
@@ -194,10 +257,10 @@ instance FreeVars Aggregator where
         bottom
       Distinct ->
         bottom
-      (OrderByAsc var) ->
-        singleton var
-      (OrderByDesc var) ->
-        singleton var
+      (OrderByAsc var0) ->
+        singleton var0
+      (OrderByDesc var0) ->
+        singleton var0
 
 instance FreeVars a => FreeVars [a] where
     freeVars = Set.unions . map freeVars
@@ -206,7 +269,7 @@ instance FreeVars a => FreeVars (Set a) where
     freeVars sa = Set.unions (map freeVars (Set.toAscList sa))
 
 instance FreeVars Bind where
-    freeVars (Bind a b) = freeVars b
+    freeVars (Bind _ b) = freeVars b
 
 instance (FreeVars a, FreeVars b) => FreeVars (a, b) where
     freeVars (a,b) = freeVars a \/ freeVars b
@@ -228,21 +291,21 @@ class BoundVars a where
 
 instance BoundVars Aggregator where
     boundVars agg = case agg of
-      (FReturn vars) ->
+      (FReturn _) ->
         bottom
       Not ->
         bottom
       Exists ->
         bottom
-      (Summarize funcs groupby) ->
+      (Summarize funcs _) ->
         boundVars funcs
       (Limit _) ->
         bottom
       Distinct ->
         bottom
-      (OrderByAsc var) ->
+      (OrderByAsc _) ->
         bottom
-      (OrderByDesc var) ->
+      (OrderByDesc _) ->
         bottom
 
 instance BoundVars a => BoundVars [a] where
@@ -321,14 +384,14 @@ splitPosNegLits = foldr (\ (Lit thesign theatom) (pos, neg) -> case thesign of
     Neg -> (pos, theatom : neg)) ([],[])
 
 isObjectPred2 :: Pred -> Bool
-isObjectPred2 (Pred _ (PredType predKind _)) = case predKind of
+isObjectPred2 (Pred _ (PredType predKind0 _)) = case predKind0 of
             ObjectPred -> True
             PropertyPred -> False
 
 isObjectPred :: PredTypeMap -> PredName -> Bool
 isObjectPred ptm pn  = case lookup pn ptm of
   Nothing -> error ("isObjectPred: cannot find predicate " ++ show pn)
-  Just (PredType predKind _) -> case predKind of
+  Just (PredType predKind0 _) -> case predKind0 of
             ObjectPred -> True
             PropertyPred -> False
 
@@ -339,34 +402,40 @@ type PredTypeMap = Map PredName PredType
 
 sortByKey :: Ord (Expr1 a) => PredTypeMap -> [Lit1 a] -> Map [Expr1 a] [Lit1 a]
 sortByKey ptm = foldl insertByKey empty where
-    insertByKey map1 lit@(Lit _ (Atom pred1 args)) =
+    insertByKey map1 lit@(Lit1 _ (Atom1 pred1 args)) =
         let keyargs = keyComponents (fromMaybe (error ("sortByKey: cannot find predicate " ++ show pred1)) (lookup pred1 ptm)) args in
             alter (\l -> case l of
                 Nothing -> Just [lit]
                 Just lits -> Just (lits ++ [lit])) keyargs map1
 
 isObjectPredAtom :: PredTypeMap -> Atom1 a -> Bool
-isObjectPredAtom ptm (Atom pn _) =
+isObjectPredAtom ptm (Atom1 pn _) =
   case fromMaybe (error ("isObjectPredAtom: cannot find predicate " ++ show pn)) (lookup pn ptm) of
     PredType ObjectPred _ -> True
     _ -> False
 
 isObjectPredLit :: PredTypeMap -> Lit1 a -> Bool
-isObjectPredLit ptm (Lit _ a) = isObjectPredAtom ptm a
+isObjectPredLit ptm (Lit1 _ a) = isObjectPredAtom ptm a
 
 sortAtomByPred :: [Atom1 a] -> Map PredName [Atom1 a]
 sortAtomByPred = foldl insertAtomByPred empty where
-    insertAtomByPred map1 a@(Atom pred1 _) =
+    insertAtomByPred map1 a@(Atom1 pred1 _) =
         alter (\asmaybe -> case asmaybe of
             Nothing -> Just [a]
             Just as -> Just (as ++ [a])) pred1 map1
 
+pattern PredName :: forall k.
+            Key k => [k] -> k -> ObjectPath k
 pattern PredName ks n = ObjectPath (NamespacePath ks) n
+pattern QPredName :: forall k.
+            Key k => k -> [k] -> k -> ObjectPath k
 pattern QPredName k ks n = ObjectPath (NamespacePath (k : ks)) n
+
+pattern UQPredName :: forall k. Key k => k -> ObjectPath k
 pattern UQPredName n = ObjectPath (NamespacePath []) n
 
 predNameToString :: PredName -> String
-predNameToString (PredName mns n)= intercalate "." (mns ++ [n])
+predNameToString (PredName mns n) = intercalate "." (mns ++ [n])
 
 predNameToString2 :: PredName -> String
 predNameToString2 (PredName _ n) = n
@@ -421,13 +490,14 @@ setPureFormulaNamespace ns CFalse = CFalse -}
 
 -- rule
 
-type Rule = Set Lit
+{- type Rule = Set Lit -}
 
-cartProd :: Ord a => Set (Set a) -> Set (Set a) -> Set (Set a)
+{- cartProd :: Ord a => Set (Set a) -> Set (Set a) -> Set (Set a)
 cartProd as as2 = Set.fromList [a `Set.union` a2 | a <- Set.toList as, a2 <- Set.toList as2 ]
 
 cartProds :: Ord a => [Set (Set a)] -> Set (Set a)
 cartProds = foldl cartProd (Set.singleton bottom)
+-}
 
 type NewEnv = State (Map String Int, [String])
 -- assume that not has been pushed
@@ -529,20 +599,20 @@ instance Subst (Atom1 a) => Subst (Lit1 a) where
     subst s (Lit1 sign0 a) = Lit1 sign0 (subst s a)
 
 instance (Subst (Atom1 a), Subst b) => Subst (Formula2 a b) where
-    subst s a = (subst s (extract a)) :< case unwrap a of
-                        FAtomicF a -> FAtomicF (subst s a)
+    subst s a = subst s (extract a) :< case unwrap a of
+                        FAtomicF form -> FAtomicF (subst s form)
                         FInsertF lits -> FInsertF (subst s lits)
                         FSequencingF form1 form2 -> FSequencingF (subst s form1) (subst s form2)
                         FChoiceF form1 form2 -> FChoiceF (subst s form1) (subst s form2)
                         FParF form1 form2 -> FParF (subst s form1) (subst s form2)
                         AggregateF (FReturn vars) form -> AggregateF (FReturn (subst s vars)) (subst s form)
-                        AggregateF Not a -> AggregateF Not (subst s a)
-                        AggregateF Exists a -> AggregateF Exists (subst s a)
-                        AggregateF (Summarize funcs groupby) a -> AggregateF (Summarize (subst s funcs) (map (subst s) groupby)) (subst (foldr delete s (boundVars funcs)) a)
-                        AggregateF (Limit n) a -> AggregateF (Limit n) (subst s a)
-                        AggregateF Distinct a -> AggregateF Distinct (subst s a)
-                        AggregateF (OrderByAsc var1) a -> AggregateF (OrderByAsc (subst s var1)) (subst s a)
-                        AggregateF (OrderByDesc var1) a -> AggregateF (OrderByDesc (subst s var1)) (subst s a)
+                        AggregateF Not form -> AggregateF Not (subst s form)
+                        AggregateF Exists form -> AggregateF Exists (subst s form)
+                        AggregateF (Summarize funcs groupby) form -> AggregateF (Summarize (subst s funcs) (map (subst s) groupby)) (subst (foldr delete s (boundVars funcs)) form)
+                        AggregateF (Limit n) form -> AggregateF (Limit n) (subst s form)
+                        AggregateF Distinct form -> AggregateF Distinct (subst s form)
+                        AggregateF (OrderByAsc var1) form -> AggregateF (OrderByAsc (subst s var1)) (subst s form)
+                        AggregateF (OrderByDesc var1) form -> AggregateF (OrderByDesc (subst s var1)) (subst s form)
                         FZeroF -> FZeroF
                         FOneF -> FOneF
 
@@ -689,19 +759,19 @@ getFpars' f1 = case unwrap f1 of
   _ -> [f1]
 
 fsequencing :: [Formula] -> Formula
-fsequencing = foldl (.*.) ( FOne)
+fsequencing = foldl (.*.) FOne
 
 fsequencing1 :: Monoid b => [Formula2 a b] -> Formula2 a b
 fsequencing1 = foldl1 (\ f1@(b1 :< _)  f2@(b2 :< _) -> (b1 <> b2) :< (FSequencingF f1 f2))
 
 fchoice :: [Formula] -> Formula
-fchoice = foldl (.+.) ( FZero)
+fchoice = foldl (.+.) FZero
 
 fchoice1 :: Monoid b => [Formula2 a b] -> Formula2 a b
 fchoice1 = foldl1 (\ f1@(b1 :< _)  f2@(b2 :< _) -> (b1 <> b2) :< (FChoiceF f1 f2))
 
 fpar :: [Formula] -> Formula
-fpar = foldl (.|.) ( FZero)
+fpar = foldl (.|.) FZero
 
 fpar1 :: Monoid b => [Formula2 a b] -> Formula2 a b
 fpar1 = foldl1 (\ f1@(b1 :< _)  f2@(b2 :< _) -> (b1 <> b2) :< (FParF f1 f2))

@@ -80,6 +80,7 @@ instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase0 (TransDB db) wher
     supported _ _ _ _ = True
 
 instance (IDatabaseUniformDBFormula FormulaT db) => IDatabase1 (TransDB db) where
+    type DBFormulaType1 (TransDB db) = FormulaT
     type DBQueryType (TransDB db) = DBQueryType db
     translateQuery (TransDB _ db _ (qr, ir, dr) ) vars2 qu vars =
                   let qu' = rewriteQuery qr ir dr (Include vars2) qu vars in do

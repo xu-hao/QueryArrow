@@ -2,7 +2,6 @@
 module QueryArrow.Parser where
 
 import QueryArrow.Syntax.Term
-import QueryArrow.Syntax.Utils
 import QueryArrow.DB.DB
 import QueryArrow.Syntax.Type
 

@@ -5,10 +5,7 @@ module QueryArrow.DB.ResultStream (eos, ResultStream, ResultStreamTrans, listRes
     where
 
 import Prelude  hiding (lookup, take, map, null, mapM)
-import Control.Applicative (empty, (<|>), Alternative)
-import Control.Monad (ap)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans.Class (lift, MonadTrans)
+import Control.Monad.IO.Class (liftIO)
 import QueryArrow.Syntax.Term
 import Data.Conduit
 import Data.Conduit.Combinators
@@ -21,12 +18,12 @@ class (Monoid row, Show row, Num (ElemType row), Ord (ElemType row), Fractional 
     sing :: Var -> ElemType row -> row
     get :: Var -> row -> ElemType row
 
-type ResultStream m o = Conduit () m o
+type ResultStream m o = ConduitT () o m ()
 
-type ResultStreamTrans m o = Conduit o m o
+type ResultStreamTrans m o = ConduitT o o m ()
 
 listResultStream :: (Monad m) => [a] -> ResultStream m a
-listResultStream results = yieldMany results
+listResultStream = yieldMany
 
 depleteResultStream :: (Monad m) => ResultStream m row -> m ()
 depleteResultStream rs =
@@ -52,7 +49,7 @@ emptyResultStream :: (Monad m) => ResultStream m a
 emptyResultStream = listResultStream []
 
 isResultStreamEmpty :: (Monad m) => ResultStream m a -> m Bool
-isResultStreamEmpty rs = runConduit (rs =$ null)
+isResultStreamEmpty rs = runConduit (rs .| null)
 
 eos :: (Monad m) => ResultStream m a -> ResultStream m Bool
 eos stream = yieldM (isResultStreamEmpty stream)
@@ -70,7 +67,7 @@ bracketPStream :: (MonadResource m) => IO a -> (a -> IO ()) -> (a -> ResultStrea
 bracketPStream = bracketP
 
 resultStream2 :: (MonadResource m) => IO [row] -> IO () -> ResultStream m row
-resultStream2 mrow finish = bracketP (return ()) (\_ -> finish) (\_ -> do
+resultStream2 mrow finish = bracketP (return ()) (const finish) (const (do
     rows <- liftIO mrow
-    listResultStream rows)
+    listResultStream rows))
 

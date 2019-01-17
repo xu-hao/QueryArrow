@@ -67,7 +67,7 @@ translateQuery1 trans vars qu env =
       env2 = foldl (\map2 key@(Var w)  -> insert key (SQLParamExpr w) map2) empty env in
       fst (runNew (runStateT (translateQueryToSQL (Set.toAscList vars) qu) (TransState {builtin = builtin, predtablemap = predtablemap, repmap = env2, tablemap = empty, nextid=Just (SQL.ICAT.nextidPred ["cat"] "nextid"), ptm = ptm})))
 
-support :: (IDatabase1 db, DBFormulaType db ~ FormulaT) => db -> Set.Set Var -> Formula -> Set.Set Var -> Bool
+support :: (IDatabase0 db, IDatabase1 db, DBFormulaType db ~ DBFormulaType1 db, DBFormulaType db ~ FormulaT) => db -> Set.Set Var -> Formula -> Set.Set Var -> Bool
 support db vs1 f vs2 = supported db vs1 (addAnnotations f) vs2
 
 testTranslateSQLInsert :: String -> String -> String -> IO ()

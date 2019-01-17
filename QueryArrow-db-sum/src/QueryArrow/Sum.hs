@@ -50,7 +50,7 @@ queryPlan formula =
 --     liftIO $ infoM "QA" ("rewritten query: " ++ show qu)
 --     return qu
 --
-translate' :: (HMapConstraint (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint IDatabase l) => HList l -> MSet Var -> FormulaT -> Set Var -> IO (QueryPlanT l)
+translate' :: (HMapC (IDatabaseUniformDBFormula FormulaT) l, HMapC IDatabase l) => HList l -> MSet Var -> FormulaT -> Set Var -> IO (QueryPlanT l)
 translate' dbs rvars qu0 vars = do
   -- trace ("translate': " ++ show qu0) $ 
     let insp = queryPlan qu0
@@ -80,33 +80,34 @@ instance (IResultRow row, Num (ElemType row), Ord (ElemType row)) => IDBStatemen
 data SumDB row l where
    SumDB :: String -> HList l -> SumDB row l
 
-instance (HMapConstraint IDatabase l) => IDatabase0 (SumDB row l ) where -- need undecidable instance
+instance (HMapC IDatabase l) => IDatabase0 (SumDB row l ) where -- need undecidable instance
     type DBFormulaType (SumDB row l) = FormulaT
     getName (SumDB name _ ) = name
-    getPreds (SumDB _ dbs ) = unions (hMapCUL @IDatabase getPreds dbs)
+    getPreds (SumDB _ dbs ) = hFoldMapCUL @IDatabase getPreds dbs
     supported _ _ _ _ = True
-instance (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformDBFormula FormulaT) l) => IDatabase1 (SumDB row l) where
+instance (HMapC IDatabase l, HMapC (IDatabaseUniformDBFormula FormulaT) l) => IDatabase1 (SumDB row l) where
+    type DBFormulaType1 (SumDB row l) = FormulaT
     type DBQueryType (SumDB row l) = QueryPlanT l
     translateQuery (SumDB _ dbs) retvars form vars = translate' dbs (Include retvars) form vars
 
-instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                      IDBConnection (HMap ConnectionType l)) => IDatabase2 (SumDB row l) where
+instance (IResultRow row, HMapC (IDatabaseUniformRow row) l, HMapC
+                      IDBConnection (HMapF ConnectionType l)) => IDatabase2 (SumDB row l) where
     data ConnectionType (SumDB row l ) = SumDBConnection (HList' ConnectionType l)
     dbOpen (SumDB _ dbs) = SumDBConnection <$> hMapACULL @(IDatabaseUniformRow row) @ConnectionType dbOpen dbs
 
-instance (IResultRow row, HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                      (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint
-                      IDBConnection (HMap ConnectionType l)) => IDatabase (SumDB row l)
+instance (IResultRow row, HMapC IDatabase l, HMapC (IDatabaseUniformRow row) l, HMapC
+                      (IDatabaseUniformDBFormula FormulaT) l, HMapC
+                      IDBConnection (HMapF ConnectionType l)) => IDatabase (SumDB row l)
 
-instance (IResultRow row, HMapConstraint IDBConnection (HMap ConnectionType l)) => IDBConnection0 (ConnectionType (SumDB row l )) where
-    dbClose (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbClose dbs
-    dbBegin (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbBegin dbs
-    dbCommit (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection)  dbCommit dbs
-    dbPrepare (SumDBConnection dbs  ) = hMapACUL'_ @(IDBConnection) dbPrepare dbs
-    dbRollback (SumDBConnection dbs  ) = hMapACUL'_ @IDBConnection dbRollback dbs
+instance (IResultRow row, HMapC IDBConnection (HMapF ConnectionType l)) => IDBConnection0 (ConnectionType (SumDB row l )) where
+    dbClose (SumDBConnection dbs  ) = hFoldMapACUL @(IDBConnection) dbClose (toHList dbs)
+    dbBegin (SumDBConnection dbs  ) = hFoldMapACUL @(IDBConnection) dbBegin (toHList dbs)
+    dbCommit (SumDBConnection dbs  ) = hFoldMapACUL @(IDBConnection)  dbCommit (toHList dbs)
+    dbPrepare (SumDBConnection dbs  ) = hFoldMapACUL @(IDBConnection) dbPrepare (toHList dbs)
+    dbRollback (SumDBConnection dbs  ) = hFoldMapACUL @IDBConnection dbRollback (toHList dbs)
 
-instance (IResultRow row, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                      IDBConnection (HMap ConnectionType l)) => IDBConnection (ConnectionType (SumDB row l )) where
+instance (IResultRow row, HMapC (IDatabaseUniformRow row) l, HMapC
+                      IDBConnection (HMapF ConnectionType l)) => IDBConnection (ConnectionType (SumDB row l )) where
     type QueryType (ConnectionType (SumDB row l )) = QueryPlanT l
     type StatementType (ConnectionType (SumDB row l )) = QueryPlanS row
     prepareQuery (SumDBConnection conns ) qu =

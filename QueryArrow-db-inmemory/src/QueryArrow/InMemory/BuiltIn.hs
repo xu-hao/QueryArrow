@@ -211,7 +211,7 @@ data ICATDBInfo = ICATDBInfo {
 instance ToJSON ICATDBInfo
 instance FromJSON ICATDBInfo
 
-data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin (String -> String -> db)
+data NoConnectionDatabasePlugin db = (IDatabase0 db, IDatabase1 db, INoConnectionDatabase2 db, DBQueryType db ~ NoConnectionQueryType db, NoConnectionRowType db ~ MapResultRow, DBFormulaType db ~ DBFormulaType1 db, DBFormulaType db ~ FormulaT) => NoConnectionDatabasePlugin (String -> String -> db)
 
 instance Plugin (NoConnectionDatabasePlugin db) MapResultRow where
   getDB (NoConnectionDatabasePlugin db) _ ps = do

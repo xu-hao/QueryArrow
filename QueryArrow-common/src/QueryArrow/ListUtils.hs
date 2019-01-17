@@ -2,8 +2,7 @@ module QueryArrow.ListUtils where
 
 
 import Prelude  hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup)
-import Data.List ((\\), intercalate, transpose, union)
+import Data.List ((\\), union)
 
 
 maximumd :: Ord a => a -> [a] -> a

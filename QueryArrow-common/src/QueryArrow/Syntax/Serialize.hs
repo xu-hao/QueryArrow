@@ -1,22 +1,11 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, StandaloneDeriving, DeriveFunctor, UndecidableInstances, DeriveGeneric,
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, ExistentialQuantification, FlexibleInstances, UndecidableInstances,
    RankNTypes, FlexibleContexts, GADTs, PatternSynonyms, ScopedTypeVariables #-}
 
 module QueryArrow.Syntax.Serialize where
 
 import Prelude hiding (lookup)
-import Data.Map.Strict (Map, empty, insert, alter, lookup, fromList, foldrWithKey)
-import Data.List (intercalate, union, unwords)
-import Control.Monad.Trans.State.Strict (evalState,get, put, State)
-import Data.Set (Set, singleton)
-import qualified Data.Set as Set
-import Data.Maybe
-import qualified Data.Map as Map
-import qualified Data.Text as T
-import Data.Namespace.Path
-import Data.Namespace.Namespace
-import Algebra.Lattice
-import Control.Monad (foldM)
-import Data.Monoid ((<>))
+import Data.Map.Strict (Map, foldrWithKey)
+import Data.List (intercalate, unwords)
 import Control.Comonad
 import Control.Comonad.Cofree
 import QueryArrow.Syntax.Type

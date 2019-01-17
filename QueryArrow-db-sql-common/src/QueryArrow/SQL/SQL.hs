@@ -1024,7 +1024,7 @@ pureOrExecF  (SQLTrans  builtin predtablemap _ ptm) _ form@(FInsertA _ (Lit sign
                                       else if not (null (ksDeleteProp ks)) || ksDeleteObj ks || pred0 `elem` (ksInsertProp ks) || (tablename, key) /= key'
                                           then lift Nothing
                                           else return ks{ksInsertProp = ksInsertProp ks ++ [pred0]}
-                      let isDeleteConditional = isDelete && not (all isVar (propComponents pt args)) -- || (not isDelete && not (all isVar (keyComponents pt args)))
+                      let isDeleteConditional = isDelete && not (all isVar (propComponents pt args)) -- prevent haddock to error || (not isDelete && not (all isVar (keyComponents pt args)))
                       put ks'{deleteConditional = isDeleteConditional}
 
 pureOrExecF  _ _ (FOneA _) = return ()

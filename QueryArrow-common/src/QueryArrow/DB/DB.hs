@@ -3,8 +3,6 @@ module QueryArrow.DB.DB where
 
 import QueryArrow.DB.ResultStream
 import QueryArrow.Syntax.Term
-import QueryArrow.Semantics.Value
-import QueryArrow.Syntax.Utils
 
 import Prelude  hiding (lookup, null)
 import Data.Map.Strict (Map, empty, insert, lookup, singleton, keysSet, unionWithKey)
@@ -12,14 +10,11 @@ import Control.Monad.Except
 import Data.Convertible.Base
 import Data.Maybe
 import Control.Monad.Trans.Resource
-import qualified Data.Text as T
 import Data.Set (Set)
 import System.Log.Logger (errorM, noticeM)
-import Control.Applicative ((<|>))
 import Control.Exception (catch, SomeException)
 import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Semantics.Value
-import Data.ByteString (ByteString)
 
 -- result row
 type MapResultRow = Map Var ResultValue
@@ -89,15 +84,16 @@ class IDatabase0 db where
     getPreds :: db -> [Pred]
     supported :: db -> Set Var -> DBFormulaType db -> Set Var -> Bool
 
-class IDatabase0 db => IDatabase1 db where
+class IDatabase1 db where
+    type DBFormulaType1 db
     type DBQueryType db
-    translateQuery :: db -> Set Var -> DBFormulaType db -> Set Var -> IO (DBQueryType db)
+    translateQuery :: db -> Set Var -> DBFormulaType1 db -> Set Var -> IO (DBQueryType db)
 
 class (IDBConnection (ConnectionType db)) => IDatabase2 db where
     data ConnectionType db
     dbOpen :: db -> IO (ConnectionType db)
 
-class (IDatabase0 db, IDatabase1 db, IDatabase2 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db where
+class (IDatabase0 db, IDatabase1 db, IDatabase2 db, DBFormulaType db ~ DBFormulaType1 db, DBQueryType db ~ QueryType (ConnectionType db)) => IDatabase db
 
 -- https://wiki.haskell.org/Existential_type#Dynamic_dispatch_mechanism_of_OOP
 data AbstractDatabase row form = forall db. (IDatabase db, row ~ RowType (StatementType (ConnectionType db)), form ~ DBFormulaType db) => AbstractDatabase { unAbstractDatabase :: db }

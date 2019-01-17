@@ -3,8 +3,7 @@ module QueryArrow.Logging where
 
 import System.IO (stderr, Handle)
 import System.Log.Logger (rootLoggerName, setHandlers, updateGlobalLogger,
-                          Priority(..), infoM, debugM,
-                          warningM, errorM, setLevel)
+                          Priority(..), setLevel)
 import System.Log.Handler.Simple (fileHandler, streamHandler, GenericHandler)
 import System.Log.Handler (setFormatter)
 import System.Log.Formatter

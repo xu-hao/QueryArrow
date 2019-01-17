@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, ScopedTypeVariables,
-   RankNTypes, FlexibleContexts, GADTs, TypeApplications #-}
+   RankNTypes, FlexibleContexts, GADTs #-}
 module QueryArrow.DB.AbstractDatabaseList where
 
 import QueryArrow.DB.DB
@@ -8,5 +8,5 @@ import QueryArrow.QueryPlan
 import QueryArrow.Data.Heterogeneous.List
 
 data AbstractDBList row where
-    AbstractDBList :: (HMapConstraint IDatabase l, HMapConstraint (IDatabaseUniformRow row) l, HMapConstraint
-                       (IDatabaseUniformDBFormula FormulaT) l, HMapConstraint IDBConnection (HMap ConnectionType l)) => HList l -> AbstractDBList row
+    AbstractDBList :: (HMapC IDatabase l, HMapC (IDatabaseUniformRow row) l, HMapC
+                       (IDatabaseUniformDBFormula FormulaT) l, HMapC IDBConnection (HMapF ConnectionType l)) => HList l -> AbstractDBList row

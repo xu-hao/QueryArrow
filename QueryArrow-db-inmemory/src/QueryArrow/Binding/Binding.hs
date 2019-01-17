@@ -86,6 +86,7 @@ instance IDatabase0 BindingDatabase where
 
 instance IDatabase1 BindingDatabase where
     type DBQueryType BindingDatabase = ( Set Var, FormulaT,  Set Var)
+    type DBFormulaType1 BindingDatabase = FormulaT
     translateQuery _ vars qu vars2 = return (vars, qu, vars2)
 
 instance INoConnectionDatabase2 BindingDatabase where

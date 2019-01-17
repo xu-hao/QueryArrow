@@ -4,7 +4,6 @@ module QueryArrow.DB.GenericDatabase where
 
 import QueryArrow.Syntax.Term
 import QueryArrow.DB.DB
-import QueryArrow.Semantics.TypeChecker
 
 import Data.Set
 
@@ -21,6 +20,8 @@ instance (IGenericDatabase01 db) => IDatabase0 (GenericDatabase db a) where
   getName (GenericDatabase _ _ name _) = name
   getPreds (GenericDatabase _ _ _ preds) = preds
   supported (GenericDatabase db _ _ _) = gSupported db
+
 instance (IGenericDatabase01 db) => IDatabase1 (GenericDatabase db a) where
   type DBQueryType (GenericDatabase db a) = GDBQueryType db
+  type DBFormulaType1 (GenericDatabase db a) = GDBFormulaType db
   translateQuery (GenericDatabase db _ _ _) = gTranslateQuery db

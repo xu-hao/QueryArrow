@@ -51,8 +51,10 @@ instance MessagePack CastType
 
 instance (Key a, MessagePack a) => MessagePack (ObjectPath a) where
     fromObject arr = do
-      a : l <- fromObject arr
-      return (ObjectPath (NamespacePath l) a)
+      list <- fromObject arr
+      case list of
+        [] -> error "emtpy object path"
+        a : l -> return (ObjectPath (NamespacePath l) a)
 
     toObject (ObjectPath (NamespacePath l) a) = toObject (a : l)
 

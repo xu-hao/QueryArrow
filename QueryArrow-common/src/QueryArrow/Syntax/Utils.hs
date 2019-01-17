@@ -5,9 +5,6 @@ module QueryArrow.Syntax.Utils where
 
 import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
-import QueryArrow.Semantics.TypeChecker
-import Control.Comonad.Cofree
-import Data.Map.Strict (empty)
 
 pattern PTKeyIO a = ParamType True True True False a
 pattern PTKeyI a = ParamType True True False False a

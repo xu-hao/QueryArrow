@@ -71,7 +71,7 @@ toDSP ptm vars (Atom p args) =
     Just pt -> fromList (map extractVar (filter isVar (outputComponents pt args)))) \/ vars
 
 class DeterminedVars a f where
-  {-|
+  {--|
     This function must return all determined vars including those in the input set
   -}
     determinedVars :: DomainSizeFunction (Atom1 f) -> DomainSizeFunction a
@@ -123,7 +123,7 @@ toOutputVarsFunction ptm vars (Atom p args) =
 type OutputVarsFunction a = Set Var -> a -> Either (Set Var) (Set Var)
 
 class OutputVars a where
-  {-|
+  {--|
     This function must return all determined vars including those in the input set
   -}
     outputVars :: OutputVarsFunction Atom -> OutputVarsFunction a

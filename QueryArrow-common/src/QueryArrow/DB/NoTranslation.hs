@@ -4,8 +4,6 @@ module QueryArrow.DB.NoTranslation where
 
 import QueryArrow.Syntax.Term
 import QueryArrow.DB.DB
-import Data.Map.Strict
-import QueryArrow.Semantics.TypeChecker
 
 import Data.Set
 
@@ -25,6 +23,7 @@ instance (INoTranslationDatabase01 db) => IDatabase0 (NoTranslationDatabase db) 
   supported (NoTranslationDatabase db) = ntSupported db
 
 instance (INoTranslationDatabase01 db) => IDatabase1 (NoTranslationDatabase db) where
+  type DBFormulaType1 (NoTranslationDatabase db) = NTDBFormulaType db
   type DBQueryType (NoTranslationDatabase db) = NTDBQuery (NTDBFormulaType db)
   translateQuery _ vars2 form vars = return (NTDBQuery vars2 form vars)
 

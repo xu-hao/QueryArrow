@@ -57,10 +57,18 @@ runQuery method db = do
             ret <- case method of
                 "get" -> do
                     liftIO $ infoM "QA" ("parsing get request")
-                    (Just qu) <- lookupGetParam "qsquery"
-                    (Just hdr) <- lookupGetParam "qsheaders"
-                    liftIO $ infoM "QA" ("received REST query " ++ T.unpack qu)
-                    liftIO $ runExceptT $ run (fromList (map Var (words (T.unpack hdr)))) (T.unpack qu) mempty tdb conn
+                    quM <- lookupGetParam "qsquery"
+                    case quM of
+                        Just qu -> do
+                            hdrsM <- lookupGetParam "qsheaders"
+                            case hdrsM of
+                                Just hdr -> do
+                                    liftIO $ infoM "QA" ("received REST query " ++ T.unpack qu)
+                                    liftIO $ runExceptT $ run (fromList (map Var (words (T.unpack hdr)))) (T.unpack qu) mempty tdb conn
+                                Nothing ->
+                                    error "no qsheaders"
+                        Nothing ->
+                            error "no qsquery"
                 "post" -> do
                     liftIO $ infoM "QA" ("parsing post request")
                     req <- requireJsonBody
