@@ -88,7 +88,6 @@ extra-deps:
   - namespace-0.1.4.1
   - semibounded-lattices-0.1.0.1
   - async-pool-0.9.0.2
-#  - trivial-constraint-0.4.0.0
   - hasbolt-0.1.3.2
   - lrucache-1.2.0.1
 
