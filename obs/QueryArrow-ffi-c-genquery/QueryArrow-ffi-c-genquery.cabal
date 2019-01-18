@@ -1,0 +1,107 @@
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: fc54be6cda66bd4fd13fbe56ee7a9e65344f1b065f1a18feb996fa1819517389
+
+name:           QueryArrow-ffi-c-genquery
+version:        0.2
+author:         Hao Xu
+license:        BSD3
+build-type:     Simple
+cabal-version:  >= 1.10
+
+library
+  exposed-modules:
+      QueryArrow.FFI.C.GenQuery
+  other-modules:
+      Main
+      Paths_QueryArrow_ffi_c_genquery
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fPIC -shared -dynamic
+  build-depends:
+      QueryArrow-common
+    , QueryArrow-ffi-genquery
+    , QueryArrow-ffi-service
+    , aeson
+    , array
+    , async
+    , base >=4
+    , bytestring
+    , constraints
+    , containers
+    , convertible
+    , either
+    , exceptions
+    , fast-logger
+    , hslogger
+    , lattices
+    , lifted-async
+    , monad-control
+    , monad-logger
+    , mtl
+    , namespace >=0.1.2.2
+    , parsec
+    , process
+    , regex-tdfa
+    , resourcet
+    , scientific
+    , semibounded-lattices
+    , semigroupoids
+    , semigroups
+    , template-haskell
+    , temporary
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unordered-containers
+    , utf8-string
+  default-language: Haskell2010
+
+executable GenQueryTrans
+  main-is: Main.hs
+  other-modules:
+      QueryArrow.FFI.C.GenQuery
+      Paths_QueryArrow_ffi_c_genquery
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      QueryArrow-common
+    , QueryArrow-ffi-genquery
+    , QueryArrow-ffi-service
+    , aeson
+    , array
+    , async
+    , base >=4
+    , bytestring
+    , constraints
+    , containers
+    , convertible
+    , either
+    , exceptions
+    , fast-logger
+    , hslogger
+    , lattices
+    , lifted-async
+    , monad-control
+    , monad-logger
+    , mtl
+    , namespace >=0.1.2.2
+    , parsec
+    , process
+    , regex-tdfa
+    , resourcet
+    , scientific
+    , semibounded-lattices
+    , semigroupoids
+    , semigroups
+    , template-haskell
+    , temporary
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unordered-containers
+    , utf8-string
+  default-language: Haskell2010

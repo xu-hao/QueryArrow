@@ -1,0 +1,53 @@
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 398de852084aaa649605e00a57bd1f9c7d5c6fba9e7c72b9c6340ab9c780191c
+
+name:           QueryArrow-ffi-service-handle-common
+version:        0.2
+author:         Hao Xu
+license:        BSD3
+build-type:     Simple
+cabal-version:  >= 1.10
+
+library
+  exposed-modules:
+      QueryArrow.FFI.Service.Handle
+  other-modules:
+      Paths_QueryArrow_ffi_service_handle_common
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fPIC
+  build-depends:
+      QueryArrow
+    , QueryArrow-common
+    , QueryArrow-ffi-service
+    , QueryArrow-rpc-common
+    , aeson
+    , array
+    , base >=4
+    , bytestring
+    , constraints
+    , containers
+    , convertible
+    , data-msgpack
+    , either
+    , exceptions
+    , fast-logger
+    , hslogger
+    , monad-control
+    , monad-logger
+    , mtl
+    , network
+    , process
+    , resourcet
+    , scientific
+    , semigroupoids
+    , semigroups
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unordered-containers
+    , utf8-string
+  default-language: Haskell2010

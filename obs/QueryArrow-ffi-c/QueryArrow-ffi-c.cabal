@@ -1,0 +1,65 @@
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 50036393a29e74b999934d6941247faa9b16413d3ed2008edc0e868a139dbdb0
+
+name:           QueryArrow-ffi-c
+version:        0.2
+author:         Hao Xu
+license:        BSD3
+build-type:     Simple
+cabal-version:  >= 1.10
+
+library
+  exposed-modules:
+      QueryArrow.FFI.C.Plugin
+      QueryArrow.FFI.C.Template
+      QueryArrow.FFI.C.PluginGen
+  other-modules:
+      Paths_QueryArrow_ffi_c
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fPIC -shared -dynamic
+  build-depends:
+      QueryArrow-common
+    , QueryArrow-db-sql-common
+    , QueryArrow-db-sql-hdbc-common
+    , QueryArrow-db-sql-hdbc-postgresql
+    , QueryArrow-db-trans
+    , QueryArrow-ffi-service
+    , QueryArrow-gen
+    , aeson
+    , array
+    , async
+    , base >=4
+    , bytestring
+    , constraints
+    , containers
+    , convertible
+    , either
+    , exceptions
+    , fast-logger
+    , hslogger
+    , lattices
+    , lifted-async
+    , monad-control
+    , monad-logger
+    , mtl
+    , namespace >=0.1.2.2
+    , parsec
+    , process
+    , regex-tdfa
+    , resourcet
+    , scientific
+    , semibounded-lattices
+    , semigroupoids
+    , semigroups
+    , template-haskell
+    , temporary
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unordered-containers
+    , utf8-string
+  default-language: Haskell2010

@@ -1,0 +1,51 @@
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: d15dc5b1276017211809683e9f8cf6f8b120c7f1d393ca0daefa008dd7e2ce89
+
+name:           QueryArrow-db-remote
+version:        0.2
+author:         Hao Xu
+license:        BSD3
+build-type:     Simple
+cabal-version:  >= 1.10
+
+library
+  exposed-modules:
+      QueryArrow.Remote.Channel
+      QueryArrow.Remote.Definitions
+      QueryArrow.Remote.Serialization
+      QueryArrow.Remote.NoTranslation.Definitions
+      QueryArrow.Remote.NoTranslation.Serialization
+      QueryArrow.Remote.NoTranslation.Server
+      QueryArrow.Remote.NoTranslation.Client
+      QueryArrow.Remote.NoTranslation.TCP.TCP
+  other-modules:
+      Paths_QueryArrow_db_remote
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fPIC
+  build-depends:
+      QueryArrow-common
+    , QueryArrow-rpc-common
+    , aeson
+    , base >=4
+    , binary
+    , bytestring
+    , constraints
+    , containers
+    , data-msgpack
+    , heterogeneous-list
+    , hslogger
+    , lifted-base
+    , mtl
+    , network
+    , resourcet
+    , scientific
+    , semigroupoids
+    , semigroups
+    , template-haskell
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010

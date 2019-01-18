@@ -1,0 +1,114 @@
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 1db717edce66498c084f21afbe1dc291bb62b6c89b1d47f852c2e95c886be480
+
+name:           test-QueryArrow
+version:        0.2
+author:         Hao Xu
+license:        BSD3
+build-type:     Simple
+cabal-version:  >= 1.10
+
+executable test_dedupper_main
+  main-is: TestDedupper.hs
+  other-modules:
+      QueryArrow.Chopper.Data
+      Paths_test_QueryArrow
+  hs-source-dirs:
+      src
+      app/dedupper
+  ghc-options: -Wall
+  build-depends:
+      QueryArrow-cli
+    , QueryArrow-common
+    , QueryArrow-rpc-common
+    , base >=4
+    , bytestring
+    , containers
+    , cryptonite
+    , directory
+    , filepath
+    , hspec
+    , hspec-expectations
+    , mtl
+    , network
+    , parsec
+    , process
+    , semigroupoids
+    , semigroups
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unix
+    , unordered-containers
+  default-language: Haskell2010
+
+executable test_parser_main
+  main-is: TestChopper.hs
+  other-modules:
+      QueryArrow.Chopper.Data
+      Paths_test_QueryArrow
+  hs-source-dirs:
+      src
+      app/chopper
+  ghc-options: -Wall
+  build-depends:
+      QueryArrow-cli
+    , QueryArrow-common
+    , QueryArrow-rpc-common
+    , base >=4
+    , bytestring
+    , containers
+    , cryptonite
+    , directory
+    , filepath
+    , hspec
+    , hspec-expectations
+    , mtl
+    , network
+    , parsec
+    , process
+    , semigroupoids
+    , semigroups
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unix
+    , unordered-containers
+  default-language: Haskell2010
+
+executable test_runner_main
+  main-is: TestRunner.hs
+  other-modules:
+      QueryArrow.Chopper.Data
+      Paths_test_QueryArrow
+  hs-source-dirs:
+      src
+      app/runner
+  ghc-options: -Wall
+  build-depends:
+      QueryArrow-cli
+    , QueryArrow-common
+    , QueryArrow-rpc-common
+    , base >=4
+    , bytestring
+    , containers
+    , cryptonite
+    , directory
+    , filepath
+    , hspec
+    , hspec-expectations
+    , mtl
+    , network
+    , parsec
+    , process
+    , semigroupoids
+    , semigroups
+    , text >=1.2.1.1
+    , time
+    , transformers
+    , unix
+    , unordered-containers
+  default-language: Haskell2010
