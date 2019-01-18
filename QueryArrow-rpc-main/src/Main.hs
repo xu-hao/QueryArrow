@@ -14,9 +14,9 @@ import Options.Applicative hiding (Success)
 import Data.Maybe
 import Data.Map.Strict
 import QueryArrow.RPC.Service
-import QueryArrow.RPC.Service.Service.TCP
-import QueryArrow.RPC.Service.Service.UDS
-import QueryArrow.RPC.Service.Service.HTTP
+import QueryArrow.RPC.Service.Socket.TCP
+import QueryArrow.RPC.Service.Socket.UDS
+import QueryArrow.RPC.Service.HTTP
 -- import QueryArrow.RPC.Service.FileSystem.TCP
 import Data.Monoid ((<>))
 

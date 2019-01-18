@@ -1,4 +1,4 @@
-name: QueryArrow-rpc-socket
+name: QueryArrow-rpc-main
 version: '0.2'
 author: Hao Xu
 license: BSD3
@@ -17,15 +17,14 @@ dependencies:
 - hslogger
 - network
 - directory
-- text
+- optparse-applicative
 - QueryArrow-plugins
 - QueryArrow-rpc-common
 - QueryArrow-common
 - QueryArrow-rpc-http
+- QueryArrow-rpc-socket
 - log-adapter
-library:
-  source-dirs: src
-  exposed-modules:
-  - QueryArrow.RPC.Service.Socket.Common
-  - QueryArrow.RPC.Service.Socket.TCP
-  - QueryArrow.RPC.Service.Socket.UDS
+executables:
+  QueryArrowServer:
+    main: Main.hs
+    source-dirs: src

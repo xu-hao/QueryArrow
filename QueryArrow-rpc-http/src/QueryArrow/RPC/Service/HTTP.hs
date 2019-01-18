@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeFamilies      #-}
 
-module QueryArrow.RPC.Service.Service.HTTP where
+module QueryArrow.RPC.Service.HTTP where
 
 import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type

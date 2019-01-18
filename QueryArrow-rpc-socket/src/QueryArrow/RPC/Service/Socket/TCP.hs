@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TypeFamilies #-}
-module QueryArrow.RPC.Service.Service.TCP where
+module QueryArrow.RPC.Service.Socket.TCP where
 
 import QueryArrow.DB.DB
 
@@ -12,7 +12,7 @@ import Control.Concurrent
 import Data.Aeson
 import QueryArrow.RPC.Config
 import QueryArrow.RPC.Service
-import QueryArrow.RPC.Service.Service.Common
+import QueryArrow.RPC.Service.Socket.Common
 
 data ServiceTCPRPCService = ServiceTCPRPCService
 

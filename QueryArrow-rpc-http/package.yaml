@@ -54,4 +54,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.RPC.Service.Service.HTTP
+  - QueryArrow.RPC.Service.HTTP

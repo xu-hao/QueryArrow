@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TypeFamilies #-}
-module QueryArrow.RPC.Service.Service.UDS where
+module QueryArrow.RPC.Service.Socket.UDS where
 
 import QueryArrow.DB.DB
 
@@ -15,7 +15,7 @@ import System.Directory (removeFile)
 import Data.Aeson
 import QueryArrow.RPC.Config
 import QueryArrow.RPC.Service
-import QueryArrow.RPC.Service.Service.Common
+import QueryArrow.RPC.Service.Socket.Common
 
 data ServiceUDSRPCService = ServiceUDSRPCService
 

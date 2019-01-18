@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TypeFamilies #-}
-module QueryArrow.RPC.Service.Service.Common where
+module QueryArrow.RPC.Service.Socket.Common where
 
 import QueryArrow.DB.DB
 
@@ -13,7 +13,15 @@ import QueryArrow.RPC.DB
 import System.IO (Handle)
 import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.TypeChecker
-import QueryArrow.FFI.Auxiliary
+import Control.Exception (SomeException)
+import Data.Text as Text
+
+
+convertException :: SomeException -> Error
+convertException e =
+                let errstr = show e in
+                            (-1, Text.pack("catchErrors: SomeException = " ++ errstr))
+
 
 worker :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Handle -> db -> ConnectionType db -> IO ()
 worker handle tdb conn = do
