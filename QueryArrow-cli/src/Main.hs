@@ -41,7 +41,7 @@ import Options.Applicative
 import Data.Maybe (fromMaybe, isJust, fromJust)
 import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
-import Control.Arrow ((***))
+import Control.Arrow (first)
 import Data.Monoid ((<>))
 import QueryArrow.Client
 import QueryArrow.SQL.Tools
@@ -97,7 +97,7 @@ mainArgs input = do
                 else 
                   return (QAL qu0)
         let showhdr = showHeaders input
-        let pars = Map.fromList (map (Var *** id) (params input))
+        let pars = Map.fromList (map (first Var) (params input))
         if isJust (tcpAddr input) && isJust (tcpPort input)
           then
             runTCP (fromJust (tcpAddr input)) (fromJust (tcpPort input)) showhdr hdr qu pars

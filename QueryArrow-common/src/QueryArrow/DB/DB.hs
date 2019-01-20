@@ -32,8 +32,6 @@ instance IResultRow MapResultRow where
 
 -- query
 
-data Command = Begin | Prepare | Commit | Rollback | Execute Formula
-
 {-
     class A a b | a -> b
     class B a b | a -> b

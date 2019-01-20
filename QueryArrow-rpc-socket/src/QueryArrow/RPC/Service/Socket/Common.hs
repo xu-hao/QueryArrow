@@ -4,15 +4,15 @@ module QueryArrow.RPC.Service.Socket.Common where
 import QueryArrow.DB.DB
 
 import Data.Time
-import QueryArrow.Serialization
 import System.Log.Logger
 import QueryArrow.Control.Monad.Logger.HSLogger ()
 import QueryArrow.RPC.Message
 import Control.Monad.Trans.Except
 import QueryArrow.RPC.DB
 import System.IO (Handle)
-import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.TypeChecker
+import QueryArrow.RPC.Serialization ()
+import QueryArrow.RPC.Data
 import Control.Exception (SomeException)
 import Data.Text as Text
 

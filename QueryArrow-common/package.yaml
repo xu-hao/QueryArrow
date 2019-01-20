@@ -58,7 +58,7 @@ library:
   - QueryArrow.Syntax.Type
   - QueryArrow.Semantics.Compute
   - QueryArrow.Semantics.Value
-  - QueryArrow.Serialize
+  - QueryArrow.Serialization
   - QueryArrow.DB.DB
   - QueryArrow.DB.NoTranslation
   - QueryArrow.DB.GenericDatabase

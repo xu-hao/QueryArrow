@@ -20,7 +20,7 @@ dependencies:
   - either
   - lattices
   - QueryArrow-common
-  - QueryArrow-db-sql-common
+  - QueryArrow-sql-common
 library:
   source-dirs: 
     - src

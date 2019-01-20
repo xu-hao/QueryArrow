@@ -53,12 +53,12 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.ElasticSearch.ElasticSearch
-  - QueryArrow.ElasticSearch.ElasticSearchConnection
-  - QueryArrow.ElasticSearch.ESQL
-  - QueryArrow.ElasticSearch.Query
-  - QueryArrow.ElasticSearch.QueryResult
-  - QueryArrow.ElasticSearch.QueryResultHits
-  - QueryArrow.ElasticSearch.ICAT
-  - QueryArrow.ElasticSearch.Record
-  - QueryArrow.HTTP.ElasticSearchUtils
+  - QueryArrow.DB.ElasticSearch.ElasticSearch
+  - QueryArrow.DB.ElasticSearch.Connection
+  - QueryArrow.DB.ElasticSearch.ESQL
+  - QueryArrow.DB.ElasticSearch.Query
+  - QueryArrow.DB.ElasticSearch.QueryResult
+  - QueryArrow.DB.ElasticSearch.QueryResultHits
+  - QueryArrow.DB.ElasticSearch.ICAT
+  - QueryArrow.DB.ElasticSearch.Record
+  - QueryArrow.DB.ElasticSearch.HTTP.ElasticSearchUtils

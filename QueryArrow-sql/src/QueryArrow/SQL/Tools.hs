@@ -7,7 +7,7 @@ import QueryArrow.Syntax.Type
 
 import Text.Parsec
 
-import QueryArrow.SQL.SQL hiding (TransMonad)
+import QueryArrow.SQL.SQL
 import QueryArrow.SQL.Mapping
 import Data.Namespace.Path
 import Data.Foldable

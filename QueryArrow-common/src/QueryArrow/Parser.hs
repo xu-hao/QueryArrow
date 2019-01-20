@@ -43,6 +43,7 @@ stringp = T.stringLiteral lexer
 comma = T.comma lexer
 semi = T.semi lexer
 symbol = T.symbol lexer
+whiteSpace :: FOParser ()
 whiteSpace = T.whiteSpace lexer
 dot = T.dot lexer
 
@@ -180,14 +181,3 @@ varp = Var <$> identifier
 varsp :: FOParser [Var]
 varsp = many1 varp
 
-progp :: FOParser [Command]
-progp = do
-    commands <- many (do
-      whiteSpace
-      (reserved "begin" *> return Begin)
-          <|> (reserved "prepare" *> return Prepare)
-          <|> (reserved "commit" *> return Commit)
-          <|> (reserved "rollback" *> return Rollback)
-          <|> (Execute <$> formulap))
-    eof
-    return commands

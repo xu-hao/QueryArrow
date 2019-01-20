@@ -23,4 +23,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.SQL.HDBC
+  - QueryArrow.DB.SQL.HDBC

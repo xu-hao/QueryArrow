@@ -16,8 +16,8 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Debug.Trace
 
-import QueryArrow.SQL.SQL hiding (TransMonad)
-import QueryArrow.SQL.Mapping
+import QueryArrow.SQL.SQL
+-- import QueryArrow.SQL.Mapping
 import Control.Arrow ((***))
 import Data.Namespace.Path
 import Algebra.Lattice.Dropped

@@ -17,4 +17,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.SQL.HDBC.PostgreSQL
+  - QueryArrow.DB.SQL.HDBC.PostgreSQL

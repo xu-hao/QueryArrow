@@ -2,30 +2,29 @@
 module QueryArrow.DBMap where
 
 import QueryArrow.DB.DB
-import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.TypeChecker
 import QueryArrow.Config
-import QueryArrow.Translation
-import QueryArrow.Cache
+import QueryArrow.DB.Trans.Translation
+import QueryArrow.DB.Cache
 import QueryArrow.Plugin
-import QueryArrow.Sum
-import QueryArrow.Include
+import QueryArrow.DB.Sum
+import QueryArrow.DB.Include
 import Data.Maybe
 
 import Prelude  hiding (lookup)
 import Data.Map.Strict (fromList, Map, lookup)
 
 -- import Plugins
-import qualified QueryArrow.SQL.HDBC.PostgreSQL as PostgreSQL
-import qualified QueryArrow.SQL.HDBC.CockroachDB as CockroachDB
-import qualified QueryArrow.Cypher.Neo4j as Neo4j
-import QueryArrow.InMemory.BuiltIn
-import QueryArrow.InMemory.Map
-import qualified QueryArrow.ElasticSearch.ElasticSearch as ElasticSearch
-import qualified QueryArrow.SQL.HDBC.Sqlite3 as Sqlite3
+import qualified QueryArrow.DB.SQL.HDBC.PostgreSQL as PostgreSQL
+import qualified QueryArrow.DB.SQL.HDBC.CockroachDB as CockroachDB
+import qualified QueryArrow.DB.Cypher.Neo4j as Neo4j
+import QueryArrow.DB.InMemory.BuiltIn
+import QueryArrow.DB.InMemory.Map
+import qualified QueryArrow.DB.ElasticSearch.ElasticSearch as ElasticSearch
+import qualified QueryArrow.DB.SQL.HDBC.Sqlite3 as Sqlite3
 -- import qualified QueryArrow.Remote.NoTranslation.TCP.TCP as Remote.TCP
 -- import qualified QueryArrow.FileSystem.FileSystem as FileSystem
-import qualified QueryArrow.SQL.LibPQ.PostgreSQL as LibPQ
+import qualified QueryArrow.DB.SQL.LibPQ.PostgreSQL as LibPQ
 
 type DBMap = Map String (AbstractPlugin MapResultRow)
 

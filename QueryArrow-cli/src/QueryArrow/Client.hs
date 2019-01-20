@@ -40,9 +40,10 @@ import Control.Monad.Trans.Except
 import QueryArrow.RPC.DB
 import System.IO
 import Control.Exception
-import QueryArrow.Serialization
+import QueryArrow.Serialization ()
 import Network.Socket
-import Network
+import QueryArrow.RPC.Data
+import QueryArrow.RPC.Serialization ()
 import QueryArrow.RPC.Message
 import QueryArrow.Syntax.Term
 import Data.Set (fromList)
@@ -50,10 +51,26 @@ import Data.Set (fromList)
 import QueryArrow.Utils
 
 data Query = QAL String | SQL Formula
+
+resolve :: String -> String -> IO AddrInfo
+resolve host port = do
+  let hints = defaultHints { addrSocketType = Stream }
+  addr:_ <- getAddrInfo (Just hints) (Just host) (Just port)
+  return addr
+
+open :: AddrInfo -> IO Handle
+open addr = do
+  sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+  connect sock $ addrAddress addr
+  socketToHandle sock ReadWriteMode
+  
+
 runTCP :: String -> Int -> Bool -> [String] -> Query -> MapResultRow -> IO ()
-runTCP  addr port showhdr hdr qu params =
+runTCP  host port showhdr hdr qu params =
   bracket
-    (connectTo addr (PortNumber (fromIntegral port)))
+    (do
+      addr <- resolve host (show port)
+      open addr)
     hClose
     (\ handle -> runHandle handle showhdr hdr qu params)
 

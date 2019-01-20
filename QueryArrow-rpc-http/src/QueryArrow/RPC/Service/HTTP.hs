@@ -10,6 +10,8 @@ import QueryArrow.Syntax.Type
 import QueryArrow.Semantics.TypeChecker
 import QueryArrow.DB.DB hiding (Null)
 import QueryArrow.DBMap
+import QueryArrow.RPC.Data
+import QueryArrow.RPC.Serialization
 import QueryArrow.RPC.Config
 import QueryArrow.Utils
 import QueryArrow.Parser

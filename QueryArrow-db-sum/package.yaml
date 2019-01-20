@@ -46,4 +46,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.Sum
+  - QueryArrow.DB.Sum

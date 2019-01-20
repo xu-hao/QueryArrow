@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module SchemaParser where
 
 import qualified Text.Parsec.Token as T
@@ -9,10 +7,13 @@ import QueryArrow.Syntax.Term
 import QueryArrow.Syntax.Type
 import QueryArrow.Syntax.Utils
 import QueryArrow.SQL.SQL
+import QueryArrow.DB.SQL.SQL
 import System.IO.Unsafe
 import Data.List (partition)
 import Data.Char
 import QueryArrow.ListUtils
+import QueryArrow.SQL.Mapping
+import QueryArrow.DB.SQL.Mapping
 
 lexer = T.makeTokenParser T.LanguageDef {
     T.commentStart = "/*",

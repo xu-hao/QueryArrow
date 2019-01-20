@@ -11,6 +11,7 @@ library:
     - parsec
     - QueryArrow-common
     - QueryArrow-db-sql-common
+    - QueryArrow-sql-common
 executables:
   schema_parser_main:
     main: schema_parser_main.hs
@@ -33,6 +34,7 @@ executables:
     - either
     - aeson
     - yaml
+    - QueryArrow-common
     - QueryArrow-rpc-common
     - QueryArrow-db-sql-common
-    - QueryArrow-common
+    - QueryArrow-sql-common

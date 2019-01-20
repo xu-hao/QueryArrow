@@ -1,18 +1,19 @@
-{-# LANGUAGE OverloadedStrings, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, TypeFamilies #-}
 
 module QueryArrow.RPC.DB where
 
 import QueryArrow.DB.ResultStream
-import QueryArrow.DB.DB hiding (Null)
+import QueryArrow.DB.DB
 import QueryArrow.Syntax.Term
 import QueryArrow.Semantics.Value
 import QueryArrow.Semantics.TypeChecker
-import QueryArrow.Syntax.Type
 import QueryArrow.Utils
 import QueryArrow.Parser
+import QueryArrow.RPC.Parser
+import QueryArrow.RPC.Data
 
 import Prelude hiding (lookup, length, map)
-import Data.Map.Strict (keysSet, map)
+import Data.Map.Strict (map)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource
 import Control.Monad.Except
@@ -21,8 +22,10 @@ import Control.Monad.Trans.Except
 import Control.Exception (SomeException(..))
 import System.IO.Error(userError)
 import Data.Set (Set)
+import Data.Text (Text)
 import Data.Conduit
 import Text.Parsec
+import GHC.Generics
 import Debug.Trace
 
 run3 :: (IDatabase db, DBFormulaType db ~ FormulaT, RowType (StatementType (ConnectionType db)) ~ MapResultRow) => Set Var -> [Command] -> MapResultRow -> db -> ConnectionType db -> ExceptT SomeException IO [MapResultRow]

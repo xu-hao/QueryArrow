@@ -1,6 +1,6 @@
 module Main where
 
-import QueryArrow.Serialization ()
+import QueryArrow.RPC.Serialization ()
 import Data.Yaml
 import System.Environment
 

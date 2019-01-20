@@ -27,5 +27,5 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.SQL.LibPQ.PostgreSQL
-  - QueryArrow.SQL.LibPQ
+  - QueryArrow.DB.SQL.LibPQ.PostgreSQL
+  - QueryArrow.DB.SQL.LibPQ

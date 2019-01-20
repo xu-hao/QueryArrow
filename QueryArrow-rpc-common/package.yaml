@@ -30,8 +30,10 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.Serialization
+  - QueryArrow.RPC.Data
+  - QueryArrow.RPC.Serialization
   - QueryArrow.RPC.Message
   - QueryArrow.RPC.DB
   - QueryArrow.RPC.Config
   - QueryArrow.RPC.Service
+  - QueryArrow.RPC.Parser

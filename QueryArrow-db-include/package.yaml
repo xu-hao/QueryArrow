@@ -16,4 +16,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.Include
+  - QueryArrow.DB.Include

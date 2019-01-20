@@ -46,6 +46,6 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.Rewriting
-  - QueryArrow.Translation
-  - QueryArrow.RuleParser
+  - QueryArrow.DB.Trans.Rewriting
+  - QueryArrow.DB.Trans.Translation
+  - QueryArrow.DB.Trans.RuleParser

@@ -25,6 +25,6 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.InMemory.BuiltIn
-  - QueryArrow.InMemory.Map
-  - QueryArrow.Binding.Binding
+  - QueryArrow.DB.InMemory.BuiltIn
+  - QueryArrow.DB.InMemory.Map
+  - QueryArrow.DB.Binding.Binding

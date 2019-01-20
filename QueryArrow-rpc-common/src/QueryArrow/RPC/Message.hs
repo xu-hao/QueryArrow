@@ -8,7 +8,6 @@ import System.IO
 import Data.ByteString.Lazy (hGet, length, hPut)
 import Data.Aeson
 import Data.MessagePack
-import qualified Data.ByteString.Lazy as BSL
 import System.Log.Logger
 import System.Posix.Process
 

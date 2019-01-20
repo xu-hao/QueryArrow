@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
 module QueryArrow.RPC.Config where
 
 import Data.Aeson

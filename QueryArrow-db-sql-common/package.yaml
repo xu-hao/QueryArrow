@@ -18,15 +18,16 @@ dependencies:
 - namespace >=0.1.2.2
 - semibounded-lattices
 - QueryArrow-common
+- QueryArrow-sql-common
 library:
   source-dirs: src
   ghc-options:
   - -Wall
   - -fPIC
   exposed-modules:
-  - QueryArrow.SQL.Mapping
-  - QueryArrow.SQL.SQL
-  - QueryArrow.SQL.BuiltIn
+  - QueryArrow.DB.SQL.Mapping
+  - QueryArrow.DB.SQL.SQL
+  - QueryArrow.DB.SQL.BuiltIn
   dependencies: []
 tests:
   Test:

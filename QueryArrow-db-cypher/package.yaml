@@ -22,6 +22,7 @@ dependencies:
 - heterogeneous-list
 - semibounded-lattices
 - QueryArrow-common
+- QueryArrow-sql-common
 - QueryArrow-db-sql-common
 library:
   source-dirs: src
@@ -29,12 +30,12 @@ library:
   - -Wall
   - -fPIC
   exposed-modules:
-  - QueryArrow.Cypher.Neo4j
-  - QueryArrow.Cypher.Neo4jConnection
-  - QueryArrow.Cypher.BuiltIn
-  - QueryArrow.Cypher.Cypher
-  - QueryArrow.Cypher.Mapping
-  - QueryArrow.Cypher.SQLToCypher
+  - QueryArrow.DB.Cypher.Neo4j
+  - QueryArrow.DB.Cypher.Neo4jConnection
+  - QueryArrow.DB.Cypher.BuiltIn
+  - QueryArrow.DB.Cypher.Cypher
+  - QueryArrow.DB.Cypher.Mapping
+  - QueryArrow.DB.Cypher.SQLToCypher
   dependencies: []
 tests:
   Test:

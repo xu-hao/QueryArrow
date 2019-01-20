@@ -13,4 +13,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.SQL.HDBC.CockroachDB
+  - QueryArrow.DB.SQL.HDBC.CockroachDB

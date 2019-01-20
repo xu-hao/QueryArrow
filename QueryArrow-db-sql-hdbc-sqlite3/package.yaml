@@ -16,4 +16,4 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - QueryArrow.SQL.HDBC.Sqlite3
+  - QueryArrow.DB.SQL.HDBC.Sqlite3

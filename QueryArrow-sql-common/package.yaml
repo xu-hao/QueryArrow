@@ -1,0 +1,29 @@
+name: QueryArrow-sql-common
+version: '0.2'
+author: Hao Xu
+license: BSD3
+dependencies:
+- base >=4
+- aeson
+- containers
+- mtl
+- transformers
+- convertible
+- text >=1.2.1.1
+- lattices
+- QueryArrow-rpc-common
+- free
+- hslogger
+- yaml
+- namespace >=0.1.2.2
+- semibounded-lattices
+- QueryArrow-common
+library:
+  source-dirs: src
+  ghc-options:
+  - -Wall
+  - -fPIC
+  exposed-modules:
+  - QueryArrow.SQL.SQL
+  - QueryArrow.SQL.Mapping
+  dependencies: []
